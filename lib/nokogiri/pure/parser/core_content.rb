@@ -343,6 +343,7 @@ module Nokogiri
               xml_attribute_checks(attname, attvalue) if aprefix == "xml"
             else
               attname, aprefix, attvalue, alloc = parse_attribute2(prefix, localname)
+              b = @buf # (in case a callback switched inputs)
               break if attname.nil?
             end
 
