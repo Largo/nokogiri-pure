@@ -137,5 +137,8 @@ EXPRS = [
   ["/", "name(//e[1]/node()[2])"], ["/", "local-name(//e[1]/node()[2])"], ["/", "string(//e[1]/node()[2])"], ["/", "//e[1]/node()[2]/self::node()"], ["/", "//e[1]/node()[2]/following-sibling::node()"],
   ["/", "//processing-instruction()"], ["/", "/processing-instruction('after-pi')"], ["/", "//comment()/following::node()[1]"], ["/", "/*/preceding::node()"], ["/", "/*/following::node()"],
   ["/", "//e[1]/node()[2] | //e[1]/text()"], ["/", "sum(//e[@key='k1']/node()[2])"], ["/", "number(//e[4])"],
+  ["/", "//e[@n = 3]"], ["/", "//e[3 = @n]"], ["/", "//e[@n != 3]"], ["/", "//e['3' = @n]"], ["/", "//e[@m = '1']"], ["/", "//e[f = '5']"], ["/", "//e[@x = 'a']"], ["/", "//e[@x != 'a']"],
+  ["/", "//e[text() = 't5']"], ["/", "//*[@n = 1.0]"], ["/", "//e[@n = 'abc']"], ["/", "//e[@n != 'abc']"], ["/", "//*[@a:attr = 'aa']", { ns: { "a" => "urn:a" } }], ["/", "//*[@b:attr = 'aa']"],
+  ["/", "//e[comment() = 'c7']"], ["/", "//e[node() = 't2']"], ["/", "//e[@* = '2']"], ["/", "//e[@* != '2']"], ["/", "//e[f != 0 div 0]"], ["/", "//e[f = 0 div 0]"], ["/", "//e[self::e = 't44']"],
   ["//div/@class", "self::node()"], ["//div/@class", "child::node()"], ["//div/@class", "following-sibling::node()"], ["//div/@class", "../@id"], ["//div/@class", "name()"],
 ]

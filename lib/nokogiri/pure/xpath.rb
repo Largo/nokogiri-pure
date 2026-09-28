@@ -14,6 +14,20 @@
 # Namespace nodes in node-sets are copies of the XmlNs whose +next+ points at the parent element,
 # exactly like xmlXPathNodeSetDupNs.
 #
+# Public API (libxml2-shaped):
+#   Context.new(doc)                        xmlXPathNewContext; #node, #doc, #namespaces (XSLT),
+#     #register_ns, #register_variable(_ns), #register_func(_ns) (callables taking (pctxt, nargs)),
+#     #register_func_lookup / #register_variable_lookup (callables taking (data, name, ns_uri)),
+#     #set_error_handler, #extra, #user_data, #context_size, #proximity_position, #function(_uri)
+#   XPath.eval(str, ctx) / eval_expression   xmlXPathEval: value, or nil after reporting the error
+#   XPath.ctxt_compile(ctx, str) -> CompExpr xmlXPathCtxtCompile (compiled expressions are cached
+#   XPath.compiled_eval(comp, ctx)           and immutable); compiled_eval_to_boolean -> 1/0/-1
+#   XPath.new_parser_context(str, ctx)      xmlXPathNewParserContext (XPointer): #eval_expr,
+#     #parse_name, #parse_ncname, #cur_byte/#cur_offset/#base, #value_push/#value_pop/#value,
+#     #pop_string/number/boolean/node_set, #xpath_err (xmlXPathErr), #xp_error (XP_ERROR), fn_*(nargs)
+#   XPath.cmp_nodes, node_set_merge, node_set_sort, node_set_add*, cast_*, format_number,
+#   string_eval_number, object_copy, new_value_tree, order_doc_elems
+#
 # The engine is split into:
 #   xpath.rb             constants, node-set primitives, document order, casts, contexts
 #   xpath/compiler.rb    the expression parser/compiler (xmlXPathCompileExpr & friends)
