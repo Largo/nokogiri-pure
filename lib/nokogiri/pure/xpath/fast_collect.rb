@@ -84,9 +84,20 @@ module Nokogiri
           end
         end
 
+        # node type constants in the generated code become literals (cheaper in the interpreter)
+        LITERAL_TYPES = %w[
+          ELEMENT_NODE ATTRIBUTE_NODE TEXT_NODE CDATA_SECTION_NODE ENTITY_REF_NODE PI_NODE
+          COMMENT_NODE DOCUMENT_NODE DTD_NODE HTML_DOCUMENT_NODE ENTITY_DECL NAMESPACE_DECL
+        ].to_h { |c| [c, Pure.const_get(c).to_s] }.freeze
+        LITERAL_TYPES_RE = /\b(?:#{LITERAL_TYPES.keys.join("|")})\b/
+
+        def self.with_literal_types(code)
+          code.gsub(LITERAL_TYPES_RE) { |c| LITERAL_TYPES[c] }
+        end
+
         MATCHERS.each do |m, cond|
           # xmlXPathNextDescendant / xmlXPathNextDescendantOrSelf
-          class_eval <<~RUBY, __FILE__, __LINE__ + 1
+          class_eval with_literal_types(<<~RUBY), __FILE__, __LINE__ + 1
             def self.descendant_#{m}(ctxnode, doc, name, uri, seq, include_self)
               ctype = ctxnode.type
               if include_self
