@@ -292,13 +292,13 @@ module Nokogiri
           ss = @ss
           fast = @input.pending_error.nil?
           if fast && (ss.pos = @cur) && (n = ss.skip(QNAME_FAST_RE)) && n <= XML_MAX_NAME_LENGTH
-            colon = b.byteindex(":", @cur)
-            if colon && colon < @cur + n
-              prefix = -b.byteslice(@cur, colon - @cur)
-              localname = -b.byteslice(colon + 1, @cur + n - colon - 1)
+            localname = b.byteslice(@cur, n)
+            if (colon = localname.byteindex(":"))
+              prefix = -localname.byteslice(0, colon)
+              localname = -localname.byteslice(colon + 1, n - colon - 1)
             else
               prefix = nil
-              localname = -b.byteslice(@cur, n)
+              localname = -localname
             end
             @cur += n
             @col += n

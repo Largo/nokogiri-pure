@@ -340,26 +340,7 @@ module Nokogiri
 
         # xmlSAX2AppendChild
         def append_child(ctxt, node)
-          parent = if ctxt.in_subset == 1
-            ctxt.my_doc.int_subset
-          elsif ctxt.in_subset == 2
-            ctxt.my_doc.ext_subset
-          else
-            ctxt.node || ctxt.my_doc
-          end
-          last = parent.last
-          if last.nil?
-            parent.children = node
-          else
-            last.next = node
-            node.prev = last
-          end
-          parent.last = node
-          node.parent = parent
-          if node.type != TEXT_NODE && ctxt.linenumbers != 0 && ctxt.input
-            line = ctxt.current_line
-            node.line = line < 65_535 ? line : 65_535
-          end
+          ctxt.sax2_append_child(node)
         end
 
         # xmlSplitQName (SAX1): returns [name, prefix]
@@ -646,7 +627,7 @@ module Nokogiri
         # ---- SAX2 elements -------------------------------------------------------------------------
 
         # xmlSAX2TextNode
-        def text_node(ctxt, str)
+        def text_node(_ctxt, str)
           t = XmlNode.new(TEXT_NODE, STRING_TEXT, nil)
           t.content = +str
           t
@@ -654,171 +635,19 @@ module Nokogiri
 
         # xmlSAX2AttributeNs
         def attribute_ns(ctxt, localname, prefix, value, alloc)
-          node = ctxt.node
-          namespace = nil
-          if prefix
-            namespace = ctxt.ns_lookup_sax(prefix)
-            namespace = Tree.search_ns(node.doc, node, prefix) if namespace.nil? && prefix == "xml"
-          end
-          ret = XmlAttr.new(localname, node.doc)
-          ret.parent = node
-          ret.ns = namespace
-          if ctxt.replace_entities == 0 && ctxt.html == 0
-            if alloc != true
-              tmp = text_node(ctxt, value)
-              ret.children = ret.last = tmp
-              tmp.doc = ret.doc
-              tmp.parent = ret
-            elsif !value.empty?
-              Tree.node_parse_content(ret, value)
-            end
-          elsif value
-            tmp = text_node(ctxt, value)
-            ret.children = ret.last = tmp
-            tmp.doc = ret.doc
-            tmp.parent = ret
-          end
-
-          doc = ctxt.my_doc
-          if ctxt.html == 0 && ctxt.validate != 0 && ctxt.well_formed != 0 && doc && doc.int_subset
-            if ctxt.replace_entities == 0
-              dup = value.include?("&") ? ctxt.expand_entities_in_att_value(value, false) : nil
-              if dup.nil?
-                ctxt.valid &= Valid.validate_one_attribute(ctxt.vctxt, doc, node, ret, value)
-              else
-                if ctxt.atts_special
-                  fullname = prefix ? "#{prefix}:#{localname}" : localname
-                  ctxt.vctxt.valid = 1
-                  nvalnorm = Valid.ctxt_normalize_attribute_value(ctxt.vctxt, doc, node, fullname, dup)
-                  ctxt.valid = 0 if ctxt.vctxt.valid != 1
-                  dup = nvalnorm if nvalnorm
-                end
-                ctxt.valid &= Valid.validate_one_attribute(ctxt.vctxt, doc, node, ret, dup)
-              end
-            else
-              ctxt.vctxt.flags |= ValidCtxt::XML_VCTXT_IN_ENTITY if ctxt.input.entity
-              ctxt.valid &= Valid.validate_one_attribute(ctxt.vctxt, doc, node, ret, value.dup)
-              ctxt.vctxt.flags &= ~ValidCtxt::XML_VCTXT_IN_ENTITY
-            end
-          elsif (ctxt.loadsubset & XML_SKIP_IDS) == 0 && ctxt.input.entity.nil? &&
-              ret.children && ret.children.type == TEXT_NODE && ret.children.next.nil?
-            content = ret.children.content
-            if prefix == "xml" && localname == "id"
-              if Valid.validate_ncname(content, true) != 0
-                ctxt.ctxt_err(nil, Domain::DTD, ErrCode::DTD_XMLID_VALUE, Level::ERROR, content, nil, nil, 0,
-                  "xml:id : attribute value #{content} is not an NCName\n")
-                ctxt.valid = 0
-              end
-              Valid.add_id(ctxt.vctxt, doc, content, ret)
-            elsif Tree.is_id(doc, node, ret)
-              Valid.add_id(ctxt.vctxt, doc, content, ret)
-            elsif Valid.is_ref(doc, node, ret)
-              Valid.add_ref(ctxt.vctxt, doc, content, ret)
-            end
-          end
-          ret
+          ctxt.sax2_attribute_ns(localname, prefix, value, alloc)
         end
 
         # xmlSAX2StartElementNs
         def start_element_ns(ctxt, localname, prefix, uri, nb_namespaces, namespaces, nb_attributes, nb_defaulted,
           attributes)
-          doc = ctxt.my_doc
-          if ctxt.validate != 0 && doc.ext_subset.nil? &&
-              (doc.int_subset.nil? || (doc.int_subset.notations.nil? && doc.int_subset.elements.nil? &&
-                doc.int_subset.attributes.nil? && doc.int_subset.entities.nil?))
-            ctxt.ctxt_err(nil, Domain::DTD, ErrCode::DTD_NO_DTD, Level::ERROR, nil, nil, nil, 0,
-              "Validation failed: no DTD found !")
-            ctxt.valid = 0
-            ctxt.validate = 0
-          end
-          localname = -"#{prefix}:#{localname}" if prefix && uri.nil?
-          ret = XmlNode.new(ELEMENT_NODE, localname, doc)
-          last = nil
-          i = 0
-          while i < nb_namespaces
-            pref, nsuri = namespaces[i]
-            ns = XmlNs.new(nsuri, pref)
-            if last.nil?
-              ret.ns_def = last = ns
-            else
-              last.next = ns
-              last = ns
-            end
-            ret.ns = ns if uri && prefix == pref
-            ctxt.ns_update_sax(pref, ns)
-            if ctxt.html == 0 && ctxt.validate != 0 && ctxt.well_formed != 0 && doc&.int_subset
-              ctxt.valid &= Valid.validate_one_namespace(ctxt.vctxt, doc, ret, prefix, ns, nsuri)
-            end
-            i += 1
-          end
-          ctxt.nodemem = -1
-          append_child(ctxt, ret)
-          if ctxt.node_push(ret) < 0
-            Tree.unlink_node(ret)
-            return
-          end
-
-          if nb_defaulted != 0 && (ctxt.loadsubset & XML_COMPLETE_ATTRS) == 0
-            nb_attributes -= nb_defaulted
-          end
-          if uri && ret.ns.nil?
-            ret.ns = ctxt.ns_lookup_sax(prefix)
-            ret.ns = Tree.search_ns(doc, ret, prefix) if ret.ns.nil? && prefix == "xml"
-            if ret.ns.nil?
-              Tree.new_ns(ret, nil, prefix)
-              ns = ret.ns_def
-              ns = ns.next while ns&.next
-              if prefix
-                ctxt.ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, prefix, nil,
-                  nil, 0, "Namespace prefix #{prefix} was not found\n")
-              else
-                ctxt.ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, nil, nil,
-                  nil, 0, "Namespace default prefix was not found\n")
-              end
-            end
-          end
-
-          if nb_attributes > 0
-            prev = nil
-            j = 0
-            while j < nb_attributes
-              a = attributes[j]
-              alloc = a.alloc
-              if a.prefix && a.ns.nil?
-                fullname = -"#{a.prefix}:#{a.name}"
-                attr = attribute_ns(ctxt, fullname, nil, a.value, alloc)
-              else
-                attr = attribute_ns(ctxt, a.name, a.prefix, a.value, alloc)
-              end
-              if attr
-                if prev.nil?
-                  ctxt.node.properties = attr
-                else
-                  prev.next = attr
-                  attr.prev = prev
-                end
-                prev = attr
-              end
-              j += 1
-            end
-          end
-
-          if ctxt.validate != 0 && (ctxt.vctxt.flags & ValidCtxt::XML_VCTXT_DTD_VALIDATED) == 0
-            chk = Valid.validate_dtd_final(ctxt.vctxt, doc)
-            ctxt.valid = 0 if chk <= 0
-            ctxt.well_formed = 0 if chk < 0
-            ctxt.valid &= Valid.validate_root(ctxt.vctxt, doc)
-            ctxt.vctxt.flags |= ValidCtxt::XML_VCTXT_DTD_VALIDATED
-          end
+          ctxt.sax2_start_element_ns(localname, prefix, uri, nb_namespaces, namespaces, nb_attributes, nb_defaulted,
+            attributes)
         end
 
         # xmlSAX2EndElementNs
         def end_element_ns(ctxt, _localname, _prefix, _uri)
-          ctxt.nodemem = -1
-          if ctxt.validate != 0 && ctxt.well_formed != 0 && ctxt.my_doc&.int_subset
-            ctxt.valid &= Valid.validate_one_element(ctxt.vctxt, ctxt.my_doc, ctxt.node)
-          end
-          ctxt.node_pop
+          ctxt.sax2_end_element_ns
         end
 
         # xmlSAX2Reference
@@ -829,67 +658,11 @@ module Nokogiri
 
         # xmlSAX2Text
         def text(ctxt, ch, type)
-          node = ctxt.node
-          return if node.nil?
-
-          last_child = node.last
-          if last_child.nil?
-            last_child = if type == TEXT_NODE
-              text_node(ctxt, ch)
-            else
-              Tree.new_cdata_block(ctxt.my_doc, ch)
-            end
-            node.children = last_child
-            node.last = last_child
-            last_child.parent = node
-            last_child.doc = node.doc
-            ctxt.nodelen = ch.bytesize
-            ctxt.nodemem = ch.bytesize + 1
-          else
-            coalesce = last_child.type == type && (type != TEXT_NODE || last_child.name.equal?(STRING_TEXT))
-            if coalesce
-              max_length = ctxt.option?(PARSE_HUGE) ? XML_MAX_HUGE_LENGTH : XML_MAX_TEXT_LENGTH
-              if ctxt.nodemem != 0 && (ch.bytesize > max_length || ctxt.nodelen > max_length - ch.bytesize)
-                ctxt.fatal_err(ErrCode::ERR_RESOURCE_LIMIT, "Text node too long, try XML_PARSE_HUGE")
-                ctxt.halt
-                return
-              end
-              c = last_child.content
-              if c.nil?
-                last_child.content = +ch
-              elsif c.frozen?
-                last_child.content = c + ch
-              else
-                c << ch
-              end
-              ctxt.nodelen = last_child.content.bytesize
-              ctxt.nodemem = ctxt.nodelen + 1
-            else
-              last_child = if type == TEXT_NODE
-                text_node(ctxt, ch).tap { |t| t.doc = ctxt.my_doc }
-              else
-                Tree.new_cdata_block(ctxt.my_doc, ch)
-              end
-              append_child(ctxt, last_child)
-              if node.children
-                ctxt.nodelen = ch.bytesize
-                ctxt.nodemem = ch.bytesize + 1
-              end
-            end
-          end
-          if type == TEXT_NODE && ctxt.linenumbers != 0 && ctxt.input
-            line = ctxt.current_line
-            if line < 65_535
-              last_child.line = line
-            else
-              last_child.line = 65_535
-              last_child.psvi = line if ctxt.option?(PARSE_BIG_LINES)
-            end
-          end
+          ctxt.sax2_text(ch, type)
         end
 
         def characters(ctxt, ch)
-          text(ctxt, ch, TEXT_NODE)
+          ctxt.sax2_text(ch, TEXT_NODE)
         end
 
         def ignorable_whitespace(_ctxt, _ch); end
@@ -908,7 +681,7 @@ module Nokogiri
 
         # xmlSAX2CDataBlock
         def cdata_block(ctxt, value)
-          text(ctxt, value, CDATA_SECTION_NODE)
+          ctxt.sax2_text(value, CDATA_SECTION_NODE)
         end
 
         START_ELEMENT_NS = method(:start_element_ns)
@@ -937,6 +710,278 @@ module Nokogiri
         IGNORABLE_WHITESPACE = method(:ignorable_whitespace)
         PROCESSING_INSTRUCTION = method(:processing_instruction)
         COMMENT = method(:comment)
+      end
+
+      # The hot SAX2.c tree-building callbacks as parser-context methods (direct ivar access); the
+      # SAX2 module functions above delegate here.
+      class Ctxt
+        # xmlSAX2AppendChild
+        def sax2_append_child(node)
+          parent = if @in_subset == 1
+            @my_doc.int_subset
+          elsif @in_subset == 2
+            @my_doc.ext_subset
+          else
+            @node || @my_doc
+          end
+          last = parent.last
+          if last.nil?
+            parent.children = node
+          else
+            last.next = node
+            node.prev = last
+          end
+          parent.last = node
+          node.parent = parent
+          if node.type != TEXT_NODE && @linenumbers != 0 && @input
+            line = @line
+            node.line = line < 65_535 ? line : 65_535
+          end
+        end
+
+        # xmlSAX2AttributeNs
+        def sax2_attribute_ns(localname, prefix, value, alloc)
+          node = @node
+          namespace = nil
+          if prefix
+            namespace = ns_lookup_sax(prefix)
+            namespace = Tree.search_ns(node.doc, node, prefix) if namespace.nil? && prefix == "xml"
+          end
+          ret = XmlAttr.new(localname, node.doc)
+          ret.parent = node
+          ret.ns = namespace
+          if @replace_entities == 0 && @html == 0
+            if alloc != true
+              tmp = XmlNode.new(TEXT_NODE, STRING_TEXT, ret.doc)
+              tmp.content = +value
+              ret.children = ret.last = tmp
+              tmp.parent = ret
+            elsif !value.empty?
+              Tree.node_parse_content(ret, value)
+            end
+          elsif value
+            tmp = XmlNode.new(TEXT_NODE, STRING_TEXT, ret.doc)
+            tmp.content = +value
+            ret.children = ret.last = tmp
+            tmp.parent = ret
+          end
+
+          doc = @my_doc
+          if @html == 0 && @validate != 0 && @well_formed != 0 && doc && doc.int_subset
+            if @replace_entities == 0
+              dup = value.include?("&") ? expand_entities_in_att_value(value, false) : nil
+              if dup.nil?
+                @valid &= Valid.validate_one_attribute(@vctxt, doc, node, ret, value)
+              else
+                if @atts_special
+                  fullname = prefix ? "#{prefix}:#{localname}" : localname
+                  @vctxt.valid = 1
+                  nvalnorm = Valid.ctxt_normalize_attribute_value(@vctxt, doc, node, fullname, dup)
+                  @valid = 0 if @vctxt.valid != 1
+                  dup = nvalnorm if nvalnorm
+                end
+                @valid &= Valid.validate_one_attribute(@vctxt, doc, node, ret, dup)
+              end
+            else
+              @vctxt.flags |= ValidCtxt::XML_VCTXT_IN_ENTITY if @input.entity
+              @valid &= Valid.validate_one_attribute(@vctxt, doc, node, ret, value.dup)
+              @vctxt.flags &= ~ValidCtxt::XML_VCTXT_IN_ENTITY
+            end
+          elsif (@loadsubset & XML_SKIP_IDS) == 0 && @input.entity.nil? &&
+              (child = ret.children) && child.type == TEXT_NODE && child.next.nil?
+            if prefix == "xml" && localname == "id"
+              content = child.content
+              if Valid.validate_ncname(content, true) != 0
+                ctxt_err(nil, Domain::DTD, ErrCode::DTD_XMLID_VALUE, Level::ERROR, content, nil, nil, 0,
+                  "xml:id : attribute value #{content} is not an NCName\n")
+                @valid = 0
+              end
+              Valid.add_id(@vctxt, doc, content, ret)
+            elsif doc.nil? || doc.int_subset || doc.ext_subset || doc.type == HTML_DOCUMENT_NODE
+              # (without a DTD, in an XML document, an attribute other than xml:id is neither an
+              # ID nor a reference: xmlIsID/xmlIsRef would return 0)
+              content = child.content
+              if Tree.is_id(doc, node, ret)
+                Valid.add_id(@vctxt, doc, content, ret)
+              elsif Valid.is_ref(doc, node, ret)
+                Valid.add_ref(@vctxt, doc, content, ret)
+              end
+            end
+          end
+          ret
+        end
+
+        # xmlSAX2StartElementNs
+        def sax2_start_element_ns(localname, prefix, uri, nb_namespaces, namespaces, nb_attributes, nb_defaulted,
+          attributes)
+          doc = @my_doc
+          if @validate != 0 && doc.ext_subset.nil? &&
+              (doc.int_subset.nil? || (doc.int_subset.notations.nil? && doc.int_subset.elements.nil? &&
+                doc.int_subset.attributes.nil? && doc.int_subset.entities.nil?))
+            ctxt_err(nil, Domain::DTD, ErrCode::DTD_NO_DTD, Level::ERROR, nil, nil, nil, 0,
+              "Validation failed: no DTD found !")
+            @valid = 0
+            @validate = 0
+          end
+          localname = -"#{prefix}:#{localname}" if prefix && uri.nil?
+          ret = XmlNode.new(ELEMENT_NODE, localname, doc)
+          if nb_namespaces > 0
+            last = nil
+            i = 0
+            while i < nb_namespaces
+              pref, nsuri = namespaces[i]
+              ns = XmlNs.new(nsuri, pref)
+              if last.nil?
+                ret.ns_def = last = ns
+              else
+                last.next = ns
+                last = ns
+              end
+              ret.ns = ns if uri && prefix == pref
+              ns_update_sax(pref, ns)
+              if @html == 0 && @validate != 0 && @well_formed != 0 && doc&.int_subset
+                @valid &= Valid.validate_one_namespace(@vctxt, doc, ret, prefix, ns, nsuri)
+              end
+              i += 1
+            end
+          end
+          @nodemem = -1
+          sax2_append_child(ret)
+          # nodePush
+          if @node_tab.length > ((@options & PARSE_HUGE) != 0 ? 2048 : 256)
+            if node_push(ret) < 0
+              Tree.unlink_node(ret)
+              return
+            end
+          else
+            @node_tab << ret
+            @node = ret
+          end
+
+          if nb_defaulted != 0 && (@loadsubset & XML_COMPLETE_ATTRS) == 0
+            nb_attributes -= nb_defaulted
+          end
+          if uri && ret.ns.nil?
+            ret.ns = ns_lookup_sax(prefix)
+            ret.ns = Tree.search_ns(doc, ret, prefix) if ret.ns.nil? && prefix == "xml"
+            if ret.ns.nil?
+              Tree.new_ns(ret, nil, prefix)
+              if prefix
+                ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, prefix, nil,
+                  nil, 0, "Namespace prefix #{prefix} was not found\n")
+              else
+                ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, nil, nil,
+                  nil, 0, "Namespace default prefix was not found\n")
+              end
+            end
+          end
+
+          if nb_attributes > 0
+            prev = nil
+            j = 0
+            while j < nb_attributes
+              a = attributes[j]
+              attr = if a.prefix && a.ns.nil?
+                sax2_attribute_ns(-"#{a.prefix}:#{a.name}", nil, a.value, a.alloc)
+              else
+                sax2_attribute_ns(a.name, a.prefix, a.value, a.alloc)
+              end
+              if attr
+                if prev.nil?
+                  @node.properties = attr
+                else
+                  prev.next = attr
+                  attr.prev = prev
+                end
+                prev = attr
+              end
+              j += 1
+            end
+          end
+
+          if @validate != 0 && (@vctxt.flags & ValidCtxt::XML_VCTXT_DTD_VALIDATED) == 0
+            chk = Valid.validate_dtd_final(@vctxt, doc)
+            @valid = 0 if chk <= 0
+            @well_formed = 0 if chk < 0
+            @valid &= Valid.validate_root(@vctxt, doc)
+            @vctxt.flags |= ValidCtxt::XML_VCTXT_DTD_VALIDATED
+          end
+        end
+
+        # xmlSAX2EndElementNs
+        def sax2_end_element_ns
+          @nodemem = -1
+          if @validate != 0 && @well_formed != 0 && @my_doc&.int_subset
+            @valid &= Valid.validate_one_element(@vctxt, @my_doc, @node)
+          end
+          # nodePop
+          tab = @node_tab
+          unless tab.empty?
+            tab.pop
+            @node = tab[-1]
+          end
+        end
+
+        # xmlSAX2Text
+        def sax2_text(ch, type)
+          node = @node
+          return if node.nil?
+
+          last_child = node.last
+          if last_child.nil?
+            if type == TEXT_NODE
+              last_child = XmlNode.new(TEXT_NODE, STRING_TEXT, node.doc)
+              last_child.content = +ch
+            else
+              last_child = Tree.new_cdata_block(@my_doc, ch)
+              last_child.doc = node.doc
+            end
+            node.children = last_child
+            node.last = last_child
+            last_child.parent = node
+            @nodelen = ch.bytesize
+            @nodemem = ch.bytesize + 1
+          elsif last_child.type == type && (type != TEXT_NODE || last_child.name.equal?(STRING_TEXT))
+            # coalesce
+            max_length = (@options & PARSE_HUGE) != 0 ? XML_MAX_HUGE_LENGTH : XML_MAX_TEXT_LENGTH
+            if @nodemem != 0 && (ch.bytesize > max_length || @nodelen > max_length - ch.bytesize)
+              fatal_err(ErrCode::ERR_RESOURCE_LIMIT, "Text node too long, try XML_PARSE_HUGE")
+              halt
+              return
+            end
+            c = last_child.content
+            if c.nil?
+              last_child.content = c = +ch
+            elsif c.frozen?
+              last_child.content = c = c + ch
+            else
+              c << ch
+            end
+            @nodelen = c.bytesize
+            @nodemem = @nodelen + 1
+          else
+            if type == TEXT_NODE
+              last_child = XmlNode.new(TEXT_NODE, STRING_TEXT, @my_doc)
+              last_child.content = +ch
+            else
+              last_child = Tree.new_cdata_block(@my_doc, ch)
+            end
+            sax2_append_child(last_child)
+            if node.children
+              @nodelen = ch.bytesize
+              @nodemem = ch.bytesize + 1
+            end
+          end
+          if type == TEXT_NODE && @linenumbers != 0 && @input
+            line = @line
+            if line < 65_535
+              last_child.line = line
+            else
+              last_child.line = 65_535
+              last_child.psvi = line if (@options & PARSE_BIG_LINES) != 0
+            end
+          end
+        end
       end
     end
   end
