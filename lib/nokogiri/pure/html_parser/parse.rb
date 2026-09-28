@@ -1356,8 +1356,32 @@ module Nokogiri
         end
 
         # htmlParseReference
+        REF_FAST = /&(?:([A-Za-z_:][A-Za-z0-9_\-:.]*+)|#([0-9]{1,7}+)|#[xX]([0-9A-Fa-f]{1,6}+));/n
+        UTF8_CACHE = Hash.new { |h, v| h[v] = HTMLParser.utf8_append(+"".b, v).force_encoding(Encoding::UTF_8).freeze }
+
         def parse_reference
           return if cur_byte != 0x26
+
+          # fast path: a known entity or a valid char reference, terminated by ';', with no
+          # possible input grow
+          ss = scanner
+          ss.pos = @cur
+          if (len = ss.skip(REF_FAST)) && @buf.bytesize - @cur - len >= INPUT_CHUNK
+            v = if (name = ss[1])
+              (ent = ENTITY_BY_NAME[name]) && ent.value > 0 ? ent.value : nil
+            elsif (dec = ss[2])
+              dec.to_i
+            else
+              ss[3].to_i(16)
+            end
+            if v && (name || ChValid.char?(v))
+              @cur += len
+              @col += len
+              check_paragraph
+              sax_characters(+UTF8_CACHE[v])
+              return
+            end
+          end
 
           if nxt(1) == 0x23
             c = parse_char_ref
