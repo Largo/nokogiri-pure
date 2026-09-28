@@ -77,7 +77,7 @@ module Nokogiri
       class Op
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
-          :dos_op, :impure, :std_fn, :std_meth, :fused, :sorted_axis,
+          :dos_op, :impure, :std_fn, :fused, :sorted_axis,
           :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
@@ -153,8 +153,6 @@ module Nokogiri
         when OP_FUNCTION
           # standard functions are looked up first in a static table (patch 0019): static binding
           op.std_fn = STANDARD_FN_METHODS[op.value4] if op.value5.nil?
-          # (bound per evaluation: see ParserContext#eval_function)
-          op.std_meth = ParserContext.instance_method(op.std_fn) if op.std_fn
         when OP_PREDICATE, OP_FILTER
           c1 = op.c1
           c2 = op.c2
@@ -202,7 +200,7 @@ module Nokogiri
         case st.value
         when AXIS_PRECEDING_SIBLING, AXIS_FOLLOWING_SIBLING
           op.count_step = st
-          st.count_meth = FastCollect.method(:"count_#{st.plan[0]}")
+          st.count_meth = :"count_#{st.plan[0]}"
         end
       end
 

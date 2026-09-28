@@ -709,6 +709,17 @@ module Nokogiri
         "true" => :fn_true,
         "translate" => :fn_translate,
       }.freeze
+
+      # ParserContext#call_std(name, nargs): calls the core function method +name+ (a
+      # STANDARD_FN_METHODS value) through a case on the name, see FastCollect.run
+      ParserContext.class_eval <<~RUBY, __FILE__, __LINE__ + 1
+        def call_std(m, nargs)
+          case m
+          #{STANDARD_FN_METHODS.values.uniq.map { |f| "when :#{f} then #{f}(nargs)" }.join("\n")}
+          else raise ArgumentError, "unknown core function \#{m}"
+          end
+        end
+      RUBY
       {
         "boolean" => :fn_boolean,
         "ceiling" => :fn_ceiling,

@@ -410,17 +410,37 @@ module Nokogiri
         end
         FOUND = FoundSink.new
 
-        # does the traversal +meth+ produce any node? (the toBool/breakOnFirstHit mode)
-        def self.exists?(meth, ctxnode, doc, name, uri, arg)
+        # does the traversal +sym+ produce any node? (the toBool/breakOnFirstHit mode)
+        def self.exists?(sym, ctxnode, doc, name, uri, arg)
           catch(:xpath_found) do
-            meth.call(ctxnode, doc, name, uri, FOUND, arg)
+            run(sym, ctxnode, doc, name, uri, FOUND, arg)
             false
           end
         end
 
-        # [method name, extra_arg, Method] for a COLLECT op, or nil. (Calling the Method object
-        # rather than __send__ with a varying name keeps YJIT from falling back to running the
-        # traversal in the interpreter.)
+        # FastCollect.run(sym, ...) runs the traversal +sym+ and count_run(sym, ...) the counter
+        # +sym+, through a case on the name: __send__ with names varying at one call site makes
+        # YJIT give up on the call (and run the traversal in the interpreter), and Method#call
+        # costs more in the interpreter.
+        traversals = singleton_methods.grep(/\A(?:descendant|child|child_elem|attribute|following_sibling|preceding_sibling|self|parent|ancestor)_/).sort
+        counters = singleton_methods.grep(/\Acount_/).sort
+        class_eval <<~RUBY, __FILE__, __LINE__ + 1
+          def self.run(sym, ctxnode, doc, name, uri, seq, arg)
+            case sym
+            #{traversals.map { |t| "when :#{t} then #{t}(ctxnode, doc, name, uri, seq, arg)" }.join("\n")}
+            else raise ArgumentError, "unknown traversal \#{sym}"
+            end
+          end
+
+          def self.count_run(sym, ctxnode, doc, name, uri, memo)
+            case sym
+            #{counters.map { |t| "when :#{t} then #{t}(ctxnode, doc, name, uri, memo)" }.join("\n")}
+            else raise ArgumentError, "unknown counter \#{sym}"
+            end
+          end
+        RUBY
+
+        # [method name, extra_arg] for a COLLECT op, or nil
         def self.plan_for(axis, test, type, prefix, name)
           kind = AXIS_KINDS[axis]
           return nil if kind.nil?
@@ -432,8 +452,7 @@ module Nokogiri
           if axis == AXIS_CHILD && (test == NODE_TEST_NAME || test == NODE_TEST_ALL) && type == NODE_TYPE_NODE
             meth = "child_elem"
           end
-          sym = :"#{meth}_#{m}"
-          [sym, kind[1], method(sym)]
+          [:"#{meth}_#{m}", kind[1]]
         end
       end
     end
