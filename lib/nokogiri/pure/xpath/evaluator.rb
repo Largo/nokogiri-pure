@@ -25,6 +25,7 @@ module Nokogiri
           @xptr = 0
           @sorted = nil
           @func_cache = nil
+          @sib_memo = nil
           @depth = context ? context.depth : 0
         end
 
@@ -327,6 +328,7 @@ module Nokogiri
             xp_error(STACK_ERROR)
           end
           old_depth = @depth
+          @sib_memo = nil
           if to_bool
             res = comp_op_eval_to_boolean(comp.root, false)
             @depth = old_depth
@@ -487,7 +489,22 @@ module Nokogiri
           end
         end
 
+        # count(<sibling axis>::test) from +n+ for the fused COLLECT op +st+. The memo lives for
+        # one evaluation and is dropped around anything that could run user code (extension
+        # functions, variable lookups), the only way the tree can change during an evaluation.
+        def count_siblings(st, n)
+          uri = st.value4 ? op_uri(st) : nil
+          doc = @context.doc
+          memos = (@sib_memo ||= {}.compare_by_identity)
+          m = memos[st]
+          if m.nil? || !m[0].equal?(doc) || m[1] != uri
+            m = memos[st] = [doc, uri, {}.compare_by_identity]
+          end
+          FastCollect.__send__(st.count_meth, n, doc, st.value5, uri, m[2])
+        end
+
         def eval_variable(op)
+          @sib_memo = nil
           comp_op_eval(op.c1) if op.c1
           if op.value5.nil?
             val = @context.variable_lookup(op.value4)
@@ -503,6 +520,15 @@ module Nokogiri
 
         def eval_function(op)
           if (m = op.std_fn)
+            if (st = op.count_step) && (n = @context.node) && n.type != NAMESPACE_DECL &&
+                @depth + 1 < XPATH_MAX_RECURSION_DEPTH
+              # count(sibling-axis::test): the same number the collected node-set would have
+              @value_tab.push(count_siblings(st, n).to_f)
+              # (the generic path leaves @sorted pointing at the discarded step result)
+              @sorted = nil if st.sorted_axis
+              check_error!
+              return
+            end
             frame = @value_tab.length
             comp_op_eval(op.c1) if op.c1
             nargs = op.value
@@ -542,11 +568,13 @@ module Nokogiri
           ctx.function = op.value4
           ctx.function_uri = uri
           @sorted = nil # (an extension function may hand back a reordered node-set)
+          @sib_memo = nil # (and may modify the tree)
           # libxml2 keeps the recursion depth in ctxt->context->depth: publish the live depth
           # so that evaluations nested in the function continue from it
           old_depth = ctx.depth
           ctx.depth = @depth
           func.call(self, nargs)
+          @sib_memo = nil
           ctx.depth = old_depth
           ctx.function = old_func
           ctx.function_uri = old_func_uri
@@ -1168,11 +1196,16 @@ module Nokogiri
           seq = []
           merge_state = dedup ? [] : nil
           range_buf = has_axis_range ? [] : nil
+          # the child axis yields nothing for a node without children (most context nodes of
+          # e.g. "//x[1]" are text nodes)
+          child_axis = op.value == AXIS_CHILD
           i = 0
           n = context_seq.length
           while i < n
             cn = context_seq[i]
             i += 1
+            next if child_axis && cn.children.nil?
+
             if has_axis_range
               FastCollect.__send__(sym, cn, doc, name, uri, range_buf, arg)
               if max_pos >= 1 && range_buf.length >= max_pos
@@ -1357,7 +1390,7 @@ module Nokogiri
           break_on_first_hit = to_bool && pred_op.nil?
           fast = first.nil? && last.nil? && !break_on_first_hit ? op.plan : nil
           if fast && (!has_axis_range || BOUNDED_AXES.include?(axis)) &&
-              context_seq.none? { |n| n.type == NAMESPACE_DECL }
+              !context_seq.any?(XmlNs) # (namespace nodes are exactly the XmlNs structs)
             return collect_fast_multi(op, fast, context_seq, uri, pred_op, has_predicate_range,
               has_axis_range, max_pos, to_bool, dedup)
           end

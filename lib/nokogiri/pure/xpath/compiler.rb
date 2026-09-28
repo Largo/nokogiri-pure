@@ -78,7 +78,7 @@ module Nokogiri
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
           :dos_op, :impure, :std_fn, :fused, :sorted_axis,
-          :eq_step, :eq_value
+          :eq_step, :eq_value, :count_step, :count_meth
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -117,6 +117,7 @@ module Nokogiri
           @steps.each { |op| XPath.precompute_op(self, op) }
           @steps.each { |op| XPath.precompute_dos_rewrite(op) if op.op == OP_COLLECT }
           @steps.each { |op| XPath.precompute_equal(op) if op.op == OP_EQUAL }
+          @steps.each { |op| XPath.precompute_count(op) if op.op == OP_FUNCTION }
           @root = @last >= 0 ? @steps[@last] : nil
           self
         end
@@ -175,6 +176,24 @@ module Nokogiri
         elsif c2.op == OP_COLLECT && c2.fused && c1.op == OP_VALUE
           op.eq_step = c2
           op.eq_value = c1.value4
+        end
+      end
+
+      # "count(preceding-sibling::test)" / "count(following-sibling::test)" on the context node
+      # (CSS :nth-child and friends): counted with a memo instead of collecting the siblings
+      def self.precompute_count(op)
+        return unless op.std_fn == :fn_count && op.value == 1
+
+        arg = op.c1
+        return unless arg && arg.op == OP_ARG && arg.c1.nil?
+
+        st = arg.c2
+        return unless st && st.op == OP_COLLECT && st.fused
+
+        case st.value
+        when AXIS_PRECEDING_SIBLING, AXIS_FOLLOWING_SIBLING
+          op.count_step = st
+          st.count_meth = :"count_#{st.plan[0]}"
         end
       end
 

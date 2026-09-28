@@ -198,6 +198,82 @@ module Nokogiri
               end
             end
 
+            # count(following-sibling::test) from +ctxnode+, memoized in +memo+ (node => number
+            # of hits from that node on). The traversal visits cur, cur.next, ... (stopping after
+            # the document node), so the count from a node is its own hit plus the count from
+            # its next sibling.
+            def self.count_following_sibling_#{m}(ctxnode, doc, name, uri, memo)
+              ctype = ctxnode.type
+              return 0 if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
+
+              start = ctxnode.next
+              return 0 if start.nil?
+
+              total = memo[start]
+              return total if total
+
+              path = []
+              total = 0
+              cur = start
+              while cur
+                if (known = memo[cur])
+                  total = known
+                  break
+                end
+                path << cur
+                break if cur.equal?(doc)
+
+                cur = cur.next
+              end
+              i = path.length - 1
+              while i >= 0
+                cur = path[i]
+                t = cur.type
+                total += 1 if #{cond}
+                memo[cur] = total
+                i -= 1
+              end
+              total
+            end
+
+            # count(preceding-sibling::test), memoized like count_following_sibling_*: the
+            # traversal from ctxnode visits ctxnode.prev unconditionally, then steps over DTD nodes
+            def self.count_preceding_sibling_#{m}(ctxnode, doc, name, uri, memo)
+              ctype = ctxnode.type
+              return 0 if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
+
+              start = ctxnode.prev
+              return 0 if start.nil?
+
+              total = memo[start]
+              return total if total
+
+              path = []
+              total = 0
+              cur = start
+              while cur
+                if (known = memo[cur])
+                  total = known
+                  break
+                end
+                path << cur
+                break if cur.equal?(doc)
+
+                pr = cur.prev
+                cur = pr if pr && pr.type == DTD_NODE
+                cur = cur.prev
+              end
+              i = path.length - 1
+              while i >= 0
+                cur = path[i]
+                t = cur.type
+                total += 1 if #{cond}
+                memo[cur] = total
+                i -= 1
+              end
+              total
+            end
+
             # xmlXPathNextSelf
             def self.self_#{m}(ctxnode, doc, name, uri, seq, _unused)
               cur = ctxnode

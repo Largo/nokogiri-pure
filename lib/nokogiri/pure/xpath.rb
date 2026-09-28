@@ -981,9 +981,12 @@ module Nokogiri
         case t1
         when ELEMENT_NODE
           if node2.type == ELEMENT_NODE
-            if (l1 = doc_order(node1)) && (l2 = doc_order(node2)) && node1.doc.equal?(node2.doc)
-              return 1 if l1 < l2
-              return -1 if l1 > l2
+            # (doc_order inlined: stamps are negative Integers in content)
+            c1 = node1.content
+            if c1.is_a?(Integer) && c1 < 0 && (c2 = node2.content).is_a?(Integer) && c2 < 0 &&
+                node1.doc.equal?(node2.doc)
+              return 1 if c1 > c2
+              return -1 if c1 < c2
             end
             return cmp_turtle(node1, node2)
           end
@@ -1106,6 +1109,46 @@ module Nokogiri
         return 1 if node1.equal?(node2.prev)
         return -1 if node1.equal?(node2.next)
 
+        # Nodes at the same depth (the common case when sorting the result of a location path):
+        # climb both chains in lockstep to the first level where the parents coincide. Neither
+        # node can then be an ancestor of the other, the roots are the same unless both chains
+        # end without meeting, and the nodes reached are exactly the ones the depth-aligning loop
+        # below stops at. Chains of different lengths take the general route.
+        x = node1
+        y = node2
+        while true
+          px = x.parent
+          py = y.parent
+          break if px.equal?(py)
+
+          if px.nil? || py.nil?
+            x = nil
+            break
+          end
+          x = px
+          y = py
+        end
+        if x
+          return -2 if px.nil?
+
+          return 1 if x.equal?(y.prev)
+          return -1 if x.equal?(y.next)
+
+          if (c1 = x.content).is_a?(Integer) && c1 < 0 && x.type == ELEMENT_NODE && y.type == ELEMENT_NODE &&
+              (c2 = y.content).is_a?(Integer) && c2 < 0 && x.doc.equal?(y.doc)
+            return 1 if c1 > c2
+            return -1 if c1 < c2
+          end
+
+          cur = x.next
+          while cur
+            return 1 if cur.equal?(y)
+
+            cur = cur.next
+          end
+          return -1
+        end
+
         depth2 = 0
         cur = node2
         while (par = cur.parent)
@@ -1189,7 +1232,7 @@ module Nokogiri
         end
 
         cx = dst[base + c]
-        loop do
+        while true
           val = wrap_cmp(x, cx)
           if val < 0
             return c if c - l <= 1
@@ -1254,16 +1297,16 @@ module Nokogiri
         end
         curr = start + 2
         if wrap_cmp(dst[start], dst[start + 1]) <= 0
-          loop do
-            break if curr == size - 1
+          last = size - 1
+          while curr != last
             break if wrap_cmp(dst[curr - 1], dst[curr]) > 0
 
             curr += 1
           end
           curr - start
         else
-          loop do
-            break if curr == size - 1
+          last = size - 1
+          while curr != last
             break if wrap_cmp(dst[curr - 1], dst[curr]) <= 0
 
             curr += 1
@@ -1339,7 +1382,7 @@ module Nokogiri
       end
 
       def tim_sort_collapse(dst, stack, stack_curr, size)
-        loop do
+        while true
           break if stack_curr <= 1
 
           if stack_curr == 2 && stack[0][1] + stack[1][1] == size
@@ -1411,11 +1454,14 @@ module Nokogiri
         run_stack = []
         stack_curr = 0
         curr = 0
-        3.times do
+        i = 0
+        while i < 3
           cont, stack_curr, curr = tim_push_next(dst, size, minrun, run_stack, stack_curr, curr)
           return unless cont
+
+          i += 1
         end
-        loop do
+        while true
           unless check_invariant(run_stack, stack_curr)
             stack_curr = tim_sort_collapse(dst, run_stack, stack_curr, size)
             next
