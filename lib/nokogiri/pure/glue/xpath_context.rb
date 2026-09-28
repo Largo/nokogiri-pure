@@ -180,7 +180,7 @@ module Nokogiri
           end
           raise TypeError, "no implicit conversion of #{desc} into String"
         end
-        raise ArgumentError, "string contains null byte" if str.include?("\0")
+        raise ArgumentError, "string contains null byte" if str.b.include?("\0")
 
         str
       end
