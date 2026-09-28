@@ -2382,7 +2382,11 @@ module Nokogiri
             is_start = true
             len = reset_rel + tail
           end
-          name.downcase! if name.match?(UPPER)
+          # (a known tag name is already lowercase: TAG_LOOKUP's keys are)
+          unless (tag = TAG_LOOKUP[name])
+            name.downcase!
+            tag = TAG_LOOKUP[name] || TAG_UNKNOWN # Util.tagn_enum
+          end
 
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
@@ -2410,7 +2414,7 @@ module Nokogiri
             reset_tag_buffer_start_point
             advance_over(@input.byteslice(start + reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
           end
-          @tag = tag = Util.tagn_enum(name)
+          @tag = tag
           @drop_next_attr_value = false
           @is_start_tag = is_start
           @is_self_closing = self_closing
@@ -2431,7 +2435,24 @@ module Nokogiri
           @tag_attributes = nil
           @tag_buffer.clear # (a fresh buffer in emit_current_tag; this one is never shared)
           @state = LEX_DATA
-          finish_token(output)
+          # finish_token(output): iter_next over the '>' ...
+          @offset += 1
+          @column += 1
+          @start += 1
+          read_char
+          # ... and the token's position
+          output.line = @token_start_line
+          output.column = @token_start_column
+          output.offset = @token_start_offset
+          orig = @token_start
+          output.orig_start = orig
+          @token_start = @start
+          @token_start_line = @line
+          @token_start_column = @column
+          @token_start_offset = @offset
+          len = @start - orig
+          len -= 1 if len > 0 && @input.getbyte(orig + len - 1) == 0x0d
+          output.orig_len = len
           true
         end
 
