@@ -21,7 +21,16 @@ module Nokogiri
   LIBXSLT_LOADED_VERSION = "10143"
   PACKAGED_LIBRARIES = true
   PRECOMPILED_LIBRARIES = true
-  LIBXML2_PATCHES = [].freeze
+  # the nokogiri patches applied to the packaged libxml2 (the XPath engine implements 0009 wildcard
+  # namespaces and 0019 static standard-function table; CSS::XPathVisitor keys off 0009)
+  LIBXML2_PATCHES = [
+    "0001-Remove-script-macro-support.patch",
+    "0002-Update-entities-to-remove-handling-of-ssi.patch",
+    "0009-allow-wildcard-namespaces.patch",
+    "0010-update-config.guess-and-config.sub-for-libxml2.patch",
+    "0011-rip-out-libxml2-s-libc_single_threaded-support.patch",
+    "0019-xpath-Use-separate-static-hash-table-for-standard-fu.patch",
+  ].freeze
   LIBXSLT_PATCHES = [].freeze
   LIBXML_ICONV_ENABLED = true
   LIBXML_ZLIB_ENABLED = false
