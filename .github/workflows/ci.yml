@@ -46,6 +46,24 @@ jobs:
         # and the memsize test measures C allocations (ObjectSpace.memsize_of), which pure Ruby lacks.
         run: bin/test --exclude '/test_version_info_for_libx(ml|slt)|memsize/'
 
+  ruby-wasm:
+    name: ruby.wasm (Ruby 4.0, browser WASI shim)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: gem install --no-document racc
+      - run: npm ci
+        working-directory: wasm
+      - name: AST depth guard (deep files overflow the wasm native stack when compiled)
+        run: ruby test-pure/wasm_ast_depth.rb 41
+      - run: wasm/test.sh
+
   gem:
     name: build gems
     runs-on: ubuntu-latest
