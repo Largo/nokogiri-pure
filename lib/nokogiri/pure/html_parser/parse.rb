@@ -359,7 +359,9 @@ module Nokogiri
 
         # areBlanks
         def are_blanks(str)
-          return false unless str.match?(/\A[ \t\n\r]*\z/n)
+          c0 = str.getbyte(0)
+          return false if c0 && c0 != 0x20 && c0 != 0x0A && c0 != 0x09 && c0 != 0x0D
+          return false unless str.match?(BLANK_RUN)
 
           c = @buf.getbyte(@cur) || 0
           return true if c == 0
@@ -749,17 +751,38 @@ module Nokogiri
           flush_script(buf) if !buf.empty? && @disable_sax == 0
         end
 
-        # advance over a run of single-byte chars already copied (NEXTL for each)
+        # advance over a run of complete, valid chars already copied (NEXTL for each: a "\n" starts
+        # a new line, every other char -- whatever its UTF-8 length -- is one column)
+        CONT_BYTES = "\x80-\xBF".b.freeze
+
         def advance_run(run)
           n = run.count("\n")
           if n > 0
             @line += n
-            @col = run.bytesize - run.rindex("\n")
+            last = run.rindex("\n")
+            if run.ascii_only?
+              @col = run.bytesize - last
+            else
+              tail = run.byteslice(last + 1, run.bytesize)
+              @col = 1 + tail.bytesize - tail.count(CONT_BYTES)
+            end
           else
-            @col += run.bytesize
+            @col += run.ascii_only? ? run.bytesize : run.bytesize - run.count(CONT_BYTES)
           end
           @cur += run.bytesize
         end
+
+        # one valid UTF-8 encoded char that htmlCurrentChar decodes without complaint and IS_CHAR
+        # accepts (no surrogates, U+FFFE/U+FFFF or values above U+10FFFF)
+        UTF8_CHAR_SRC = "[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE][\x80-\xBF]{2}|" \
+          "\xED[\x80-\x9F][\x80-\xBF]|\xEF(?:[\x80-\xBE][\x80-\xBF]|\xBF[\x80-\xBD])|" \
+          "\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2}"
+        # runs of character data that htmlParseCharDataInternal copies char by char without errors
+        TEXT_RUN_ASCII = /[^<&\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n
+        TEXT_RUN_UTF8 = Regexp.new(
+          "(?:[\\x09\\x0A\\x0D\\x20-\\x25\\x27-\\x3B\\x3D-\\x7F]+|#{UTF8_CHAR_SRC})+".b, Regexp::NOENCODING
+        )
+        BLANK_RUN = /\A[ \t\n\r]*\z/n
 
         def deliver_chars(buf)
           return unless @disable_sax == 0
@@ -768,13 +791,13 @@ module Nokogiri
           str = buf.force_encoding(Encoding::UTF_8)
           if blanks
             if @keep_blanks != 0
-              sax_characters(str)
+              @sax.characters(@user_data, str) if @sax_characters
             else
               sax_ignorable_whitespace(str)
             end
           else
             check_paragraph
-            sax_characters(str)
+            @sax.characters(@user_data, str) if @sax_characters
           end
         end
 
@@ -784,14 +807,23 @@ module Nokogiri
           buf << readahead if readahead != 0
           cur = current_char
           l = @clen
-          while cur != 0x3C && cur != 0x26 && cur != 0 && !stopped?
-            if cur < 0x80 && l == 1 && cur == @buf.getbyte(@cur) &&
-                (cur >= 0x20 || cur == 0x9 || cur == 0xA || cur == 0xD) &&
-                (run = scan_at(@cur, /[^<&\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n))
+          while cur != 0x3C && cur != 0x26 && cur != 0 && @disable_sax <= 1
+            # fast path: copy a run of chars that the loop below would copy one by one without
+            # errors, up to the next flush point and before any char whose CUR_CHAR could grow
+            # the input
+            if (l >= 2 || (cur < 0x80 && cur == @buf.getbyte(@cur))) &&
+                (run = scan_at(@cur, (@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII))
               lim = HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize
-              lim = [lim, @buf.bytesize - INPUT_CHUNK - @cur].min if growable?
+              if growable?
+                g = @buf.bytesize - INPUT_CHUNK - @cur
+                lim = g if g < lim
+              end
               lim = 1 if lim < 1
-              run = run.byteslice(0, lim) if run.bytesize > lim
+              if run.bytesize > lim
+                # the char straddling the limit is still copied before the flush
+                lim += 1 while ((run.getbyte(lim) || 0) & 0xC0) == 0x80
+                run = run.byteslice(0, lim)
+              end
               buf << run
               advance_run(run)
             else
