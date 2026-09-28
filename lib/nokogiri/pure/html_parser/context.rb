@@ -221,12 +221,24 @@ module Nokogiri
         end
       end
 
+      NOT_ICONV_NAMES = [
+        "646", "ASCII-8BIT", "BINARY", "BIG5-HKSCS:2008", "BIG5-UAO", "CESU-8", "CP50220", "CP50221",
+        "CP51932", "CP65000", "CP65001", "CP720", "CP878", "CP951", "EUC-JIS-2004", "EMACS-MULE", "GB12345",
+        "GB1988", "IBM720", "IBM737", "ISO-2022-JP-KDDI", "ISO2022-JP", "ISO2022-JP2", "MACJAPAN",
+        "MACJAPANESE", "PCK", "SJIS-DOCOMO", "SJIS-KDDI", "SJIS-SOFTBANK", "UTF-8-HFS", "UTF-8-MAC",
+        "UTF8-DOCOMO", "UTF8-KDDI", "UTF8-MAC", "UTF8-SOFTBANK", "EXTERNAL", "FILESYSTEM", "INTERNAL",
+        "LOCALE", "MACCENTEURO", "MACCROATIAN", "MACGREEK", "MACICELAND", "MACROMAN", "MACROMANIA",
+        "MACTHAI", "MACTURKISH", "MACUKRAINE", "STATELESS-ISO-2022-JP", "STATELESS-ISO-2022-JP-KDDI",
+      ].map(&:b).freeze
+
       # xmlOpenCharEncodingHandler: returns [status, handler]; handler is nil for UTF-8.
       def self.open_encoding_handler(name)
         return [:unsupported, nil] if name.nil?
 
         up = name.b.upcase
         return [:ok, nil] if up == "UTF-8" || up == "UTF8"
+        # names Ruby knows but glibc's iconv (the native gem's converter) doesn't
+        return [:unsupported, nil] if NOT_ICONV_NAMES.include?(up)
 
         h = Enc.find_handler(name.dup.force_encoding(Encoding::UTF_8))
         return [:unsupported, nil] if h.nil? || h.kind == :html
