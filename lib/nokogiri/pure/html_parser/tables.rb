@@ -1010,6 +1010,9 @@ module Nokogiri
       START_CLOSE_MAP = START_CLOSE.each_with_object({}) { |(o, n), h| (h[o] ||= {})[n] = true }
         .transform_values(&:freeze).freeze
       START_CLOSE_NONE = {}.freeze
+      # the other way round: CLOSED_BY[new] = the old tags a start tag +new+ closes
+      CLOSED_BY = START_CLOSE.each_with_object({}) { |(o, n), h| (h[n] ||= {})[o] = true }
+        .transform_values(&:freeze).freeze
 
       # htmlNoContentElements
       NO_CONTENT_ELEMENTS = ["html", "head"].freeze

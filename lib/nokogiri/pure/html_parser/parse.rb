@@ -332,7 +332,10 @@ module Nokogiri
         def auto_close(newtag)
           return if newtag.nil?
 
-          while @name && HTMLParser.check_auto_close(newtag, @name)
+          closes = CLOSED_BY[newtag] # (htmlCheckAutoClose(newtag, oldtag) for every oldtag)
+          return if closes.nil?
+
+          while @name && closes.key?(@name)
             sax_end_element(@name)
             name_pop
           end
@@ -1259,7 +1262,7 @@ module Nokogiri
         # htmlParseStartTag: returns 0 on success, -1 on error, 1 if discarded
         def parse_start_tag
           return -1 unless @has_input
-          return -1 if cur_byte != 0x3C
+          return -1 if @buf.getbyte(@cur) != 0x3C
 
           if @ni_pos == @cur + 1 && @ni_buf.equal?(@buf) && (len = @ni_len) &&
               !TAG_NAME_CHAR[@buf.getbyte(@cur + 1 + len) || 0] && @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
@@ -1311,9 +1314,10 @@ module Nokogiri
           end
 
           atts = nil
-          skip_blanks
-          while (c = cur_byte) != 0 && c != 0x3E && (c != 0x2F || nxt(1) != 0x3E) && !stopped?
-            grow_macro
+          c = @buf.getbyte(@cur)
+          skip_blanks if c == 0x20 || c == 0x0A || c == 0x09 || c == 0x0D
+          while (c = @buf.getbyte(@cur) || 0) != 0 && c != 0x3E && (c != 0x2F || nxt(1) != 0x3E) && @disable_sax <= 1
+            grow if @buf.bytesize - @cur < INPUT_CHUNK && (@input_flags & INPUT_PROGRESSIVE) == 0
             # fast path: a whole attribute that htmlParseAttribute would parse without errors,
             # entities, line breaks or input grows
             ss = scanner
@@ -1359,7 +1363,8 @@ module Nokogiri
                 next_char
               end
             end
-            skip_blanks
+            c = @buf.getbyte(@cur)
+            skip_blanks if c == 0x20 || c == 0x0A || c == 0x09 || c == 0x0D
           end
 
           check_meta(atts) if meta && atts
