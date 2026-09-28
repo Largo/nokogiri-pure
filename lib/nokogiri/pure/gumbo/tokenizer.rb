@@ -126,6 +126,12 @@ module Nokogiri
 
           @doc_type_state = DocTypeToken.new
 
+          # fast path state (set up front: one object shape for all tokenizers)
+          @scanner = nil
+          @max_attributes = nil
+          @next_nl = nil
+          @next_tab = nil
+
           # Utf8Iterator
           @start = 0
           @end = input.bytesize
@@ -410,6 +416,12 @@ module Nokogiri
           output.doc_type = @doc_type_state
           finish_token(output)
           @doc_type_state = DocTypeToken.new
+
+          # fast path state (set up front: one object shape for all tokenizers)
+          @scanner = nil
+          @max_attributes = nil
+          @next_nl = nil
+          @next_tab = nil
           true
         end
 

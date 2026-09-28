@@ -316,6 +316,17 @@ module Nokogiri
           @error_handler = nil
           @input_id = 1
           @last_error = nil
+          # (state of the fast paths, set up front so that every context has the same object
+          # shape: lazily added instance variables would make YJIT's ivar reads megamorphic)
+          @ni_buf = nil
+          @ni_pos = nil
+          @ni_len = nil
+          @ni_name = nil
+          @run_end = nil
+          @run_buf = nil
+          @run_re = nil
+          @blank_dtd_key = nil
+          @blank_dtd_res = nil
           reset_input
         end
 
