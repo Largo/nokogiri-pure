@@ -1108,14 +1108,14 @@ module Nokogiri
             pop_errors(ctxt, err_nr) if ctxt.err_nr > err_nr
           end
         when ONEORMORE, ZEROORMORE
-          catch(:brk) do
-            if define.type == ONEORMORE
-              err_nr = ctxt.err_nr
-              ret = validate_definition_list(ctxt, define.content)
-              throw :brk if ret != 0
-
+          if define.type == ONEORMORE
+            err_nr = ctxt.err_nr
+            ret = validate_definition_list(ctxt, define.content)
+            if ret == 0
               pop_errors(ctxt, err_nr) if ctxt.err_nr > err_nr
+              ret = validate_zero_or_more(ctxt, define)
             end
+          else
             ret = validate_zero_or_more(ctxt, define)
           end
         when CHOICE
