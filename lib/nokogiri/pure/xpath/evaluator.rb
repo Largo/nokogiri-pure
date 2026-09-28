@@ -1552,18 +1552,22 @@ module Nokogiri
         # merge +set2+ into +set1+ skipping duplicates (xmlXPathNodeSetMergeAndClear); +state+ keeps
         # identity tables of set1 across calls within one collect.
         def merge_and_clear(set1, set2, state)
-          if set1.length * set2.length <= 256 && state[0].nil?
+          # (both routes give the same result; the linear one is cheaper for small sets only)
+          if set1.length * set2.length <= 32 && state[0].nil?
             init_nb = set1.length
-            set2.each do |n2|
+            k = 0
+            while k < set2.length
+              n2 = set2[k]
+              k += 1
               skip = false
+              n2_ns = n2.type == NAMESPACE_DECL
               j = 0
               while j < init_nb
                 n1 = set1[j]
-                if n1.equal?(n2)
+                if n1 == n2
                   skip = true
                   break
-                elsif n1.type == NAMESPACE_DECL && n2.type == NAMESPACE_DECL &&
-                    n1.next.equal?(n2.next) && n1.prefix == n2.prefix
+                elsif n2_ns && n1.type == NAMESPACE_DECL && n1.next.equal?(n2.next) && n1.prefix == n2.prefix
                   skip = true
                   break
                 end
@@ -1584,7 +1588,10 @@ module Nokogiri
               end
               indexed += 1
             end
-            set2.each do |n2|
+            k = 0
+            while k < set2.length
+              n2 = set2[k]
+              k += 1
               next if seen[n2]
               next if ns_seen && n2.type == NAMESPACE_DECL && ns_seen[[n2.next.__id__, n2.prefix]]
 
