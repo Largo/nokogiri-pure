@@ -44,8 +44,11 @@ module Nokogiri
 
       class Ctxt
         TEST_CHAR_DATA_RE = /[\t\x20-\x25\x27-\x3B\x3D-\x5C\x5E-\x7F]+/
+        TEST_CHAR_DATA_BOUNDED_RE = /[\t\x20-\x25\x27-\x3B\x3D-\x5C\x5E-\x7F]{1,8192}/
         NEWLINES_RE = /\n+/
         SPACES_RE = / +/
+        NEWLINES_BOUNDED_RE = /\n{1,8192}/
+        SPACES_BOUNDED_RE = / {1,8192}/
         # complex char data: anything but markup delimiters, CR, controls, U+FFFE/F, U+FFFD
         CHAR_DATA_COMPLEX_RE = /[^<&\]\r\x00-\x08\x0B\x0C\x0E-\x1F�￾￿]+/
         ATT_PLAIN_DQ_RE = /[^"&<\x00-\x1F\u0080-\u{10FFFF}]+/
@@ -431,12 +434,12 @@ module Nokogiri
         # libxml2 (which accepts U+FFFD, the value xmlCurrentChar returns for them, as a name char)
         def name_slice(start, len)
           bad = @input.bad
-          if bad && bad.any? { |b| b[0] >= start && b[0] < start + len }
+          if bad && @input.bad_in_range(start, start + len)
             out = +"".b
             i = start
             e = start + len
             while i < e
-              if (b = bad.find { |x| x[0] == i })
+              if (b = @input.bad_at(i))
                 out << b[1].chr
                 i += 3
               else
@@ -730,6 +733,24 @@ module Nokogiri
           end
         end
 
+        # length of the run of +re+ (a {1,8192}-bounded regexp) at +inp+, not beyond +lim+
+        def bounded_run(re, inp, lim)
+          ss = @ss
+          ss.pos = inp
+          n = ss.skip(re)
+          return 0 if n.nil?
+
+          while (n & 8191) == 0 && inp + n < lim
+            ss.pos = inp + n
+            m = ss.skip(re)
+            break if m.nil?
+
+            n += m
+          end
+          n = lim - inp if inp + n > lim
+          n
+        end
+
         # xmlParseCharDataInternal. The fast path scans up to the end of the data libxml2 has
         # read so far (it stops at the buffer's NUL terminator), so long runs are delivered in
         # pieces at 4000-byte read boundaries like in libxml2.
@@ -746,16 +767,12 @@ module Nokogiri
             # get_more_space
             while true
               if inp < lim && buf.getbyte(inp) == 0x20
-                ss.pos = inp
-                n = ss.skip(SPACES_RE)
-                n = lim - inp if inp + n > lim
+                n = bounded_run(SPACES_BOUNDED_RE, inp, lim)
                 inp += n
                 @col += n
               end
               if inp < lim && buf.getbyte(inp) == 0x0A
-                ss.pos = inp
-                n = ss.skip(NEWLINES_RE)
-                n = lim - inp if inp + n > lim
+                n = bounded_run(NEWLINES_BOUNDED_RE, inp, lim)
                 @line += n
                 @col = 1
                 inp += n
@@ -784,18 +801,14 @@ module Nokogiri
 
             # get_more
             while true
-              ss.pos = inp
-              n = ss.skip(TEST_CHAR_DATA_RE)
-              if n
-                n = lim - inp if inp + n > lim
+              n = bounded_run(TEST_CHAR_DATA_BOUNDED_RE, inp, lim)
+              if n > 0
                 inp += n
                 @col += n
               end
               c = inp < lim ? buf.getbyte(inp) : nil
               if c == 0x0A
-                ss.pos = inp
-                n = ss.skip(NEWLINES_RE)
-                n = lim - inp if inp + n > lim
+                n = bounded_run(NEWLINES_BOUNDED_RE, inp, lim)
                 @line += n
                 @col = 1
                 inp += n

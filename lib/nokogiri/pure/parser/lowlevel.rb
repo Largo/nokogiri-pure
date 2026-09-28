@@ -92,10 +92,7 @@ module Nokogiri
 
         # Is the U+FFFD at +pos+ a replacement for an invalid input byte? returns the record.
         def bad_byte_at(pos)
-          bad = @input.bad
-          return nil if bad.nil?
-
-          bad.find { |b| b[0] == pos }
+          @input.bad_at(pos)
         end
 
         # decode the (valid UTF-8) char at byte offset +pos+ of the buffer: [codepoint, length]

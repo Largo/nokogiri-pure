@@ -66,13 +66,14 @@ module Nokogiri
           @raw_boundaries = out
         end
 
-        # buffer offset for raw offset +q+ in identity (UTF-8) mode
+        # buffer offset for raw offset +q+ in identity (UTF-8) mode (every replaced byte grew
+        # from 1 to 3 bytes)
         def buf_offset(q)
-          return q if @bad.nil? || @bad.empty?
+          bad = @bad
+          return q if bad.nil? || bad.empty?
 
-          n = 0
-          @bad.each { |b| n += 1 if b[0] - 2 * n < q }
-          q + 2 * n
+          k = (0...bad.size).bsearch { |i| bad[i][0] - 2 * i >= q } || bad.size
+          q + 2 * k
         end
 
         # buffer offsets where the reads end (pull mode)
@@ -189,10 +190,10 @@ module Nokogiri
 
         # raw offset corresponding to buffer offset +pos+ (identity mode only)
         def raw_offset(pos)
-          return pos if @bad.nil? || @bad.empty?
+          bad = @bad
+          return pos if bad.nil? || bad.empty?
 
-          n = 0
-          @bad.each { |b| n += 1 if b[0] < pos }
+          n = bad.bsearch_index { |b| b[0] >= pos } || bad.size
           pos - 2 * n
         end
 
@@ -213,9 +214,20 @@ module Nokogiri
 
         # the bad-byte record at +pos+ if any
         def bad_at(pos)
-          return nil if @bad.nil?
+          bad = @bad
+          return nil if bad.nil?
 
-          @bad.find { |b| b[0] == pos }
+          b = bad.bsearch { |x| x[0] >= pos }
+          b && b[0] == pos ? b : nil
+        end
+
+        # first bad-byte record in [s, e)
+        def bad_in_range(s, e)
+          bad = @bad
+          return nil if bad.nil?
+
+          b = bad.bsearch { |x| x[0] >= s }
+          b && b[0] < e ? b : nil
         end
       end
     end

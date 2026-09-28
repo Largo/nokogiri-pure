@@ -14,6 +14,8 @@ module Nokogiri
         ATT_RUN_SQ = ATT_RUN[[0x27, false]]
         ATT_RUN_DQ_N = ATT_RUN[[0x22, true]]
         ATT_RUN_SQ_N = ATT_RUN[[0x27, true]]
+        ENTITY_VALUE_DQ_RE = /[^"\0]+/
+        ENTITY_VALUE_SQ_RE = /[^'\0]+/
         MB_RUN_RE = /[\u0080-￼\u{10000}-\u{10FFFF}]+/
 
         # "ent->content[0] = 0": the C string becomes empty but the bytes after it remain
@@ -198,14 +200,10 @@ module Nokogiri
               return [nil, nil]
             end
             # bulk: everything up to the quote or a NUL
-            idx = @buf.byteindex(qch, @cur)
-            nul = @buf.byteindex("\0", @cur)
-            stop_at = [idx, nul].compact.min
-            if stop_at.nil?
-              advance_bytes(@end - @cur)
-              next
-            end
-            advance_bytes(stop_at - @cur) if stop_at > @cur
+            @ss.pos = @cur
+            n = @ss.skip(quote == 0x22 ? ENTITY_VALUE_DQ_RE : ENTITY_VALUE_SQ_RE)
+            advance_bytes(n) if n && n > 0
+            next if @cur >= @end
             c = cur_byte
             if c == 0 && @cur < @end
               fatal_err_msg(ErrCode::ERR_INVALID_CHAR, "invalid character in entity value\n")
