@@ -27,7 +27,7 @@ jobs:
       contents: write # create the GitHub release
       id-token: write # rubygems.org trusted publishing (OIDC)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "4.0"

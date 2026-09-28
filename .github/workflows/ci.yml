@@ -27,7 +27,7 @@ jobs:
       NOKOGIRI_UPSTREAM: ${{ github.workspace }}/nokogiri-upstream
       RUBY_YJIT_ENABLE: ${{ matrix.yjit && '1' || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
@@ -50,13 +50,13 @@ jobs:
     name: ruby.wasm (Ruby 4.0, browser WASI shim)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "4.0"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
       - run: gem install --no-document racc
       - run: npm ci
         working-directory: wasm
@@ -68,7 +68,7 @@ jobs:
     name: build gems
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "4.0"
