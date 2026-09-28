@@ -403,10 +403,14 @@ module Nokogiri
 
           if @name == "body" && @my_doc
             dtd = Tree.get_int_subset(@my_doc)
-            if dtd && dtd.external_id &&
-                (HTMLParser.strcasecmp(dtd.external_id, "-//W3C//DTD HTML 4.01//EN") == 0 ||
-                 HTMLParser.strcasecmp(dtd.external_id, "-//W3C//DTD HTML 4//EN") == 0)
-              return true
+            if dtd && (ext = dtd.external_id)
+              # (the comparison result is remembered for the last external ID seen)
+              unless @blank_dtd_key == ext
+                @blank_dtd_res = HTMLParser.strcasecmp(ext, "-//W3C//DTD HTML 4.01//EN") == 0 ||
+                  HTMLParser.strcasecmp(ext, "-//W3C//DTD HTML 4//EN") == 0
+                @blank_dtd_key = ext.dup
+              end
+              return true if @blank_dtd_res
             end
           end
 
@@ -851,6 +855,20 @@ module Nokogiri
 
         # htmlParseCharDataInternal
         def parse_char_data_internal(readahead = 0)
+          # express lane: a run of plain chars ending at '<' or '&' before the flush limit, far
+          # from the end of the buffer -- exactly one iteration of the loop below
+          if readahead == 0 && @disable_sax <= 1 && (c = @buf.getbyte(@cur)) && c < 0x80 && c != 0 &&
+              c != 0x3C && c != 0x26 &&
+              (n = text_run_length((@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII)) &&
+              n < HTML_PARSER_BIG_BUFFER_SIZE && ((e = @buf.getbyte(@cur + n)) == 0x3C || e == 0x26) &&
+              @buf.bytesize - @cur - n >= INPUT_CHUNK
+            @clen = 1
+            run = bytes_at_cur(n)
+            advance_run(run)
+            deliver_chars(run)
+            return
+          end
+
           # (buf is only allocated when needed; a run copied from the input becomes buf itself)
           buf = readahead != 0 ? (+"".b << readahead) : nil
           cur = current_char
