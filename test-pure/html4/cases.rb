@@ -116,6 +116,10 @@ module HTML4Cases
     fuzz(100, 9).each { |s| cases << [:mem, s, nil, "UTF-8", DEF | NOBLANKS] }
     cases << [:mem, "<p>x</p>", "http://example.com/a b?c=d#e", "UTF-8", DEF]
     cases << [:mem, "<p>x</p>", "/some/path.html", "UTF-8", DEF]
+    cases << [:mem, "<div>\n" + "<p>line</p>\n" * 70000 + "</div>", nil, "UTF-8", DEF]
+    cases << [:mem, "<div>\n" + "text\n" * 70000 + "<b>x</b></div>", nil, "UTF-8", DEF]
+    cases << [:mem, "<div>" * 300, nil, "UTF-8", DEF | HUGE]
+    cases << [:mem, "<p>" + "x" * 20000 + "</p>", nil, "UTF-8", DEF]
     cases
   end
 end

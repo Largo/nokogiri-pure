@@ -63,10 +63,9 @@ module Nokogiri
             ctxt.parse_chunk(data, last_chunk == true)
           end
           if status != 0 && (ctxt.options & Nokogiri::Pure::HTMLParser::PARSE_RECOVER) == 0
-            e = ctxt.last_error
-            raise Nokogiri::Pure.wrap_error(e) if e
-
-            raise Nokogiri::XML::SyntaxError, "Unknown error"
+            # xmlCtxtGetLastError never returns NULL: without an error it's a zeroed struct
+            e = ctxt.last_error || Nokogiri::Pure::XmlError.new(level: 0)
+            raise Nokogiri::Pure.wrap_error(e)
           end
           self
         end
