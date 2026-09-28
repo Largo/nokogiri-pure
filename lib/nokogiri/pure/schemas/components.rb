@@ -339,11 +339,20 @@ module Nokogiri
 
       # xmlSchemaIsBlank: 1 if +str+ is nil or only made of blanks (first +len+ bytes if
       # len >= 0), 0 otherwise
+      BLANK_RE = /\A[ \t\n\r]*(?:\0|\z)/
+
       def is_blank(str, len = -1)
         return 1 if str.nil?
 
-        n = str.bytesize
-        n = len if len >= 0 && len < n
+        if len < 0 || len >= str.bytesize
+          # fast path: only blanks (and NUL terminates like C)
+          begin
+            return str.match?(BLANK_RE) ? 1 : 0
+          rescue ArgumentError
+            len = str.bytesize
+          end
+        end
+        n = len
         i = 0
         while i < n
           c = str.getbyte(i)

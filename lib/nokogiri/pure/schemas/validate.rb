@@ -445,17 +445,12 @@ module Nokogiri
         val_needed = true if !val_needed && (type.flags & XML_SCHEMAS_TYPE_FACETSNEEDVALUE) != 0
         value = "" if value.nil?
 
-        # NORMALIZE(atype)
-        do_normalize = lambda do |atype|
+        if wxs_is_any_simple_type(type) || wxs_is_atomic(type)
           if !is_normalized && (normalize || (type.flags & XML_SCHEMAS_TYPE_NORMVALUENEEDED) != 0)
-            norm = normalize_value(atype, value)
+            norm = normalize_value(type, value)
             value = norm unless norm.nil?
             is_normalized = true
           end
-        end
-
-        if wxs_is_any_simple_type(type) || wxs_is_atomic(type)
-          do_normalize.call(type)
           if type.type != XML_SCHEMA_TYPE_BASIC
             bi_type = type.base_type
             bi_type = bi_type.base_type while bi_type && bi_type.type != XML_SCHEMA_TYPE_BASIC
@@ -504,7 +499,11 @@ module Nokogiri
             simple_type_err(actxt, ret, node, value, type, 1)
           end
         elsif wxs_is_list(type)
-          do_normalize.call(type)
+          if !is_normalized && (normalize || (type.flags & XML_SCHEMAS_TYPE_NORMVALUENEEDED) != 0)
+            norm = normalize_value(type, value)
+            value = norm unless norm.nil?
+            is_normalized = true
+          end
           item_type = type.subtypes
           len = 0
           prev_val = nil
@@ -551,7 +550,11 @@ module Nokogiri
           end
           if fire_errors && ret > 0
             normalize = true
-            do_normalize.call(type)
+            if !is_normalized && (normalize || (type.flags & XML_SCHEMAS_TYPE_NORMVALUENEEDED) != 0)
+              norm = normalize_value(type, value)
+              value = norm unless norm.nil?
+              is_normalized = true
+            end
             simple_type_err(actxt, ret, node, value, type, 1)
           end
         elsif wxs_is_union(type)
@@ -574,7 +577,11 @@ module Nokogiri
             ret = ErrCode::SCHEMAV_CVC_DATATYPE_VALID_1_2_3
           end
           if ret == 0 && (type.flags & XML_SCHEMAS_TYPE_HAS_FACETS) != 0
-            do_normalize.call(member_link.type)
+            if !is_normalized && (normalize || (type.flags & XML_SCHEMAS_TYPE_NORMVALUENEEDED) != 0)
+              norm = normalize_value(member_link.type, value)
+              value = norm unless norm.nil?
+              is_normalized = true
+            end
             ret = validate_facets(actxt, node, type, XML_SCHEMAS_UNKNOWN, value, val, 0, fire_errors)
             if ret != 0
               if ret < 0

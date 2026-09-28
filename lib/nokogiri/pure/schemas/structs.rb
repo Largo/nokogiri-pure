@@ -27,10 +27,12 @@ module Nokogiri
         klass = Class.new do
           attr_accessor(*all)
         end
-        init = +"def initialize(**kw)\n"
+        # keyword arguments with literal defaults: no Hash allocation per instance
+        params = all.map { |f| "#{f}: #{defaults.key?(f) ? defaults[f].inspect : "nil"}" }.join(", ")
+        init = +"def initialize(#{params})\n"
+        reserved = %i[next end def class if then else do begin rescue ensure when case in not and or self nil true false redo retry return yield super undef alias module unless until while for break defined?]
         all.each do |f|
-          d = defaults.key?(f) ? defaults[f].inspect : "nil"
-          init << "  @#{f} = kw.fetch(:#{f}, #{d})\n"
+          init << (reserved.include?(f) ? "  @#{f} = binding.local_variable_get(:#{f})\n" : "  @#{f} = #{f}\n")
         end
         init << "end\n"
         klass.class_eval(init)
