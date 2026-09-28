@@ -61,7 +61,7 @@ jobs:
       - run: npm ci
         working-directory: wasm
       - name: AST depth guard (deep files overflow the wasm native stack when compiled)
-        run: ruby test-pure/wasm_ast_depth.rb 41
+        run: ruby test-pure/wasm_ast_depth.rb 36
       - run: wasm/test.sh
 
   gem:
