@@ -277,10 +277,47 @@ module Nokogiri
           comp.link!
         end
 
+        # For parser-context users (XPointer): run one of the name scanners at byte offset +pos+.
+        # Returns [name_or_nil, new_pos, error_or_nil].
+        def scan_at(pos, what)
+          @pos = pos
+          name = nil
+          err = catch(:xpath_compile_error) do
+            name = what == :name ? parse_name : parse_ncname
+            nil
+          end
+          [name, @pos, err]
+        end
+
         private
 
         def xp_error(code)
           throw :xpath_compile_error, CompileError.new(code, @pos)
+        end
+
+        # xmlXPathParseName
+        def parse_name
+          start = @pos
+          i = start
+          c = @s.getbyte(i) || 0
+          if ascii_letter?(c) || c == 0x5F || c == 0x3A
+            i += 1
+            c = @s.getbyte(i) || 0
+            while ascii_letter?(c) || ascii_digit?(c) || c == 0x5F || c == 0x2D || c == 0x3A || c == 0x2E
+              i += 1
+              c = @s.getbyte(i) || 0
+            end
+            if c > 0 && c < 0x80
+              count = i - start
+              if count > 50_000
+                @pos = i
+                xp_error(EXPR_ERROR)
+              end
+              @pos = i
+              return utf8_str(@s.byteslice(start, count))
+            end
+          end
+          parse_name_complex(true)
         end
 
         def cur

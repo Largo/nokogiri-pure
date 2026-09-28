@@ -220,6 +220,102 @@ module Nokogiri
           XPath.string_eval_number(node_to_string(node))
         end
 
+        # ---- parser-context API (xmlXPathNewParserContext users such as XPointer) ------------
+        #
+        # +base+ is the expression string and +cur_offset+ the current byte offset in it (the
+        # ctxt->base / ctxt->cur pair); both may be reassigned by the caller.
+
+        # the byte at the current position (0 at the end), like CUR
+        def cur_byte
+          @base.getbyte(@cur_offset) || 0
+        end
+
+        # the byte +n+ positions ahead, like NXT(n)
+        def nxt_byte(n)
+          @base.getbyte(@cur_offset + n) || 0
+        end
+
+        # NEXT
+        def next_byte
+          @cur_offset += 1 if @cur_offset < @base.bytesize
+        end
+
+        # SKIP_BLANKS
+        def skip_blanks
+          while (c = @base.getbyte(@cur_offset)) && (c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D)
+            @cur_offset += 1
+          end
+        end
+
+        # the rest of the expression from the current position
+        def rest
+          @base.byteslice(@cur_offset, @base.bytesize - @cur_offset).force_encoding(::Encoding::UTF_8)
+        end
+
+        # xmlXPathParseName / xmlXPathParseNCName: nil if there's no name (errors are recorded
+        # with #xpath_err, without aborting)
+        def parse_name
+          scan_name_with(:name)
+        end
+
+        def parse_ncname
+          scan_name_with(:ncname)
+        end
+
+        def scan_name_with(what)
+          name, pos, err = Compiler.new(@base).scan_at(@cur_offset, what)
+          if err
+            @cur_offset = err.offset
+            xpath_err(err.code)
+            return nil
+          end
+          @cur_offset = pos
+          name
+        end
+
+        # xmlXPathEvalExpr: compile the expression at +base+ (from the current position) and
+        # evaluate it, leaving the result on the value stack. Errors are recorded in #error
+        # (and reported), never raised.
+        def eval_expr
+          return if @context&.last_error && @context.last_error.code != 0
+
+          str = @cur_offset == 0 ? @base : rest
+          start = @cur_offset
+          comp = XPath.cached_compile(str, @context ? @context.flags : 0)
+          if comp.is_a?(CompileError)
+            @cur_offset = start + comp.offset
+            xpath_err(comp.code)
+            return
+          end
+          @cur_offset = @base.bytesize
+          @comp = comp
+          ctx = @context
+          saved = [ctx.node, ctx.doc, ctx.context_size, ctx.proximity_position, ctx.function,
+                   ctx.function_uri, ctx.depth]
+          aborted = true
+          catch(:xpath_abort) do
+            run_eval(false)
+            aborted = false
+          end
+          XPath.restore_context(ctx, saved) if aborted
+          nil
+        end
+
+        # xmlXPathRoot
+        def root
+          @value_tab.push(@context.doc ? [@context.doc] : [])
+        end
+
+        # run a function (a callable or a fn_* method name) with the XP_ERROR abort caught, the
+        # way a C caller sees it return; for callers outside the evaluator (e.g. XPointer calling
+        # xmlXPathIdFunction)
+        def call_function(f, nargs)
+          catch(:xpath_abort) do
+            f.is_a?(Symbol) ? __send__(f, nargs) : f.call(self, nargs)
+          end
+          nil
+        end
+
         # ---- evaluation entry -------------------------------------------------------------
 
         # xmlXPathRunEval
@@ -1829,6 +1925,11 @@ module Nokogiri
       # xmlXPathNewContext
       def new_context(doc)
         Context.new(doc)
+      end
+
+      # xmlXPathNewParserContext
+      def new_parser_context(str, context)
+        ParserContext.new(context, nil, str.b.force_encoding(::Encoding::UTF_8), 0)
       end
 
       # xmlXPathCtxtCompile: returns a CompExpr or nil (after reporting the error)
