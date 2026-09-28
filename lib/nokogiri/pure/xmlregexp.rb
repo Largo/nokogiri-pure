@@ -1838,6 +1838,15 @@ module Nokogiri
         end
       end
 
+      # rb_counts[nb] = copy of counts (reusing the saved array)
+      def save_counts(rb_counts, nb, counts)
+        if (c = rb_counts[nb])
+          c.replace(counts)
+        else
+          rb_counts[nb] = counts.dup
+        end
+      end
+
       # ------------------------------------------------------------------
       # Verifier, running an input against a compiled regexp
       # ------------------------------------------------------------------
@@ -1847,6 +1856,7 @@ module Nokogiri
       # Same control flow as the C function; for speed the execution context (state, index,
       # transno, counts and the rollback stack of xmlFARegExecSave/xmlFARegExecRollBack) lives
       # in local variables instead of an ExecCtxt, with those two helpers inlined.
+
       def fa_reg_exec(comp, content)
         input = input_codepoints(content)
         states = comp.states
@@ -1961,7 +1971,7 @@ module Nokogiri
                   end
                   counts[trans.counter] += 1 if trans.counter >= 0
                   transcount = 1
-                  loop do
+                  while true
                     # Try to progress as much as possible on the input
                     break if transcount == atom.max
 
@@ -1983,9 +1993,7 @@ module Nokogiri
                       rb_state[nb_rb] = to
                       rb_index[nb_rb] = index
                       rb_next[nb_rb] = 0
-                      if counts
-                        (c = rb_counts[nb_rb]) ? c.replace(counts) : (rb_counts[nb_rb] = counts.dup)
-                      end
+                      save_counts(rb_counts, nb_rb, counts) if counts
                       nb_rb += 1
                     end
                     codepoint = input[index]
