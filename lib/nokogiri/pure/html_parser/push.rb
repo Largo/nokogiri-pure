@@ -279,6 +279,13 @@ module Nokogiri
                 end
                 throw :done if !terminate && lookup_sequence(0x3E, 0, 0, true) < 0
 
+                if (nx >= 0x61 && nx <= 0x7A) || (nx >= 0x41 && nx <= 0x5A)
+                  if express_start_tag(nil, 0, true)
+                    @instate = PARSER_CONTENT
+                    next
+                  end
+                end
+
                 failed = parse_start_tag
                 name = @name
                 if failed == -1 || name.nil?

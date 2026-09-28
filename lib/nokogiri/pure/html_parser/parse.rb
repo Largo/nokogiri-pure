@@ -1584,6 +1584,8 @@ module Nokogiri
         EXPRESS_TAG_NAME = /[A-Za-z][A-Za-z0-9]{0,99}/n
         EXPRESS_BLANKS = /[ \t\n\r]*+/n
         EXPRESS_SPECIAL = { "html" => true, "head" => true, "body" => true, "meta" => true }.freeze
+        # (only the name is captured and consumed: the blanks are left to the caller's loop)
+        ATTR_NO_VALUE_BLANKS = /([A-Za-z_:.][A-Za-z0-9:_.\-]{0,99})(?=[ \t\n\r]++[^= \t\n\r\x00])/n
 
         # Express lane for one iteration of htmlParseContentInternal at "<name": a start tag
         # whose name is plain alphanumeric (so htmlParseHTMLName_nonInvasive and
@@ -1592,9 +1594,13 @@ module Nokogiri
         # the attribute fast path (no errors, duplicates or input grows). Does exactly what
         # the full path would (implied elements, SAX events, line/column bookkeeping); returns
         # false, having done nothing, for anything else.
-        def express_start_tag(current_node, depth)
-          return false if current_node == "script" || current_node == "style"
-          return false if !@name_tab.empty? && depth >= @name_tab.length && current_node != @name
+        # +push+: called by htmlParseTryOrFinish (which has none of the content loop's checks and
+        # lets htmlParseStartTag's htmlAutoClose do the auto-closing) instead of the content loop.
+        def express_start_tag(current_node, depth, push = false)
+          unless push
+            return false if current_node == "script" || current_node == "style"
+            return false if !@name_tab.empty? && depth >= @name_tab.length && current_node != @name
+          end
 
           buf = @buf
           start = @cur
@@ -1605,7 +1611,7 @@ module Nokogiri
 
           name = cached_name(ss.matched)
           return false if EXPRESS_SPECIAL.key?(name)
-          return false if @name && (closes = CLOSED_BY[name]) && closes.key?(@name)
+          return false if !push && @name && (closes = CLOSED_BY[name]) && closes.key?(@name)
 
           info = HTMLParser.tag_lookup(name)
           return false if info.nil?
@@ -1642,7 +1648,11 @@ module Nokogiri
             return false if c.nil? || c == 0
 
             len = ss.skip(attre)
-            return false if len.nil?
+            if len.nil?
+              # a name without value followed by blanks (that htmlParseAttribute skips) and no '='
+              len = ss.skip(ATTR_NO_VALUE_BLANKS)
+              return false if len.nil?
+            end
 
             raw = ss[2] || ss[3] || ss[4]
             if raw
@@ -1671,9 +1681,11 @@ module Nokogiri
           self_closing = c == 0x2F
           return false if buf.bytesize - pos - (self_closing ? 2 : 1) < INPUT_CHUNK
 
-          # commit: NEXT over '<', the name; htmlAutoClose (nothing); htmlCheckImplied
+          # commit: NEXT over '<', the name; htmlAutoClose (nothing to do in the content loop);
+          # htmlCheckImplied
           @cur = start + 1 + nlen
           @col += 1 + nlen
+          auto_close(name) if push
           check_implied(name)
           # the blanks and attributes; then name push and startElement
           @cur = pos
