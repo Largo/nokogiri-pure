@@ -286,6 +286,31 @@ module ParserCases
       add.("long_io_sax", l, RECOVER, nil, nil, :sax_io)
       add.("long", l, DEFAULT)
     end
+    if (fn = ENV["FUZZ_N"]&.to_i) && fn > 0
+      frng = Random.new(ENV.fetch("FUZZ_SEED", "7").to_i)
+      fpool = Dir.glob("/root/workspace/nokogiri-pure-ref/libxml2-2.13.9/test/{*.xml,errors/*,valid/*,namespaces/*,VC/*,SVG/*,xmlid/*}")
+        .select { |f| File.file?(f) && File.size(f) < 6000 }.map { |f| File.binread(f) } + BASES + BASIC
+      fn.times do |n|
+        src = fpool[frng.rand(fpool.size)].b.dup
+        (1 + frng.rand(4)).times do
+          pos = frng.rand(src.bytesize + 1)
+          case frng.rand(4)
+          when 0 then src = src.byteslice(0, pos) + alphabet[frng.rand(alphabet.size)].b + src.byteslice(pos..).to_s
+          when 1 then src = src.byteslice(0, pos) + src.byteslice(pos + 1 + frng.rand(6)..).to_s
+          when 2
+            l = frng.rand(12)
+            src = src.byteslice(0, pos) + src.byteslice(pos, l).to_s + src.byteslice(pos..).to_s
+          else
+            q = frng.rand(src.bytesize + 1)
+            src = src.byteslice(0, [pos, q].min).to_s + src.byteslice([pos, q].max..).to_s
+          end
+        end
+        opt = [DEFAULT, STRICT, DEFAULT | NOENT, DEFAULT | DTDVALID, DEFAULT | NOBLANKS, DEFAULT | SAX1][frng.rand(6)]
+        add.("bigfuzz", src, opt)
+        add.("bigfuzz_sax", src, RECOVER, nil, nil, :sax) if n % 4 == 0
+        add.("bigfuzz_push", src, DEFAULT, nil, nil, [:push, 1 + frng.rand(40)]) if n % 4 == 1
+      end
+    end
     add.("enc", "<a>\xe9</a>".b, DEFAULT, "ISO-8859-1")
     add.("enc", "<a>x</a>", DEFAULT, "bogus")
     add.("enc", "<?xml version='1.0' encoding='UTF-8'?><a>\xe9</a>".b, DEFAULT, "ISO-8859-1")

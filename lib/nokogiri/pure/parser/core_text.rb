@@ -407,6 +407,7 @@ module Nokogiri
             while true
               @ss.pos = @cur
               n = @ss.skip(NAME_CHARS_RE)
+              n = cap_run(n) if n && @input.pending_error
               if n && n > 0
                 advance_name(n)
               end
@@ -508,6 +509,7 @@ module Nokogiri
             while true
               @ss.pos = @cur
               n = @ss.skip(NCNAME_CHARS_RE)
+              n = cap_run(n) if n && @input.pending_error
               advance_name(n) if n && n > 0
               c = cur_char
               break unless c != 0x20 && c != 0x3E && c != 0x2F && Chars.name_char?(c) && c != 0x3A
@@ -874,6 +876,8 @@ module Nokogiri
             end
             @ss.pos = @cur
             n = @ss.skip(CHAR_DATA_COMPLEX_RE)
+            n = cap_run(n) if n && @input.pending_error
+            n = nil if n == 0
             if n
               out << @buf.byteslice(@cur, n)
               advance_text(n)

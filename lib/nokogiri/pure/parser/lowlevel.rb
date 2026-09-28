@@ -67,6 +67,20 @@ module Nokogiri
           (@input.flags & XML_INPUT_PROGRESSIVE) != 0
         end
 
+        # With a pending input conversion error, libxml2's per-char GROW calls report it once the
+        # parser is less than +threshold+ bytes before the end of the converted data: bulk scans
+        # must stop there so the per-char code reaches that point.
+        def cap_run(n, threshold = INPUT_CHUNK)
+          return n unless @input.pending_error
+
+          p0 = @end - threshold + 1
+          return n if @cur + n < p0
+
+          p0 = @cur if p0 < @cur
+          p0 += 1 while p0 < @end && (@buf.getbyte(p0) & 0xC0) == 0x80
+          p0 - @cur
+        end
+
         # report the encoding error of a replaced byte at +pos+ (once per input)
         def report_bad_byte
           inp = @input
@@ -100,6 +114,7 @@ module Nokogiri
         # xmlCurrentChar: returns the current char, its byte length in @cl.
         # A "\r\n" pair is returned as "\n" of length 1 with the "\r" already skipped.
         def cur_char
+          grow if @input.pending_error && @end - @cur < INPUT_CHUNK
           c = @buf.getbyte(@cur)
           if c.nil?
             @cl = 0
@@ -135,6 +150,7 @@ module Nokogiri
 
         # xmlNextChar
         def next_char
+          grow if @input.pending_error && @end - @cur < INPUT_CHUNK
           c = @buf.getbyte(@cur)
           return if c.nil?
 

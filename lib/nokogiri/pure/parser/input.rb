@@ -166,6 +166,15 @@ module Nokogiri
         end
 
         def append(str)
+          str = str.force_encoding(Encoding::UTF_8)
+          unless str.valid_encoding?
+            str, bad, = EncodingSupport.sanitize_utf8(str, false)
+            if bad
+              base = @buf.bytesize
+              @bad ||= []
+              bad.each { |b| @bad << [b[0] + base, b[1], b[2]] }
+            end
+          end
           if @buf.empty?
             @buf = str.frozen? ? str.dup : str
           else

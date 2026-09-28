@@ -418,6 +418,8 @@ module Nokogiri
             if c >= 0x80
               ss.pos = @cur
               n = ss.skip(MB_RUN_RE)
+              n = cap_run(n, 10) if n && @input.pending_error
+              n = nil if n == 0
               if n
                 chunk_size += n
                 @col += b.byteslice(@cur, n).length
@@ -450,6 +452,7 @@ module Nokogiri
                 else
                   ss.pos = @cur
                   n = ss.skip(run_re)
+                  n = [cap_run(n, 10), 1].max if @input.pending_error
                   chunk_size += n
                   @col += n
                   @cur += n

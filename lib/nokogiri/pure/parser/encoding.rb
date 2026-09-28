@@ -30,8 +30,59 @@ module Nokogiri
           @dead = false
         end
 
+        # UTF16LEToUTF8 / UTF16BEToUTF8: a high surrogate must be followed by a low one (else
+        # error); lone low surrogates pass through as (invalid) 3-byte UTF-8.
+        def decode_utf16(src, le, flush)
+          s = (@pending16 || "".b) + src.b
+          @pending16 = nil
+          n = s.bytesize & ~1
+          fmt = le ? "v*" : "n*"
+          units = s.byteslice(0, n).unpack(fmt)
+          out = [].pack("x0").b
+          i = 0
+          cnt = units.size
+          buf = []
+          while i < cnt
+            c = units[i]
+            if (c & 0xFC00) == 0xD800
+              if i + 1 >= cnt
+                break
+              end
+              d = units[i + 1]
+              if (d & 0xFC00) == 0xDC00
+                c = (((c & 0x3FF) << 10) | (d & 0x3FF)) + 0x10000
+                i += 2
+              else
+                out << buf.pack("U*").b unless buf.empty?
+                @dead = true
+                return [out, :error]
+              end
+            else
+              i += 1
+            end
+            if (c & 0xF800) == 0xD800
+              out << buf.pack("U*").b unless buf.empty?
+              buf.clear
+              out << [0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F)].pack("C*")
+            else
+              buf << c
+            end
+          end
+          out << buf.pack("U*").b unless buf.empty?
+          rest = s.byteslice(i * 2, s.bytesize - i * 2)
+          if rest && !rest.empty?
+            if flush
+              return [out, :partial]
+            else
+              @pending16 = rest
+            end
+          end
+          [out, :ok]
+        end
+
         # are there bytes of an incomplete sequence buffered in the converter?
         def pending?
+          return !@pending16.nil? && !@pending16.empty? if @handler.kind == :utf16le || @handler.kind == :utf16be
           return false if @dead || @conv.nil?
 
           dst = +""
@@ -49,6 +100,8 @@ module Nokogiri
           return ["".dup.force_encoding(Encoding::UTF_8), :error] if @dead
 
           case @handler.kind
+          when :utf16le, :utf16be
+            decode_utf16(src, @handler.kind == :utf16le, flush)
           when :table
             tbl = @handler.ruby_encoding
             out = +""
@@ -91,9 +144,9 @@ module Nokogiri
 
         # libxml2 built-in (non-iconv) input handlers, matched case-insensitively
         BUILTIN = {
-          "UTF-16LE" => ["UTF-16LE", Encoding::UTF_16LE, :ruby],
-          "UTF-16BE" => ["UTF-16BE", Encoding::UTF_16BE, :ruby],
-          "UTF-16" => ["UTF-16", Encoding::UTF_16LE, :ruby],
+          "UTF-16LE" => ["UTF-16LE", Encoding::UTF_16LE, :utf16le],
+          "UTF-16BE" => ["UTF-16BE", Encoding::UTF_16BE, :utf16be],
+          "UTF-16" => ["UTF-16", Encoding::UTF_16LE, :utf16le],
           "ISO-8859-1" => ["ISO-8859-1", Encoding::ISO_8859_1, :latin1],
           "ASCII" => ["ASCII", Encoding::US_ASCII, :ruby],
           "US-ASCII" => ["US-ASCII", Encoding::US_ASCII, :ruby],
@@ -172,8 +225,8 @@ module Nokogiri
         # xmlLookupCharEncodingHandler for the encodings xmlDetectEncoding can find
         def lookup_handler(enc)
           case enc
-          when :utf16le then InputHandler.new("UTF-16LE", Encoding::UTF_16LE)
-          when :utf16be then InputHandler.new("UTF-16BE", Encoding::UTF_16BE)
+          when :utf16le then InputHandler.new("UTF-16LE", Encoding::UTF_16LE, :utf16le)
+          when :utf16be then InputHandler.new("UTF-16BE", Encoding::UTF_16BE, :utf16be)
           when :ucs4be then InputHandler.new("UCS-4", Encoding::UTF_32BE)
           when :ucs4le then InputHandler.new("UCS-4", Encoding::UTF_32LE)
           when :ebcdic then InputHandler.new("IBM-037", Encoding::IBM037)

@@ -146,7 +146,7 @@ module Nokogiri
             return [nil, nil] if !is_ncname && cur_byte != 0x3A
 
             parse_nmtoken
-            l = -@buf.byteslice(start, @cur - start)
+            l = name_slice(start, @cur - start)
             ns_err(ErrCode::NS_ERR_QNAME, "Failed to parse QName '#{l}'\n", l)
           end
           [l, p]
@@ -527,6 +527,8 @@ module Nokogiri
             end
             @ss.pos = @cur
             n = @ss.skip(CDATA_PLAIN_RE)
+            n = cap_run(n) if n && @input.pending_error
+            n = nil if n == 0
             if n
               seg = @buf.byteslice(@cur, n)
               buf << seg

@@ -120,6 +120,8 @@ module Nokogiri
             nextl(@cl)
             @ss.pos = @cur
             n = @ss.skip(PI_BODY_RE)
+            n = cap_run(n) if n && @input.pending_error
+            n = nil if n == 0
             if n
               buf << @buf.byteslice(@cur, n)
               advance_text(n)
@@ -196,7 +198,7 @@ module Nokogiri
           if cur_byte == 0x25
             next_char
             if skip_blank_chars_pe == 0
-              fatal_err_msg(ErrCode::ERR_SPACE_REQUIRED, "Space required after '%'\n")
+              fatal_err_msg(ErrCode::ERR_SPACE_REQUIRED, "Space required after '%%'\n")
             end
             is_parameter = true
           end
