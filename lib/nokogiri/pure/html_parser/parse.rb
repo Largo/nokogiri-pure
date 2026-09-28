@@ -1625,21 +1625,23 @@ module Nokogiri
           while true
             ss.pos = pos
             if (bl = ss.skip(EXPRESS_BLANKS)) > 0
-              nl = 0
-              i = pos
-              last_nl = nil
-              while i < pos + bl
-                if buf.getbyte(i) == 0x0A
-                  nl += 1
-                  last_nl = i
+              # (htmlSkipBlankChars: a newline starts a new line, other blanks are a column each)
+              if bl == 1
+                if buf.getbyte(pos) == 0x0A
+                  line += 1
+                  col = 1
+                else
+                  col += 1
                 end
-                i += 1
-              end
-              if nl > 0
-                line += nl
-                col = pos + bl - last_nl
               else
-                col += bl
+                blanks = ss.matched
+                nl = blanks.count("\n")
+                if nl > 0
+                  line += nl
+                  col = bl - blanks.rindex("\n")
+                else
+                  col += bl
+                end
               end
               pos += bl
             end
