@@ -2354,7 +2354,7 @@ module Nokogiri
             return false unless ss.skip(FAST_TAG_NAME)
 
             name = ss.matched
-            max_attributes = @parser.max_attributes
+            max_attributes = (@max_attributes ||= @parser.max_attributes)
             attrs = []
             while ss.skip(FAST_ATTR)
               aname = ss[1]
@@ -2390,7 +2390,11 @@ module Nokogiri
 
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
-          iter_mark
+          # iter_mark
+          @mark = start
+          @mark_line = @line
+          @mark_column = @column
+          @mark_offset = @offset
           # (@next_nl/@next_tab: the next "\n"/"\t" at or after some position <= start, found
           # without rescanning; names are ASCII and non-ASCII values were noted above)
           nl = @next_nl
@@ -2402,7 +2406,11 @@ module Nokogiri
             @column += reset_rel
             @offset += reset_rel
             @start = start + reset_rel
-            reset_tag_buffer_start_point
+            # reset_tag_buffer_start_point
+            @tag_start_line = @line
+            @tag_start_column = @column
+            @tag_start_offset = @offset
+            @tag_original_text = @start
             rest = len - 1 - reset_rel
             @column += rest
             @offset += rest
