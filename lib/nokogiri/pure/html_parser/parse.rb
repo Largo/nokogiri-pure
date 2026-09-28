@@ -947,6 +947,8 @@ module Nokogiri
           state = @instate
           @instate = PARSER_COMMENT
           skip(4)
+          return @instate = state if fast_comment
+
           max_length = (@options & PARSE_HUGE) != 0 ? MAX_HUGE_LENGTH : MAX_TEXT_LENGTH
           buf = +"".b
           finished = catch(:done) do
@@ -1007,6 +1009,43 @@ module Nokogiri
           # unfinished:
           shown = buf.byteslice(0, 50)
           html_err(Err::COMMENT_NOT_FINISHED, "Comment not terminated \n<!--#{shown}\n".b, buf)
+        end
+
+        COMMENT_END = "-->".b.freeze
+        COMMENT_BANG_END = "--!>".b.freeze
+        # comment content the loop in htmlParseComment copies char by char without any error
+        COMMENT_TEXT_ASCII = /[\t\n\r\x20-\x7F]*+/n
+        COMMENT_TEXT_UTF8 = Regexp.new("(?:[\\t\\n\\r\\x20-\\x7F]++|#{UTF8_CHAR_SRC})*+".b, Regexp::NOENCODING)
+
+        # htmlParseComment after "<!--" for a comment that is terminated by "-->" well inside the
+        # buffer (so that no CUR_CHAR/NEXT can grow the input) and contains only chars that are
+        # copied without errors. Returns false (having consumed nothing) otherwise.
+        def fast_comment
+          start = @cur
+          buf = @buf
+          c = buf.getbyte(start)
+          return false if c.nil? || c == 0x3E || (c == 0x2D && buf.getbyte(start + 1) == 0x3E)
+
+          e = buf.byteindex(COMMENT_END, start)
+          return false if e.nil? || buf.bytesize - (e + 2) < INPUT_CHUNK
+
+          bang = buf.byteindex(COMMENT_BANG_END, start)
+          return false if bang && bang < e
+
+          ss = scanner
+          ss.pos = start
+          len = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? COMMENT_TEXT_UTF8 : COMMENT_TEXT_ASCII)
+          return false if len < e - start
+
+          ss.pos = start
+          content = ss.peek(e - start) # (a copy: a substring would share @buf's memory)
+          advance_run(content) # NEXTL over the content ...
+          @cur += 3 # ... and over "--", NEXT over '>'
+          @col += 3
+          if @sax_comment && @disable_sax == 0
+            @sax.comment(@user_data, content.force_encoding(Encoding::UTF_8))
+          end
+          true
         end
 
         # htmlParseCharRef
