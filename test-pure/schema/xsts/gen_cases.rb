@@ -20,7 +20,7 @@ Dir[File.join(root, "*Meta/*.testSet")].sort.each do |ts|
     next unless File.exist?(xsd)
 
     insts = g.xpath("instanceTest/instanceDocument").map { |d| File.expand_path(d["href"], base) }.select { |f| File.exist?(f) }
-    cases << { "id" => "xsts/#{File.basename(File.dirname(ts))}/#{set}/#{g["name"]}", "xsd" => xsd, "instances" => insts, "files" => false }
+    cases << { "id" => "xsts/#{File.basename(File.dirname(ts))}/#{set}/#{g["name"]}", "xsd" => xsd, "instances" => insts, "files" => true }
   end
 end
 File.write(File.join(__dir__, "cases.json"), JSON.pretty_generate(cases))

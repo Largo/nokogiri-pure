@@ -23,10 +23,93 @@ module Nokogiri
         end
       end
 
+      # the view of the xmlParserCtxt the schema error functions use (input->filename/line/col)
+      class SAXStreamCtxt
+        def initialize(ctxt)
+          @ctxt = ctxt
+        end
+
+        def input
+          inp = @ctxt.input
+          return nil if inp.nil?
+
+          StreamInput.new(inp.filename, @ctxt.current_line, @ctxt.current_col)
+        end
+
+        def line = @ctxt.current_line
+
+        def stop_parser
+          @ctxt.stop
+        end
+      end
+
+      # xmlSchemaSAXPlug with a NULL user SAX handler: only the schema handlers are installed
+      def schema_sax_handler(vctxt, pctxt)
+        h = Parser::SAXHandler.new
+        h.initialized = Parser::SAX2::XML_SAX2_MAGIC
+        h.start_element_ns = lambda do |_ud, localname, prefix, uri, nb_ns, namespaces, nb_atts, _nb_def, atts|
+          nss = []
+          nb_ns.times do |i|
+            pr, u = namespaces[i]
+            nss << pr << (u || "")
+          end
+          attrs = []
+          nb_atts.times do |i|
+            a = atts[i]
+            v = a.value.to_s
+            v = v.gsub("&#38;", "&") if v.include?("&#38;")
+            attrs << [a.name, a.prefix, a.ns, v]
+          end
+          sax_handle_start_element_ns(vctxt, localname, prefix, uri, nss, attrs, pctxt.current_line)
+        end
+        h.end_element_ns = ->(_ud, localname, prefix, uri) { sax_handle_end_element_ns(vctxt, localname, prefix, uri) }
+        text = ->(_ud, ch) { sax_handle_text(vctxt, ch, -1) }
+        h.characters = text
+        h.ignorable_whitespace = text
+        h.cdata_block = ->(_ud, ch) { sax_handle_c_data_section(vctxt, ch, -1) }
+        h.reference = ->(_ud, name) { sax_handle_reference(vctxt, name) }
+        h
+      end
+
       # xmlSchemaValidateFile(ctxt, filename, options)
       def validate_file(vctxt, filename, _options)
         return -1 if vctxt.nil? || filename.nil?
+        return validate_file_tree(vctxt, filename) if parse_memory_override
 
+        ret = nil
+        # parser errors go to the global handler, which Nokogiri does not collect here
+        Errors.with_handler(nil) do
+          # xmlCreateURLParserCtxt(filename, 0)
+          pctxt = Parser::Ctxt.new
+          pctxt.linenumbers = 1
+          input = Parser::Loader.load_external_entity(filename, nil, pctxt)
+          return -1 if input.nil?
+
+          pctxt.input_push(input)
+          pctxt.sax = schema_sax_handler(vctxt, pctxt)
+          pctxt.user_data = vctxt
+          sctxt = SAXStreamCtxt.new(pctxt)
+          vctxt.loc_func = -> { [pctxt.input&.filename, pctxt.current_line] }
+          vctxt.parser_ctxt = sctxt
+          vctxt.sax = pctxt.sax
+          vctxt.flags |= XML_SCHEMA_VALID_CTXT_FLAG_STREAM
+          ret = v_start(vctxt) do
+            pctxt.parse_document
+            pctxt.well_formed != 0 ? 0 : -1
+          end
+          if ret == 0 && pctxt.well_formed == 0
+            ret = pctxt.err_no
+            ret = 1 if ret == 0
+          end
+          vctxt.parser_ctxt = nil
+          vctxt.sax = nil
+          vctxt.loc_func = nil
+        end
+        ret
+      end
+
+      # fallback used by the REXML test shim: walk a parsed tree emitting SAX-like events
+      def validate_file_tree(vctxt, filename)
         content = begin
           File.binread(filename)
         rescue SystemCallError

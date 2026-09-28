@@ -65,3 +65,7 @@ CASES << {
     ["unknownroot", %(<zz/>)],
   ],
 }
+CASES << {
+  id: "stream-files", xsd: File.join(F, "stream/r.xsd"), files: true,
+  instances: Dir[File.join(F, "stream/m*.xml")].sort,
+}
