@@ -84,3 +84,26 @@ end
   //a[@rel] //tr[@n=7] //tr[@n>35]/@n //*[contains(.,'link')] //*[starts-with(.,'t')]
   //div[contains(concat('\ ',normalize-space(@class),'\ '),'\ c1\ ')]
 ].each { |e| EXPRS << ["/", e.gsub("\\ ", " ")] }
+
+# parent / ancestor axes
+%w[
+  //node()/.. //@*/.. //text()/.. //comment()/.. //processing-instruction()/.. /node()/..
+  //node()/ancestor::* //node()/ancestor::node() //node()/ancestor-or-self::node() //@*/ancestor::*
+  //@*/ancestor-or-self::node() //text()/ancestor::b //node()/ancestor::p:* //node()/ancestor::*[1]
+  //node()/parent::* //node()/parent::node() //node()/parent::a //*[parent::r] //*[ancestor::b]
+  //node()[..] //node()[ancestor::*] //namespace::*/.. //namespace::*/ancestor::* //namespace::*/parent::node()
+  count(//node()/ancestor-or-self::node()) //text()[ancestor-or-self::a] //td/../..//td /.. //*/ancestor-or-self::text()
+].each do |e|
+  EXPRS << ["/", e, { ns: { "p" => "urn:p" } }]
+end
+["//text()[1]", "//@*[1]", "//comment()[1]", "/*", "//e[2]"].each do |ctx|
+  %w[.. ../.. ancestor::* ancestor::node() ancestor-or-self::node() parent::node() ancestor::*[2]
+     count(ancestor::node()) ..//text()].each { |e| EXPRS << [ctx, e] }
+end
+%w[
+  /node()/node() /node()/node()/.. /node()/node()/ancestor::node() /node()/node()/node()/ancestor::node()
+  /node()/node()/node()/.. /node()/node()/ancestor-or-self::node() /node()//node() /node()/descendant::node()
+  /node()/node()/following-sibling::node() /node()/node()/preceding-sibling::node()
+  /node()/node()[count(preceding-sibling::node())=1]
+].each { |e| EXPRS << ["/", e] }
+%w[//node()/..[1] //node()/parent::*[1] //@*/..[1] //node()/parent::node()[2] (//node()/..)[1]].each { |e| EXPRS << ["/", e] }

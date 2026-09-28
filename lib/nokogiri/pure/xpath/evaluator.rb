@@ -24,6 +24,9 @@ module Nokogiri
           @ancestor = nil
           @xptr = 0
           @sorted = nil
+          # the last node-set a specialised traversal produced (known to hold no namespace
+          # nodes) while it isn't merged into
+          @ns_free = nil
           @func_cache = nil
           @sib_memo = nil
           @depth = context ? context.depth : 0
@@ -329,6 +332,7 @@ module Nokogiri
           end
           old_depth = @depth
           @sib_memo = nil
+          @ns_free = nil
           if to_bool
             res = comp_op_eval_to_boolean(comp.root, false)
             @depth = old_depth
@@ -356,6 +360,7 @@ module Nokogiri
               plan[2].call(n, ctx.doc, op.value5, op.value4 ? op_uri(op) : nil, seq, plan[1])
               @value_tab.push(seq)
               @sorted = seq if op.sorted_axis
+              @ns_free = seq
             elsif (d = op.dos_op) && (op.impure.nil? || pure_functions?(op.impure))
               comp_op_eval(d.c1)
               node_collect_and_test(d, nil, nil, false)
@@ -455,6 +460,7 @@ module Nokogiri
             end
             unless arg2.empty?
               @sorted = nil if arg1.equal?(@sorted)
+              @ns_free = nil if arg1.equal?(@ns_free)
               XPath.node_set_merge(arg1, arg2)
             end
             @value_tab.push(arg1)
@@ -612,6 +618,7 @@ module Nokogiri
           ctx.function = op.value4
           ctx.function_uri = uri
           @sorted = nil # (an extension function may hand back a reordered node-set)
+          @ns_free = nil
           @sib_memo = nil # (and may modify the tree)
           # libxml2 keeps the recursion depth in ctxt->context->depth: publish the live depth
           # so that evaluations nested in the function continue from it
@@ -679,6 +686,7 @@ module Nokogiri
             end
             unless arg2.empty?
               @sorted = nil if arg1.equal?(@sorted)
+              @ns_free = nil if arg1.equal?(@ns_free)
               XPath.node_set_merge(arg1, arg2)
             end
             @value_tab.push(arg1)
@@ -730,6 +738,7 @@ module Nokogiri
             end
             unless arg2.empty?
               @sorted = nil if arg1.equal?(@sorted)
+              @ns_free = nil if arg1.equal?(@ns_free)
               XPath.node_set_merge(arg1, arg2)
             end
             @value_tab.push(arg1)
@@ -1312,6 +1321,7 @@ module Nokogiri
           out_seq ||= seq.empty? ? seq : []
           @value_tab.push(out_seq)
           @sorted = out_seq if n == 1 && SORTED_AXES.include?(op.value)
+          @ns_free = out_seq
           nil
         end
 
@@ -1368,7 +1378,7 @@ module Nokogiri
 
         # axes visiting a bounded, small number of nodes
         BOUNDED_AXES = [AXIS_CHILD, AXIS_ATTRIBUTE, AXIS_SELF, AXIS_FOLLOWING_SIBLING,
-                        AXIS_PRECEDING_SIBLING].freeze
+                        AXIS_PRECEDING_SIBLING, AXIS_PARENT].freeze
 
         # axes whose traversal from a single context node yields document order
         SORTED_AXES = [AXIS_CHILD, AXIS_DESCENDANT, AXIS_DESCENDANT_OR_SELF, AXIS_ATTRIBUTE, AXIS_SELF,
@@ -1401,6 +1411,7 @@ module Nokogiri
             plan[2].call(cn, xpctxt.doc, name, uri, seq, plan[1])
             @value_tab.push(seq)
             @sorted = seq if SORTED_AXES.include?(axis)
+            @ns_free = seq
             return
           end
 
@@ -1449,7 +1460,8 @@ module Nokogiri
           break_on_first_hit = to_bool && pred_op.nil?
           fast = first.nil? && last.nil? && !break_on_first_hit ? op.plan : nil
           if fast && (!has_axis_range || BOUNDED_AXES.include?(axis)) &&
-              !context_seq.any?(XmlNs) # (namespace nodes are exactly the XmlNs structs)
+              # (namespace nodes are the XmlNs structs)
+              (context_seq.equal?(@ns_free) || !context_seq.any?(XmlNs))
             return collect_fast_multi(op, fast, context_seq, uri, pred_op, has_predicate_range,
               has_axis_range, max_pos, to_bool, dedup)
           end

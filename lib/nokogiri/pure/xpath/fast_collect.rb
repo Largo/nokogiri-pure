@@ -41,6 +41,12 @@ module Nokogiri
            COMMENT_NODE, NOTATION_NODE, DTD_NODE, DOCUMENT_NODE, DOCUMENT_TYPE_NODE,
            DOCUMENT_FRAG_NODE, HTML_DOCUMENT_NODE].each { |t| a[t] = true }
         end.freeze
+        # node types xmlXPathNextParent / xmlXPathNextAncestor step up from through ->parent
+        PARENT_CTX = [].tap do |a|
+          [ELEMENT_NODE, TEXT_NODE, CDATA_SECTION_NODE, ENTITY_REF_NODE, ENTITY_NODE, PI_NODE,
+           COMMENT_NODE, NOTATION_NODE, DTD_NODE, ELEMENT_DECL, ATTRIBUTE_DECL, XINCLUDE_START,
+           XINCLUDE_END, ENTITY_DECL].each { |t| a[t] = true }
+        end.freeze
         CHILD_ELEM_CTX = [].tap do |a|
           [ELEMENT_NODE, DOCUMENT_FRAG_NODE, ENTITY_REF_NODE, ENTITY_NODE, DOCUMENT_NODE,
            HTML_DOCUMENT_NODE].each { |t| a[t] = true }
@@ -274,6 +280,93 @@ module Nokogiri
               total
             end
 
+            # xmlXPathNextParent (at most one node)
+            def self.parent_#{m}(ctxnode, doc, name, uri, seq, _unused)
+              ctype = ctxnode.type
+              if PARENT_CTX[ctype]
+                cur = ctxnode.parent
+                if cur.nil?
+                  cur = doc
+                elsif cur.type == ELEMENT_NODE && (nm = cur.name) &&
+                    (nm.start_with?(" ") || nm == "fake node libxslt")
+                  return
+                end
+              elsif ctype == ATTRIBUTE_NODE
+                cur = ctxnode.parent
+              elsif ctype == NAMESPACE_DECL
+                cur = ctxnode.next
+                return if cur && cur.type == NAMESPACE_DECL
+              else
+                return
+              end
+              return if cur.nil?
+
+              t = cur.type
+              seq << cur if #{cond}
+            end
+
+            # xmlXPathNextAncestor / xmlXPathNextAncestorOrSelf
+            def self.ancestor_#{m}(ctxnode, doc, name, uri, seq, include_self)
+              cur = ctxnode
+              if include_self
+                t = cur.type
+                seq << cur if #{cond}
+              else
+                # the first step differs from the following ones
+                ctype = ctxnode.type
+                if PARENT_CTX[ctype]
+                  cur = ctxnode.parent
+                  if cur.nil?
+                    cur = doc
+                  elsif cur.type == ELEMENT_NODE && (nm = cur.name) &&
+                      (nm.start_with?(" ") || nm == "fake node libxslt")
+                    return
+                  end
+                elsif ctype == ATTRIBUTE_NODE
+                  cur = ctxnode.parent
+                elsif ctype == NAMESPACE_DECL
+                  cur = ctxnode.next
+                  return if cur && cur.type == NAMESPACE_DECL
+                else
+                  return
+                end
+                return if cur.nil?
+
+                t = cur.type
+                seq << cur if #{cond}
+              end
+              while true
+                if cur.equal?(doc.children)
+                  cur = doc
+                else
+                  return if cur.equal?(doc)
+
+                  ctype = cur.type
+                  if PARENT_CTX[ctype]
+                    par = cur.parent
+                    return if par.nil?
+                    return if par.type == ELEMENT_NODE && (nm = par.name) &&
+                      (nm.start_with?(" ") || nm == "fake node libxslt")
+
+                    cur = par
+                  elsif ctype == ATTRIBUTE_NODE
+                    cur = cur.parent
+                  elsif ctype == NAMESPACE_DECL
+                    nx = cur.next
+                    return if nx.nil? || nx.type == NAMESPACE_DECL
+
+                    cur = nx
+                  else
+                    return
+                  end
+                end
+                return if cur.nil?
+
+                t = cur.type
+                seq << cur if #{cond}
+              end
+            end
+
             # xmlXPathNextSelf
             def self.self_#{m}(ctxnode, doc, name, uri, seq, _unused)
               cur = ctxnode
@@ -291,6 +384,9 @@ module Nokogiri
           AXIS_SELF => ["self", nil],
           AXIS_FOLLOWING_SIBLING => ["following_sibling", nil],
           AXIS_PRECEDING_SIBLING => ["preceding_sibling", nil],
+          AXIS_PARENT => ["parent", nil],
+          AXIS_ANCESTOR => ["ancestor", false],
+          AXIS_ANCESTOR_OR_SELF => ["ancestor", true],
         }.freeze
 
         # a stand-in for the result sequence that stops the traversal at the first hit
