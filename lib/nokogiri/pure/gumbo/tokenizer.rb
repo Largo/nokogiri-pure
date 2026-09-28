@@ -2356,7 +2356,9 @@ module Nokogiri
             name = ss.matched
             max_attributes = (@max_attributes ||= @parser.max_attributes)
             attrs = []
-            while ss.skip(FAST_ATTR)
+            input = @input
+            # (an attribute starts with whitespace: don't run the regexp in front of '>' or '/')
+            while ((b = input.getbyte(ss.pos)) == 0x20 || b == 0x0A || b == 0x09 || b == 0x0C) && ss.skip(FAST_ATTR)
               aname = ss[1]
               orig_len = aname.bytesize
               aname.downcase! if aname.match?(UPPER)
@@ -2372,7 +2374,14 @@ module Nokogiri
               attrs << Attribute.new(aname, value, orig_len)
             end
             reset_rel = ss.pos - start
-            if (tail = ss.skip(FAST_TAG_END))
+            b = input.getbyte(ss.pos)
+            if b == 0x3e
+              tail = 1
+              self_closing = false
+            elsif b == 0x2f && input.getbyte(ss.pos + 1) == 0x3e
+              tail = 2
+              self_closing = true
+            elsif (tail = ss.skip(FAST_TAG_END))
               self_closing = false
             elsif (tail = ss.skip(FAST_TAG_SELF_CLOSING_END))
               self_closing = true

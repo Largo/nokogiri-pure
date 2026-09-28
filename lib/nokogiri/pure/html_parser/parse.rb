@@ -1626,7 +1626,7 @@ module Nokogiri
           attre = (@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII
           while true
             # (the scanner is at pos)
-            if (bl = ss.skip(EXPRESS_BLANKS)) > 0
+            if ((b = buf.getbyte(pos)) == 0x20 || b == 0x0A || b == 0x09 || b == 0x0D) && (bl = ss.skip(EXPRESS_BLANKS)) > 0
               # (htmlSkipBlankChars: a newline starts a new line, other blanks are a column each)
               if bl == 1
                 if buf.getbyte(pos) == 0x0A
