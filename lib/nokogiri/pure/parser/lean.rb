@@ -9,8 +9,8 @@ module Nokogiri
       # xmlSAX2EndElementNs) in one method, with the same effects in the same order. They return
       # false, having changed nothing, whenever the general path is needed.
       class Ctxt
-        # an unprefixed ASCII name directly followed by ">", "/>" or a space
-        SIMPLE_TAG_NAME_RE = /[A-Za-z_][-A-Za-z0-9_.]*(?=\/?>| )/
+        # an ASCII QName directly followed by ">", "/>" or a space
+        SIMPLE_TAG_NAME_RE = /[A-Za-z_][-A-Za-z0-9_.]*(?::[A-Za-z_][-A-Za-z0-9_.]*)?(?=\/?>| )/
 
         # the content loop may use the fused paths (default tree-building handler)
         def lean_handler?
@@ -34,6 +34,15 @@ module Nokogiri
           return false if n.nil? || n > XML_MAX_NAME_LENGTH
 
           b = @buf
+          qname = b.byteslice(cur + 1, n)
+          if (colon = qname.byteindex(":"))
+            # a prefix bound in scope (not "xml") to a non-empty URI
+            prefix = qname.byteslice(0, colon)
+            return false if prefix == "xml"
+
+            idx = @ns_hash.fetch(prefix, INT_MAX)
+            return false if idx == INT_MAX || idx < @min_ns_index || @ns_tab[idx][1].empty?
+          end
           e = cur + 1 + n
           dcol = n + 1
           atts = nil
@@ -56,14 +65,21 @@ module Nokogiri
           line = @line
           # xmlParseStartTag2
           @ns_element_id += 1
-          name = -b.byteslice(cur + 1, n)
-          idx = @ns_default_index
-          if idx == INT_MAX || idx < @min_ns_index
-            uri = nil
-          else
+          if colon
+            prefix = -prefix
+            name = -qname.byteslice(colon + 1, n - colon - 1)
             uri = @ns_tab[idx][1]
-            uri = nil if uri.empty?
+          else
+            name = -qname
+            idx = @ns_default_index
+            if idx == INT_MAX || idx < @min_ns_index
+              uri = nil
+            else
+              uri = @ns_tab[idx][1]
+              uri = nil if uri.empty?
+            end
           end
+          lean_xml_space(atts) if atts && atts.include?("space")
           @cur = e
           @col += dcol
           # xmlSAX2StartElementNs (no namespaces, not validating)
@@ -76,6 +92,10 @@ module Nokogiri
             ns = idx == INT_MAX || idx < @min_ns_index ? nil : @ns_extra[idx][0]
             if ns
               ret.ns = ns
+            elsif prefix
+              Tree.new_ns(ret, nil, prefix)
+              ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, prefix, nil,
+                nil, 0, "Namespace prefix #{prefix} was not found\n")
             else
               Tree.new_ns(ret, nil, nil)
               ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, nil, nil,
@@ -83,11 +103,12 @@ module Nokogiri
             end
           end
           if atts
-            # the attributes, as xmlSAX2AttributeNs(name, NULL, value, not allocated) makes them
+            # the attributes, as xmlSAX2AttributeNs(name, prefix, value, not allocated) makes them
             prev = nil
             j = 0
             while j < atts.length
-              attr = sax2_attribute_ns(-atts[j], nil, atts[j + 1], false)
+              apfx = atts[j + 1]
+              attr = sax2_attribute_ns(-atts[j], apfx && -apfx, atts[j + 2], false)
               if prev.nil?
                 ret.properties = attr
               else
@@ -95,19 +116,19 @@ module Nokogiri
                 attr.prev = prev
               end
               prev = attr
-              j += 2
+              j += 3
             end
           end
           # nameNsPush
           (tab = @name_tab) << name
           @name = name
           if (st = @push_tab[tab.length - 1])
-            st.prefix = nil
+            st.prefix = prefix
             st.uri = uri
             st.line = line
             st.ns_nr = 0
           else
-            @push_tab[tab.length - 1] = StartTag.new(nil, uri, line, 0)
+            @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, 0)
           end
           if b.getbyte(e) == 0x3E
             @cur = e + 1
@@ -128,8 +149,10 @@ module Nokogiri
           true
         end
 
-        # the attributes after the element name at +e+ (a space): [[name, value, ...], end, dcol], or
-        # nil if the general path is needed
+        # the attributes after the element name at +e+ (a space): [[name, prefix, value, ...], end,
+        # dcol], or nil if the general path is needed. Taken: single-space separated, no xmlns
+        # declarations, prefixes bound in scope (or "xml" without an xml:lang check or an invalid
+        # xml:space), plain values, distinct local names.
         def lean_attributes(e, dcol)
           ss = @ss
           b = @buf
@@ -140,30 +163,59 @@ module Nokogiri
 
             ss.pos = e + 1
             n = ss.skip(ATTR_FAST_RE)
-            return nil if n.nil? || ss[2]
+            return nil if n.nil?
 
             name = ss[1]
-            return nil if name == "xmlns" || name.bytesize > XML_MAX_NAME_LENGTH
+            if (prefix = ss[2])
+              name, prefix = prefix, name
+              return nil unless lean_attribute_prefix_ok?(prefix, name, ss)
+            end
+            return nil if name == "xmlns" || n > XML_MAX_NAME_LENGTH
 
             value = ss[3] || ss[4]
-            atts << name << value
+            atts << name << prefix << value
             dcol += 1 + (value.ascii_only? ? n : n - value.bytesize + value.length)
             e += 1 + n
             c = b.getbyte(e)
             break if c == 0x3E || (c == 0x2F && b.getbyte(e + 1) == 0x3E)
             return nil if c != 0x20
           end
-          # duplicates are reported by the general path
-          if atts.length > 2
+          # (duplicates are reported by the general path)
+          if atts.length > 3
             names = []
             k = 0
             while k < atts.length
               names << atts[k]
-              k += 2
+              k += 3
             end
             return nil if names.uniq!
           end
           [atts, e, dcol]
+        end
+
+        def lean_attribute_prefix_ok?(prefix, name, ss)
+          return false if prefix == "xmlns"
+
+          if prefix == "xml"
+            return false if name == "lang" && @pedantic != 0
+            return true unless name == "space"
+
+            v = ss[3] || ss[4]
+            return v == "default" || v == "preserve"
+          end
+          idx = @ns_hash.fetch(prefix, INT_MAX)
+          idx != INT_MAX && idx >= @min_ns_index
+        end
+
+        # xml:space among the attributes (valid values only): as xmlParseAttribute2 sets it
+        def lean_xml_space(atts)
+          j = 0
+          while j < atts.length
+            if atts[j] == "space" && atts[j + 1] == "xml"
+              self.space = atts[j + 2] == "default" ? 0 : 1
+            end
+            j += 3
+          end
         end
 
         # "</qname>" closing the current element
