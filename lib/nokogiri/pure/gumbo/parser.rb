@@ -98,6 +98,7 @@ module Nokogiri
       end
 
       class Parser
+        NO_ATTRIBUTES = [].freeze
         HTML_BIT = 1 << NAMESPACE_HTML
         SVG_BIT = 1 << NAMESPACE_SVG
         MATHML_BIT = 1 << NAMESPACE_MATHML
@@ -805,12 +806,13 @@ module Nokogiri
           type = tag_namespace == NAMESPACE_HTML && token.tag == TAG_TEMPLATE ? NODE_TEMPLATE : NODE_ELEMENT
           node = Node.new(type)
           node.children = []
-          node.attributes = token.attributes
+          attributes = token.attributes
+          node.attributes = attributes.equal?(NO_ATTRIBUTES) ? [] : attributes
           node.tag = token.tag
           node.name = token.name || TAG_NAMES[token.tag]
           node.tag_namespace = tag_namespace
           node.line = token.line
-          token.attributes = []
+          token.attributes = NO_ATTRIBUTES # (only ever read: a new array per tag isn't needed)
           token.name = nil
           node
         end
@@ -3134,7 +3136,8 @@ module Nokogiri
             else
               acn = adjusted_current_node
               tokenizer.set_is_adjusted_current_node_foreign(!acn.nil? && acn.tag_namespace != NAMESPACE_HTML)
-              if !@ignore_next_linefeed && open_elements.length <= max_tree_depth && bulk_text(acn)
+              if !@ignore_next_linefeed && open_elements.length <= max_tree_depth &&
+                  (tokenizer.current != 0x3c || tokenizer.state == LEX_PLAINTEXT) && bulk_text(acn)
                 # the text run stood for character tokens handled one per iteration: the next token
                 # starts a new iteration (the run may have reconstructed formatting elements)
                 acn = adjusted_current_node

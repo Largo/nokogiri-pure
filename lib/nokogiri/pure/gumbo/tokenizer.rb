@@ -89,7 +89,7 @@ module Nokogiri
         SCRIPT_TAG = "script".b.freeze
         EMPTY = "".b.freeze
 
-        attr_reader :state, :input, :line
+        attr_reader :state, :input, :line, :current
 
         def initialize(parser, input, tab_stop)
           @parser = parser
@@ -2322,6 +2322,8 @@ module Nokogiri
         FT_UQV = "(?:[\\x21\\x23-\\x25\\x28-\\x3B\\x3F-\\x5F\\x61-\\x7E]++|#{SAFE_MB})++"
         FT_ATTR = "#{FT_WS}++(#{FT_ANAME})(?:=(?:\"(#{FT_DQV})\"|'(#{FT_SQV})'|(#{FT_UQV})))?"
         FAST_ATTR = Regexp.new(FT_ATTR.b, Regexp::NOENCODING)
+        UPPER = /[A-Z]/n
+        NON_PLAIN = /[^\x20-\x7E]/n
         FAST_TAG_NAME = Regexp.new(FT_TNAME.b, Regexp::NOENCODING)
         FAST_TAG_END = Regexp.new("#{FT_WS}*+>".b, Regexp::NOENCODING)
         FAST_TAG_SELF_CLOSING_END = Regexp.new("#{FT_WS}*+/>".b, Regexp::NOENCODING)
@@ -2332,7 +2334,7 @@ module Nokogiri
         def fast_tag(output)
           start = @start
           ss = (@scanner ||= StringScanner.new(@input))
-          attrs = []
+          attrs = nil
           if @input.getbyte(start + 1) == 0x2F
             ss.pos = start + 2
             return false unless ss.skip(FAST_TAG_NAME)
@@ -2350,10 +2352,11 @@ module Nokogiri
 
             name = ss.matched
             max_attributes = @parser.max_attributes
+            attrs = []
             while ss.skip(FAST_ATTR)
               aname = ss[1]
               orig_len = aname.bytesize
-              aname.downcase!
+              aname.downcase! if aname.match?(UPPER)
               return false if max_attributes >= 0 && attrs.length >= max_attributes
               return false if attrs.any? { |a| a.name == aname }
 
@@ -2370,13 +2373,18 @@ module Nokogiri
             is_start = true
             len = reset_rel + tail
           end
-          name.downcase!
+          name.downcase! if name.match?(UPPER)
 
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
           iter_mark
-          text = @input.byteslice(start, len)
-          if text.ascii_only? && !text.include?("\n") && !text.include?("\t")
+          # @next_nonplain: the first byte at or after some position <= start that isn't
+          # printable ASCII (tabs and newlines included), found without rescanning
+          np = @next_nonplain
+          if np.nil? || np < start
+            np = @next_nonplain = @input.byteindex(NON_PLAIN, start) || @end
+          end
+          if np >= start + len
             # one column per byte: move straight to the reset point, then onto the '>'
             @column += reset_rel
             @offset += reset_rel
@@ -2389,9 +2397,9 @@ module Nokogiri
             @current = 0x3e
             @width = 1
           else
-            advance_over(text.byteslice(0, reset_rel))
+            advance_over(@input.byteslice(start, reset_rel))
             reset_tag_buffer_start_point
-            advance_over(text.byteslice(reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
+            advance_over(@input.byteslice(start + reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
           end
           @tag = tag = Util.tagn_enum(name)
           @drop_next_attr_value = false
