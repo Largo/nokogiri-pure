@@ -5,8 +5,6 @@
 module Nokogiri
   class EncodingHandler
     class << self
-      undef_method :new rescue nil
-      undef_method :allocate rescue nil
 
       def [](key)
         handler = Nokogiri::Pure::Enc.find_handler(Nokogiri::Pure.str(key))

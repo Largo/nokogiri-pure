@@ -62,7 +62,7 @@ module Nokogiri
           private
 
           def __wrap(ctxt)
-            rb = allocate
+            rb = Nokogiri::Pure::ALLOCATE.bind_call(self)
             rb.instance_variable_set(:@__native, ctxt)
             rb
           end

@@ -144,7 +144,6 @@ module Nokogiri
 
     class Stylesheet
       class << self
-        undef_method :allocate rescue nil
 
         # parse_stylesheet_doc
         def parse_stylesheet_doc(xmldocobj)

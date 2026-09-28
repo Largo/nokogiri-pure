@@ -25,7 +25,7 @@ module Nokogiri
           reader = Nokogiri::Pure::XmlReader.for_memory(buffer, c_url, c_encoding, c_options)
           raise RuntimeError, "couldn't create a parser" if reader.nil?
 
-          rb_reader = allocate
+          rb_reader = Nokogiri::Pure::ALLOCATE.bind_call(self)
           rb_reader.instance_variable_set(:@__native, reader)
           rb_reader.send(:initialize, rb_buffer, rb_url, encoding)
           rb_reader
@@ -47,7 +47,7 @@ module Nokogiri
           reader = Nokogiri::Pure::XmlReader.for_io(rb_io, c_url, c_encoding, c_options)
           raise RuntimeError, "couldn't create a parser" if reader.nil?
 
-          rb_reader = allocate
+          rb_reader = Nokogiri::Pure::ALLOCATE.bind_call(self)
           rb_reader.instance_variable_set(:@__native, reader)
           rb_reader.send(:initialize, rb_io, rb_url, encoding)
           rb_reader

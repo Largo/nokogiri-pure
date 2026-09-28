@@ -162,8 +162,6 @@ module Nokogiri
 
     class Namespace
       class << self
-        undef_method :new rescue nil
-        undef_method :allocate rescue nil
       end
 
       def prefix

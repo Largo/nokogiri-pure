@@ -191,3 +191,18 @@ module Nokogiri
     end
   end
 end
+
+module Nokogiri
+  module Pure
+    # rb_undef_alloc_func(klass): `new`/`allocate` raise like C. (Internal code still allocates via
+    # ALLOCATE.bind_call, which Ruby < 4 only permits while the class responds to `allocate`.)
+    # +new+: also make `new` raise (for classes where neither the C glue nor upstream Ruby defines
+    # a `new`; otherwise theirs is used, as in C).
+    def self.undef_alloc_func(klass, new: false)
+      klass.define_singleton_method(:allocate) { raise TypeError, "allocator undefined for #{self}" }
+      return unless new
+
+      klass.define_singleton_method(:new) { |*_args, **_kw, &_blk| raise TypeError, "allocator undefined for #{self}" }
+    end
+  end
+end

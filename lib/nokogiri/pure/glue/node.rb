@@ -868,8 +868,6 @@ module Nokogiri
 
     class ElementContent
       class << self
-        undef_method :new rescue nil
-        undef_method :allocate rescue nil
 
         def __wrap(rb_document, c) # :nodoc:
           elem = Class.instance_method(:allocate).bind_call(self)

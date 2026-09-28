@@ -146,4 +146,11 @@ Nokogiri::Pure.load_shallow do
 
   Dir[File.join(__dir__, "pure", "glue", "*.rb")].sort.each { |f| require f }
   Nokogiri::Pure.init_class_table
+
+  # classes whose C implementation calls rb_undef_alloc_func()
+  [Nokogiri::EncodingHandler, Nokogiri::HTML4::ElementDescription, Nokogiri::XML::ElementContent,
+   Nokogiri::XML::Namespace].each { |k| Nokogiri::Pure.undef_alloc_func(k, new: true) }
+  [Nokogiri::HTML4::SAX::ParserContext, Nokogiri::XML::Reader, Nokogiri::XML::RelaxNG,
+   Nokogiri::XML::SAX::ParserContext, Nokogiri::XML::Schema, Nokogiri::XML::XPathContext,
+   Nokogiri::XSLT::Stylesheet].each { |k| Nokogiri::Pure.undef_alloc_func(k) }
 end

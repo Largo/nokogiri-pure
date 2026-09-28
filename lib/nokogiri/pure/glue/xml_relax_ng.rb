@@ -98,7 +98,7 @@ module Nokogiri
           raise RuntimeError, "Could not parse document"
         end
 
-        rb_schema = rb_class.allocate
+        rb_schema = Nokogiri::Pure::ALLOCATE.bind_call(rb_class)
         rb_schema.instance_variable_set(:@__native, c_schema)
         rb_schema.instance_variable_set(:@errors, rb_errors)
         rb_schema.instance_variable_set(:@parse_options, rb_parse_options)
