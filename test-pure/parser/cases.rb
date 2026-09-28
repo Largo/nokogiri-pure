@@ -277,6 +277,10 @@ module ParserCases
     add.("longname", "<#{"n" * 60_000}/>", DEFAULT)
     add.("longname", "<#{"n" * 60_000}/>", DEFAULT | HUGE)
     add.("longtext", "<a>#{"x" * 10_000_050}</a>", DEFAULT) if ENV["SLOW"]
+    longpush = "<root>" + (1..150).map { |i| "<p:e xmlns:p='u'>\r\n#{"é" * i}</p:e>" }.join + "</root>"
+    [5, 512, 4000].each { |n| add.("longpush", longpush, DEFAULT, nil, nil, [:push, n]) }
+    latin = "<?xml version='1.0' encoding='ISO-8859-1'?><r>".b + ("\xe9x" * 5000).b + "</r>".b
+    [5, 512].each { |n| add.("longpush", latin, DEFAULT, nil, nil, [:push, n]) }
     LONG.each do |l|
       add.("long_sax", l, RECOVER, nil, nil, :sax)
       add.("long_io_sax", l, RECOVER, nil, nil, :sax_io)

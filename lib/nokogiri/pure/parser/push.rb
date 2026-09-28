@@ -233,6 +233,7 @@ module Nokogiri
           return if @cur <= 4096 || !inp.equal?(@input_tab[0])
 
           drop = @cur - LINE_LEN
+          drop -= 1 while drop > 0 && (@buf.getbyte(drop) & 0xC0) == 0x80
           if inp.raw
             if inp.decoder
               inp.raw = inp.raw.byteslice(inp.raw_done, inp.raw.bytesize - inp.raw_done)
