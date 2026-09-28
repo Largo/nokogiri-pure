@@ -457,7 +457,13 @@ module Nokogiri
           return nil if !ascii_letter?(c) && c != 0x5F && c != 0x3A
 
           run = scan_at(@cur + 1, /[A-Za-z0-9:_\-]{1,100}/n)
-          return cached_name(run) if run
+          if run
+            # remembered for htmlParseStartTag at the same position (see parse_start_tag)
+            @ni_buf = @buf
+            @ni_pos = @cur + 1
+            @ni_len = run.bytesize
+            return @ni_name = cached_name(run)
+          end
 
           loc = +"".b
           i = 0
@@ -1206,11 +1212,11 @@ module Nokogiri
         ATTR_NAME_SRC = "([A-Za-z_:.][A-Za-z0-9:_.\\-]{0,99})"
         # an entity or char reference htmlParseHTMLAttribute may decode without errors (checked
         # again by expand_attr_refs)
-        ATTR_REF_SRC = "&(?:[A-Za-z_:][A-Za-z0-9_\\-:.]*+|#[0-9]{1,7}+|#[xX][0-9A-Fa-f]{1,6}+);"
+        ATTR_REF_SRC = "&(?:[A-Za-z_:][A-Za-z0-9_\\-:.]*+|#[0-9]{1,7}|#[xX][0-9A-Fa-f]{1,6});"
 
         def self.attr_fast_re(utf8)
           mb = utf8 ? "|#{UTF8_CHAR_SRC}" : ""
-          v = ->(cls) { "(?:[#{cls}]#{mb}|#{ATTR_REF_SRC})" }
+          v = ->(cls) { "(?:[#{cls}]++#{mb}|#{ATTR_REF_SRC})" }
           Regexp.new(
             "#{ATTR_NAME_SRC}(?:=(?:\"(#{v["^\\x00&\"\\n\\x80-\\xFF"]}*+)\"|'(#{v["^\\x00&'\\n\\x80-\\xFF"]}*+)'|" \
             "(#{v["^\\x00&>\\t\\n\\r \"'\\x80-\\xFF"]}#{v["^\\x00&>\\t\\n\\r \\x80-\\xFF"]}*+)(?=[\\t\\n\\r >]))|" \
@@ -1248,15 +1254,22 @@ module Nokogiri
         end
 
         TAG_NAME_FAST = /[A-Za-z_:.][A-Za-z0-9:_.\-]{0,99}/n
+        TAG_NAME_CHAR = Array.new(256) { |c| c.chr.match?(/[A-Za-z0-9:_.\-]/n) }.freeze
 
         # htmlParseStartTag: returns 0 on success, -1 on error, 1 if discarded
         def parse_start_tag
           return -1 unless @has_input
           return -1 if cur_byte != 0x3C
 
-          ss = scanner
-          ss.pos = @cur + 1
-          if (len = ss.skip(TAG_NAME_FAST)) && @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
+          if @ni_pos == @cur + 1 && @ni_buf.equal?(@buf) && (len = @ni_len) &&
+              !TAG_NAME_CHAR[@buf.getbyte(@cur + 1 + len) || 0] && @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
+            # the name htmlParseHTMLName_nonInvasive just read here is also the complete
+            # htmlParseHTMLName result (it isn't followed by a name char such as '.')
+            name = @ni_name
+            @cur += len + 1
+            @col += len + 1
+          elsif (ss = scanner) && (ss.pos = @cur + 1) && (len = ss.skip(TAG_NAME_FAST)) &&
+              @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
             # NEXT; GROW; htmlParseHTMLName without any input grow
             name = cached_name(ss.matched)
             @cur += len + 1
@@ -1423,7 +1436,7 @@ module Nokogiri
         end
 
         # htmlParseReference
-        REF_FAST = /&(?:([A-Za-z_:][A-Za-z0-9_\-:.]*+)|#([0-9]{1,7}+)|#[xX]([0-9A-Fa-f]{1,6}+));/n
+        REF_FAST = /&(?:([A-Za-z_:][A-Za-z0-9_\-:.]*+)|#([0-9]{1,7})|#[xX]([0-9A-Fa-f]{1,6}));/n
         UTF8_CACHE = Hash.new { |h, v| h[v] = HTMLParser.utf8_append(+"".b, v).force_encoding(Encoding::UTF_8).freeze }
 
         def parse_reference
