@@ -10,6 +10,13 @@ module Nokogiri
       private_constant :T, :P
 
       class << self
+        # an allocated-but-uninitialized node has a NULL data pointer in C
+        def allocate
+          obj = super
+          obj.instance_variable_set(:@__native, Nokogiri::Pure::Uninitialized.new(obj.class))
+          obj
+        end
+
         # rb_xml_node_new
         def new(name, document, *rest, &block)
           unless document.is_a?(Nokogiri::XML::Node)
@@ -19,7 +26,7 @@ module Nokogiri
             warn("Passing a Node as the second parameter to Node.new is deprecated. Please pass a Document instead, or prefer an alternative constructor like Node#add_child. This will become an error in Nokogiri v1.17.0.", uplevel: 1, category: :deprecated)
           end
           c_document_node = P.unwrap(document)
-          c_node = T.new_node(nil, name.to_str)
+          c_node = T.new_node(nil, Nokogiri::Pure.str(name))
           c_node.doc = c_document_node.doc
           rb_node = P.wrap_node(c_node, equal?(Nokogiri::XML::Node) ? nil : self)
           rb_node.__send__(:initialize, name, document, *rest)
@@ -192,11 +199,11 @@ module Nokogiri
       def add_namespace_definition(prefix, href)
         c_node = @__native
         element = c_node
-        c_prefix = prefix&.to_str
+        c_prefix = Nokogiri::Pure.str_opt(prefix)
         c_namespace = T.search_ns(c_node.doc, c_node, c_prefix)
         unless c_namespace
           element = c_node.parent if c_node.type != P::ELEMENT_NODE
-          c_namespace = T.new_ns(element, href.to_str, c_prefix)
+          c_namespace = T.new_ns(element, Nokogiri::Pure.str(href), c_prefix)
         end
         return nil unless c_namespace
 
@@ -207,7 +214,7 @@ module Nokogiri
       end
 
       def attribute(name)
-        prop = T.has_prop(@__native, name.to_str)
+        prop = T.has_prop(@__native, Nokogiri::Pure.str(name))
         return nil unless prop
 
         P.wrap_node(prop)
@@ -215,7 +222,9 @@ module Nokogiri
 
       def attribute_nodes
         out = []
-        prop = @__native.properties
+        c_node = @__native
+        # xmlElement (an <!ELEMENT> decl) keeps its attribute decls where xmlNode keeps properties
+        prop = c_node.is_a?(Nokogiri::Pure::XmlElementDecl) ? c_node.attributes : c_node.properties
         while prop
           out << P.wrap_node(prop)
           prop = prop.next
@@ -224,7 +233,7 @@ module Nokogiri
       end
 
       def attribute_with_ns(name, namespace)
-        prop = T.has_ns_prop(@__native, name.to_str, namespace&.to_str)
+        prop = T.has_ns_prop(@__native, Nokogiri::Pure.str(name), Nokogiri::Pure.str_opt(namespace))
         return nil unless prop
 
         P.wrap_node(prop)
@@ -259,7 +268,7 @@ module Nokogiri
         doc = @__native.doc
         raise RuntimeError, "Document already has an external subset" if doc.ext_subset
 
-        dtd = T.new_dtd(doc, name&.to_str, external_id&.to_str, system_id&.to_str)
+        dtd = T.new_dtd(doc, Nokogiri::Pure.str_opt(name), Nokogiri::Pure.str_opt(external_id), Nokogiri::Pure.str_opt(system_id))
         dtd && P.wrap_node(dtd)
       end
 
@@ -267,7 +276,7 @@ module Nokogiri
         doc = @__native.doc
         raise RuntimeError, "Document already has an internal subset" if T.get_int_subset(doc)
 
-        dtd = T.create_int_subset(doc, name&.to_str, external_id&.to_str, system_id&.to_str)
+        dtd = T.create_int_subset(doc, Nokogiri::Pure.str_opt(name), Nokogiri::Pure.str_opt(external_id), Nokogiri::Pure.str_opt(system_id))
         dtd && P.wrap_node(dtd)
       end
 
@@ -291,7 +300,7 @@ module Nokogiri
       end
 
       def encode_special_chars(string)
-        T.encode_special_chars(@__native.doc, string.to_str)
+        T.encode_special_chars(@__native.doc, Nokogiri::Pure.str(string))
       end
 
       def external_subset
@@ -316,7 +325,7 @@ module Nokogiri
       end
 
       def key?(attribute)
-        !T.has_prop(@__native, attribute.to_str).nil?
+        !T.has_prop(@__native, Nokogiri::Pure.str(attribute)).nil?
       end
 
       def lang
@@ -324,7 +333,7 @@ module Nokogiri
       end
 
       def lang=(lang)
-        T.node_set_lang(@__native, lang.to_str)
+        T.node_set_lang(@__native, Nokogiri::Pure.str(lang))
         nil
       end
 
@@ -339,7 +348,7 @@ module Nokogiri
 
       def line=(line_number)
         c_node = @__native
-        line_number = Integer(line_number)
+        line_number = Nokogiri::Pure.int(line_number)
         if line_number < 65535
           c_node.line = line_number
         else
@@ -374,7 +383,7 @@ module Nokogiri
       end
 
       def namespaced_key?(attribute, namespace)
-        !T.has_ns_prop(@__native, attribute.to_str, namespace&.to_str).nil?
+        !T.has_ns_prop(@__native, Nokogiri::Pure.str(attribute), Nokogiri::Pure.str_opt(namespace)).nil?
       end
 
       def native_content=(content)
@@ -385,7 +394,7 @@ module Nokogiri
           T.unlink_node(child)
           child = nxt
         end
-        T.node_set_content(node, content.to_str)
+        T.node_set_content(node, Nokogiri::Pure.str(content))
         content
       end
 
@@ -405,7 +414,7 @@ module Nokogiri
       end
 
       def node_name=(new_name)
-        T.node_set_name(@__native, new_name.to_str)
+        T.node_set_name(@__native, Nokogiri::Pure.str(new_name))
         new_name
       end
 
@@ -450,7 +459,7 @@ module Nokogiri
 
         c_other = P.unwrap(other)
         c_new_parent_doc = P.unwrap_document(new_parent_doc)
-        c_self = T.doc_copy_node(c_other, c_new_parent_doc, Integer(level))
+        c_self = T.doc_copy_node(c_other, c_new_parent_doc, Nokogiri::Pure.int(level))
         return nil if c_self.nil?
 
         @__native = c_self
@@ -467,7 +476,7 @@ module Nokogiri
         raise RuntimeError, "Could not copy node for xinclude substitution" if c_copy.nil?
 
         T.replace_node(c_node, c_copy)
-        __process_xinclude_subtree(c_copy, Integer(flags))
+        __process_xinclude_subtree(c_copy, Nokogiri::Pure.int(flags))
         nil
       end
 
@@ -501,7 +510,7 @@ module Nokogiri
         return nil if attribute.nil?
 
         node = @__native
-        attribute = attribute.to_str
+        attribute = Nokogiri::Pure.str(attribute)
         colon = attribute.index(":")
         value = if colon
           prefix = attribute[0, colon]
@@ -522,8 +531,8 @@ module Nokogiri
         node = @__native
         return nil if node.type != P::ELEMENT_NODE
 
-        property = property.to_str
-        value = value.to_str
+        property = Nokogiri::Pure.str(property)
+        value = Nokogiri::Pure.str(value)
         prop = T.has_prop(node, property)
         if prop.is_a?(P::XmlAttr) && prop.children
           cur = prop.children
@@ -544,11 +553,11 @@ module Nokogiri
       end
 
       def in_context(str, options)
-        P::Parser.node_in_context(self, str.to_str, Integer(options))
+        P::Parser.node_in_context(self, Nokogiri::Pure.str(str), Nokogiri::Pure.int(options))
       end
 
       def native_write_to(io, encoding, indent_string, options)
-        P::Save.native_write_to(@__native, io, encoding&.to_str, indent_string.to_str, Integer(options))
+        P::Save.native_write_to(@__native, io, Nokogiri::Pure.str_opt(encoding), Nokogiri::Pure.str(indent_string), Nokogiri::Pure.int(options))
         io
       end
 
@@ -566,7 +575,7 @@ module Nokogiri
           raise RuntimeError, "cannot process XInclude on an unlinked <xi:include> node"
         end
 
-        __process_xinclude_subtree(c_node, Integer(flags))
+        __process_xinclude_subtree(c_node, Nokogiri::Pure.int(flags))
         self
       end
 
@@ -595,7 +604,7 @@ module Nokogiri
           end
 
           xml_doc = Nokogiri::Pure.unwrap_document(document)
-          node = Nokogiri::Pure::Tree.new_doc_prop(xml_doc, name.to_str, nil)
+          node = Nokogiri::Pure::Tree.new_doc_prop(xml_doc, Nokogiri::Pure.str(name), nil)
           rb_node = Nokogiri::Pure.wrap_node(node, self)
           rb_node.__send__(:initialize, document, name, *rest)
           yield rb_node if block
@@ -615,7 +624,7 @@ module Nokogiri
         if content.nil?
           t.node_set_content(attr, nil)
         else
-          value = t.encode_entities_reentrant(attr.doc, content.to_str)
+          value = t.encode_entities_reentrant(attr.doc, Nokogiri::Pure.str(content))
           if value.empty?
             t.node_set_content(attr, nil)
             text = t.new_doc_text(attr.doc, value)
@@ -701,7 +710,7 @@ module Nokogiri
       class << self
         def new(document, name, content, *rest, &block)
           xml_doc = Nokogiri::Pure.unwrap_document(document)
-          node = Nokogiri::Pure::Tree.new_doc_pi(xml_doc, name.to_str, content.to_str)
+          node = Nokogiri::Pure::Tree.new_doc_pi(xml_doc, Nokogiri::Pure.str(name), Nokogiri::Pure.str(content))
           rb_node = Nokogiri::Pure.wrap_node(node, self)
           rb_node.__send__(:initialize, document, name, content, *rest)
           yield rb_node if block
@@ -714,7 +723,7 @@ module Nokogiri
       class << self
         def new(document, name, *rest, &block)
           xml_doc = Nokogiri::Pure.unwrap_document(document)
-          node = Nokogiri::Pure::Tree.new_reference(xml_doc, name.to_str)
+          node = Nokogiri::Pure::Tree.new_reference(xml_doc, Nokogiri::Pure.str(name))
           rb_node = Nokogiri::Pure.wrap_node(node, self)
           rb_node.__send__(:initialize, document, name, *rest)
           yield rb_node if block
@@ -776,7 +785,7 @@ module Nokogiri
       def validate(document)
         doc = Nokogiri::Pure.unwrap_document(document)
         errors = []
-        Nokogiri::Pure::Errors.collecting(errors) do
+        Nokogiri::Pure::Errors.collecting_then_clear(errors) do
           Nokogiri::Pure::Valid.validate_dtd(doc, @__native)
         end
         errors

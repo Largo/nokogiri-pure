@@ -100,6 +100,7 @@ module Nokogiri
           ctxt.sax = sax_parser.instance_variable_get(:@__native)
           ctxt.user_data = ctxt
           ctxt._private = sax_parser
+          Nokogiri::Pure::Errors.handler = nil # the C glue clears (not restores) the global handler
           Nokogiri::Pure::Errors.with_handler(nil) do
             ctxt.parse_document
           end

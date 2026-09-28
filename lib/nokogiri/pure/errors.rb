@@ -118,6 +118,18 @@ module Nokogiri
         err
       end
 
+      # Like the C glue's `xmlSetStructuredErrorFunc(list, pusher); ...; xmlSetStructuredErrorFunc(NULL, NULL)`:
+      # collects errors, then *clears* the global handler instead of restoring it (a side effect
+      # some Nokogiri entry points have, which callers can observe).
+      def collecting_then_clear(list)
+        self.handler = ->(err) { list << Pure.wrap_error(err) }
+        begin
+          yield
+        ensure
+          self.handler = nil
+        end
+      end
+
       def report(err)
         fill_location(err)
         h = handler

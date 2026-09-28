@@ -66,8 +66,8 @@ module Nokogiri
       def [](*args)
         nodes = __nodes
         if args.length == 2
-          beg = Integer(args[0])
-          len = Integer(args[1])
+          beg = Nokogiri::Pure.int(args[0])
+          len = Nokogiri::Pure.int(args[1])
           beg += nodes.length if beg < 0
           return __subseq(beg, len)
         end
@@ -82,7 +82,7 @@ module Nokogiri
 
           return __subseq(beg, len)
         end
-        __index_at(Integer(arg))
+        __index_at(Nokogiri::Pure.int(arg))
       end
       alias_method :slice, :[]
 
@@ -143,8 +143,8 @@ module Nokogiri
 
       # rb_range_beg_len(range, &beg, &len, len, err=0)
       def __range_beg_len(range, length)
-        beg = range.begin.nil? ? 0 : Integer(range.begin)
-        en = range.end.nil? ? -1 : Integer(range.end)
+        beg = range.begin.nil? ? 0 : Nokogiri::Pure.int(range.begin)
+        en = range.end.nil? ? -1 : Nokogiri::Pure.int(range.end)
         excl = range.end.nil? ? false : range.exclude_end?
         origbeg = beg
         beg += length if beg < 0

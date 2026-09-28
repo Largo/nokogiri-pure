@@ -9,7 +9,7 @@ module Nokogiri
         def read_io(io, url, encoding, options)
           errors = []
           c_document = Nokogiri::Pure::Errors.collecting(errors) do
-            Nokogiri::Pure::Parser.read_io(io, url&.to_str, encoding&.to_str, Integer(options))
+            Nokogiri::Pure::Parser.read_io(io, Nokogiri::Pure.str_opt(url), Nokogiri::Pure.str_opt(encoding), Nokogiri::Pure.int(options))
           end
           if c_document.nil?
             Nokogiri::Pure.raise_aggregate(errors, "Could not parse document")
@@ -21,9 +21,9 @@ module Nokogiri
 
         def read_memory(input, url, encoding, options)
           errors = []
-          input = input.to_str
-          c_document = Nokogiri::Pure::Errors.collecting(errors) do
-            Nokogiri::Pure::Parser.read_memory(input, url&.to_str, encoding&.to_str, Integer(options))
+          input = Nokogiri::Pure.str(input)
+          c_document = Nokogiri::Pure::Errors.collecting_then_clear(errors) do
+            Nokogiri::Pure::Parser.read_memory(input, Nokogiri::Pure.str_opt(url), Nokogiri::Pure.str_opt(encoding), Nokogiri::Pure.int(options))
           end
           if c_document.nil?
             Nokogiri::Pure.raise_aggregate(errors, "Could not parse document")
@@ -36,7 +36,7 @@ module Nokogiri
         def new(*args)
           version = args[0]
           version = "1.0" if version.nil?
-          doc = Nokogiri::Pure::Tree.new_doc(version.to_str)
+          doc = Nokogiri::Pure::Tree.new_doc(Nokogiri::Pure.str(version))
           Nokogiri::Pure.wrap_document(self, doc, args)
         end
       end
@@ -73,7 +73,7 @@ module Nokogiri
       end
 
       def encoding=(encoding)
-        @__native.encoding = encoding.to_str.dup
+        @__native.encoding = Nokogiri::Pure.str(encoding).dup
         encoding
       end
 
@@ -123,11 +123,11 @@ module Nokogiri
         err_code, c_entity = Nokogiri::Pure::Errors.collecting(errors) do
           Nokogiri::Pure::Tree.add_entity(
             c_document, false,
-            name&.to_str,
-            type.nil? ? Nokogiri::Pure::INTERNAL_GENERAL_ENTITY : Integer(type),
-            external_id&.to_str,
-            system_id&.to_str,
-            content&.to_str,
+            Nokogiri::Pure.str_opt(name),
+            type.nil? ? Nokogiri::Pure::INTERNAL_GENERAL_ENTITY : Nokogiri::Pure.int(type),
+            Nokogiri::Pure.str_opt(external_id),
+            Nokogiri::Pure.str_opt(system_id),
+            Nokogiri::Pure.str_opt(content),
           )
         end
         if c_entity.nil?
@@ -148,7 +148,7 @@ module Nokogiri
 
       def initialize_copy_with_args(other, level)
         c_other = Nokogiri::Pure.unwrap_document(other)
-        c_self = Nokogiri::Pure::Tree.copy_doc(c_other, Integer(level))
+        c_self = Nokogiri::Pure::Tree.copy_doc(c_other, Nokogiri::Pure.int(level))
         return nil if c_self.nil?
 
         c_self.type = c_other.type

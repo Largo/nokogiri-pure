@@ -36,6 +36,19 @@ module Nokogiri
           end
         end
 
+        # run the block with ctxt->input = NULL (xmlValidateDocumentFinal: "Don't print line numbers")
+        def without_input
+          save_registers
+          saved = @input
+          @input = nil
+          begin
+            yield
+          ensure
+            @input = saved
+            load_registers
+          end
+        end
+
         # xmlCtxtParseDocument: returns the document or nil
         def parse_document_with(input)
           @input_tab.clear
@@ -166,7 +179,7 @@ module Nokogiri
         doc_children = doc.children
         list = nil
         error = nil
-        Errors.collecting(errors) do
+        Errors.collecting_then_clear(errors) do
           error, list = parse_in_node_context(node, string.b, options)
         end
         if error != 0

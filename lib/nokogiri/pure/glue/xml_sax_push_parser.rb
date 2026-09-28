@@ -47,6 +47,7 @@ module Nokogiri
         def native_write(chunk, last_chunk)
           ctxt = @__native
           chunk = chunk.nil? ? nil : (String.try_convert(chunk) || raise(TypeError, "no implicit conversion into String"))
+          Nokogiri::Pure::Errors.handler = nil # the C glue clears (not restores) the global handler
           ret = Nokogiri::Pure::Errors.with_handler(nil) do
             ctxt.parse_chunk(chunk, last_chunk == true)
           end

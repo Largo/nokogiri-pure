@@ -9,7 +9,7 @@ module Nokogiri
       undef_method :allocate rescue nil
 
       def [](key)
-        handler = Nokogiri::Pure::Enc.find_handler(key.to_str)
+        handler = Nokogiri::Pure::Enc.find_handler(Nokogiri::Pure.str(key))
         return nil unless handler
 
         eh = Class.instance_method(:allocate).bind_call(self)
@@ -18,11 +18,11 @@ module Nokogiri
       end
 
       def delete(name)
-        Nokogiri::Pure::Enc.del_alias(name.to_str) == 0 ? true : nil
+        Nokogiri::Pure::Enc.del_alias(Nokogiri::Pure.str(name)) == 0 ? true : nil
       end
 
       def alias(from, to)
-        Nokogiri::Pure::Enc.add_alias(from.to_str, to.to_str)
+        Nokogiri::Pure::Enc.add_alias(Nokogiri::Pure.str(from), Nokogiri::Pure.str(to))
         to
       end
 

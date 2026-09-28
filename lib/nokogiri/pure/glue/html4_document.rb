@@ -26,7 +26,7 @@ module Nokogiri
           options = Integer(options)
           error_list = []
 
-          c_doc = Nokogiri::Pure::Errors.collecting(error_list) do
+          c_doc = Nokogiri::Pure::Errors.collecting_then_clear(error_list) do
             Nokogiri::Pure::HTMLParser.read_io(Nokogiri::Pure::HTMLParser.io_reader(io), c_url, c_encoding, options)
           end
 
@@ -50,7 +50,7 @@ module Nokogiri
           options = Integer(options)
           error_list = []
 
-          c_doc = Nokogiri::Pure::Errors.collecting(error_list) do
+          c_doc = Nokogiri::Pure::Errors.collecting_then_clear(error_list) do
             Nokogiri::Pure::HTMLParser.read_memory(c_buffer, c_url, c_encoding, options)
           end
 

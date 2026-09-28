@@ -59,6 +59,7 @@ module Nokogiri
         def native_write(chunk, last_chunk)
           ctxt = __ctxt
           data = chunk.nil? ? nil : chunk.to_str
+          Nokogiri::Pure::Errors.handler = nil # the C glue clears (not restores) the global handler
           status = Nokogiri::Pure::Errors.with_handler(nil) do
             ctxt.parse_chunk(data, last_chunk == true)
           end

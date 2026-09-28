@@ -8,6 +8,7 @@ module Nokogiri
     # in #_private (documents in #_ruby_doc), exactly like the C extension's DATA_PTR/_private.
 
     CLASS_FOR_TYPE = {}
+    ALLOCATE = Class.instance_method(:allocate)
 
     module_function
 
@@ -46,17 +47,20 @@ module Nokogiri
       end
 
       klass ||= CLASS_FOR_TYPE[type] || Nokogiri::XML::Node
-      rb_node = klass.allocate
+      rb_node = ALLOCATE.bind_call(klass)
       rb_node.instance_variable_set(:@__native, c_node)
       c_node._private = rb_node
-      rb_doc&.decorate(rb_node)
+      if rb_doc
+        rb_doc.instance_variable_get(:@node_cache) << rb_node
+        rb_doc.decorate(rb_node)
+      end
       rb_node
     end
 
     # noko_xml_document_wrap_with_init_args
     def wrap_document(klass, c_doc, args = [])
       klass ||= Nokogiri::XML::Document
-      rb_doc = klass.allocate
+      rb_doc = ALLOCATE.bind_call(klass)
       rb_doc.instance_variable_set(:@__native, c_doc)
       c_doc._ruby_doc = rb_doc
       rb_doc.instance_variable_set(:@node_cache, [])
@@ -76,6 +80,7 @@ module Nokogiri
       rb_ns.instance_variable_set(:@__native, c_ns)
       if c_doc && (rb_doc = c_doc._ruby_doc)
         rb_ns.instance_variable_set(:@document, rb_doc)
+        rb_doc.instance_variable_get(:@node_cache) << rb_ns
       end
       c_ns._private = rb_ns
       rb_ns
@@ -127,6 +132,62 @@ module Nokogiri
 
     def str_or_nil(s)
       s&.dup
+    end
+  end
+end
+
+module Nokogiri
+  module Pure
+    # Stand-in for a NULL DATA_PTR: every use raises like _noko_data_ptr() does.
+    class Uninitialized < BasicObject
+      def initialize(klass)
+        @klass = klass
+      end
+
+      def nil? = true
+
+      def method_missing(*)
+        ::Kernel.raise ::RuntimeError, "Uninitialized #{@klass} struct (null data pointer)"
+      end
+
+      def respond_to_missing?(*) = false
+    end
+
+    module_function
+
+    def conversion_type_name(v)
+      case v
+      when nil then "nil"
+      when true then "true"
+      when false then "false"
+      else v.class.to_s
+      end
+    end
+
+    # StringValue / StringValueCStr
+    def str(v)
+      return v if v.is_a?(String)
+
+      s = String.try_convert(v)
+      return s if s
+
+      raise TypeError, "no implicit conversion of #{conversion_type_name(v)} into String"
+    end
+
+    def str_opt(v)
+      v.nil? ? nil : str(v)
+    end
+
+    # NUM2INT / NUM2LONG
+    def int(v)
+      return v if v.is_a?(Integer)
+      raise TypeError, "no implicit conversion from nil to integer" if v.nil?
+      return Integer(v) if v.is_a?(Float)
+
+      i = Integer.try_convert(v)
+      return i if i
+
+      raise TypeError, "no implicit conversion of #{conversion_type_name(v)} into Integer"
     end
   end
 end

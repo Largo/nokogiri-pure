@@ -1009,12 +1009,19 @@ module Nokogiri
         io
       end
 
-      def write_to_io(io, bytes)
-        return if bytes.empty?
+      # noko_io_write, called the way libxml2's output buffer flushes: ~4000-byte chunks
+      # (MINLEN), the remainder, then a final empty write when the buffer is closed.
+      IO_CHUNK = 4000
 
+      def write_to_io(io, bytes)
         enc = io.respond_to?(:external_encoding) ? io.external_encoding : nil
-        str = bytes.dup.force_encoding(enc || Encoding::BINARY)
-        io.write(str)
+        enc ||= Encoding::BINARY
+        off = 0
+        while off < bytes.bytesize
+          io.write(bytes.byteslice(off, IO_CHUNK).force_encoding(enc))
+          off += IO_CHUNK
+        end
+        io.write(String.new(encoding: enc))
       end
 
       # xmlNodeDumpOutput-style helper returning a UTF-8 string (used internally, e.g. inner_xml)
