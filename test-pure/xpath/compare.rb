@@ -74,7 +74,7 @@ end
 
 load CASES
 DOCS.each do |name, xml|
-  doc = parse(xml)
+  doc = name.start_with?("html") ? Nokogiri::HTML4(xml) : parse(xml)
   EXPRS.each do |ctx_path, expr, opts|
     opts ||= {}
     begin

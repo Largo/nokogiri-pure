@@ -20,6 +20,13 @@ DOCS = {
   "d2" => <<~XML,
     <html><body><div class="a b  c" id="d1"><p class="x">P1</p><p>P2<span>S</span></p></div><div class="b"><p>P3</p><div><p class="x y">P4</p></div></div><ul><li>1</li><li>2</li><li>3</li><li>4</li></ul></body></html>
   XML
+  "html1" => <<~HTML,
+    <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+    <!-- lead comment -->
+    <html lang="de-CH"><head><title>T &amp; t</title></head>
+    <body><div id="a1" class="x y">A <b>B</b> &nbsp;&lt; C</div><p id="p1" name="n1">P1</p><a name="an">anchor</a><p lang="en">P2 <!-- c --></p>
+    <table><tr><td>1</td><td>2</td></tr><tr><td>3</td></tr></table><script>if (a < b) {}</script></body></html>
+  HTML
   "d3" => "<r xmlns:p='urn:p' xmlns:q='urn:q'>" + (1..30).map { |i| "<e n='#{i}' m='#{i % 3}'>t#{i}<f xmlns:z='urn:z#{i}'>#{i}</f><!--c#{i}--></e>" }.join + "</r>",
 }
 
@@ -91,5 +98,8 @@ EXPRS = [
   ["/", "nokogiri:nodes(//e[3]/f/namespace::*) | //e[3]", { handler: true }], ["/", "nokogiri:arr(//e[@m=2]) | //e[@m=1]", { handler: true }],
   ["/", "//e[3]/f/namespace::*[3]/self::node()"], ["/", "//e[3]/f/namespace::*/parent::*"], ["/", "//e[3]/f/namespace::*/following::*[1]"], ["/", "//e[3]/f/namespace::*/preceding::*[1]"],
   ["/", "//e[3]/f/namespace::*/ancestor-or-self::node()"], ["/", "//e[3]/f/namespace::*/descendant-or-self::node()"], ["/", "//e[3]/f/namespace::*/child::node()"],
+  ["/", "id('a1')"], ["/", "id('p1 a1 zz')"], ["/", "id(' p1')"], ["/", "id('an')"], ["/", "id(//@id)"], ["/", "count(/node())"], ["/", "/node()"], ["/", "/comment()"],
+  ["/", "//*[lang('de')]"], ["/", "//*[lang('en')]"], ["/", "string(//title)"], ["/", "//text()[contains(., '<')]"], ["/", "string-length(//div)"], ["/", "//td[. > 1]"],
+  ["/", "normalize-space(//div)"], ["/", "translate(//div, ' ', '_')"], ["/", "//script/text()"], ["/", "name(/node()[1])"], ["/", "/node()[1]/self::node()"], ["/", "//node()[not(self::*)]"],
   ["//div/@class", "self::node()"], ["//div/@class", "child::node()"], ["//div/@class", "following-sibling::node()"], ["//div/@class", "../@id"], ["//div/@class", "name()"],
 ]
