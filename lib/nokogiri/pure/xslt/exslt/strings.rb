@@ -9,13 +9,28 @@ module Nokogiri
   module Pure
     module XSLT
       module EXSLT
+        TOKEN_NAME = -"token"
+
         module_function
 
         # adds a <token> element holding +content+ (binary) to +container+ and the node-set
         def str_add_token(container, ret, content)
-          node = Tree.new_doc_raw_node(container, nil, "token", to_utf8(content))
-          Tree.add_child(container, node)
-          XPath.node_set_add_unique(ret, node)
+          # xmlNewDocRawNode(container, NULL, "token", content) + xmlAddChild(container, node),
+          # linked directly (an element appended to a document never merges with a sibling)
+          node = XmlNode.new(ELEMENT_NODE, TOKEN_NAME, container)
+          text = XmlNode.new(TEXT_NODE, STRING_TEXT, container)
+          text.content = to_utf8(content)
+          text.parent = node
+          node.children = node.last = text
+          node.parent = container
+          if (prev = container.last)
+            prev.next = node
+            node.prev = prev
+          else
+            container.children = node
+          end
+          container.last = node
+          ret << node
         end
 
         # the tokens (binary strings) of str:tokenize(s, d); s and d are binary C strings
@@ -474,6 +489,50 @@ module Nokogiri
           0
         end
 
+        # the replace loop of exsltStrReplaceFunction (binary strings in and out)
+        def str_replace_bytes(string, search, replace, slen, rlen, n, i_empty, fast: true)
+          if fast && n == 1 && slen[0] > 0 && i_empty < 0 &&
+              string.dup.force_encoding(::Encoding::UTF_8).valid_encoding? &&
+              search[0].dup.force_encoding(::Encoding::UTF_8).valid_encoding?
+            # fast path: matches of a well-formed search string start on character boundaries
+            rep = rlen[0] > 0 ? replace[0] : "".b
+            return string.gsub(search[0]) { rep }
+          end
+
+          buf = +"".b
+          src = 0
+          start = 0
+          len = string.bytesize
+          while src < len
+            max_len = 0
+            i_match = 0
+            c = string.getbyte(src)
+            n.times do |i|
+              si = search[i]
+              if slen[i] > max_len && c == si.getbyte(0) && strncmp(string, src, si, 0, slen[i]) == 0
+                i_match = i
+                max_len = slen[i]
+              end
+            end
+
+            if max_len == 0
+              if i_empty >= 0 && start < src
+                buf << string.byteslice(start, src - start) << replace[i_empty]
+                start = src
+              end
+              src += utf8_strsize(string, src, 1)
+            else
+              buf << string.byteslice(start, src - start) if start < src
+              buf << replace[i_match] if rlen[i_match] > 0
+              src += slen[i_match]
+              start = src
+            end
+          end
+
+          buf << string.byteslice(start, src - start) if start < src
+          buf
+        end
+
         # exsltStrReplaceFunction
         def str_replace_function(ctxt, nargs)
           if nargs != 3
@@ -538,37 +597,7 @@ module Nokogiri
           i_empty = -1 if i_empty >= 0 && rlen[i_empty] == 0
 
           # replace operation
-          buf = +"".b
-          src = 0
-          start = 0
-          len = string.bytesize
-          while src < len
-            max_len = 0
-            i_match = 0
-            c = string.getbyte(src)
-            n.times do |i|
-              si = search[i]
-              if slen[i] > max_len && c == si.getbyte(0) && strncmp(string, src, si, 0, slen[i]) == 0
-                i_match = i
-                max_len = slen[i]
-              end
-            end
-
-            if max_len == 0
-              if i_empty >= 0 && start < src
-                buf << string.byteslice(start, src - start) << replace[i_empty]
-                start = src
-              end
-              src += utf8_strsize(string, src, 1)
-            else
-              buf << string.byteslice(start, src - start) if start < src
-              buf << replace[i_match] if rlen[i_match] > 0
-              src += slen[i_match]
-              start = src
-            end
-          end
-
-          buf << string.byteslice(start, src - start) if start < src
+          buf = str_replace_bytes(string, search, replace, slen, rlen, n, i_empty)
 
           # create result node set
           str_return_string(ctxt, buf)

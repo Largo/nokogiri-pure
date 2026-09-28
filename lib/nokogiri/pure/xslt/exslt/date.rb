@@ -286,6 +286,19 @@ module Nokogiri
           [0, cur]
         end
 
+        # RETURN_TYPE_IF_VALID: [status, cur] where status is :ok (dt->type set), :error, or nil
+        # to go on
+        def date_return_type_if_valid(dt, s, cur, type)
+          return [nil, cur] unless tzo_char?(byte_at(s, cur))
+
+          ret, ncur = date_parse_time_zone(dt, s, cur)
+          return [nil, cur] if ret != 0
+          return [:error, ncur] if byte_at(s, ncur) != 0
+
+          dt.type = type
+          [:ok, ncur]
+        end
+
         # exsltDateParse: a DateVal, or nil
         def date_parse(date_time)
           return nil if date_time.nil?
@@ -293,20 +306,6 @@ module Nokogiri
           s = date_time.b
           cur = 0
           dt = DateVal.new(EXSLT_UNKNOWN)
-
-          # RETURN_TYPE_IF_VALID: :ok (dt->type set), :error, or nil to go on
-          return_type_if_valid = lambda do |t|
-            next nil unless tzo_char?(byte_at(s, cur))
-
-            ret, ncur = date_parse_time_zone(dt, s, cur)
-            next nil if ret != 0
-
-            cur = ncur
-            next :error if byte_at(s, cur) != 0
-
-            dt.type = t
-            :ok
-          end
 
           if byte_at(s, 0) == 0x2D && byte_at(s, 1) == 0x2D
             # It's an incomplete date (xs:gMonthDay, xs:gMonth or xs:gDay)
@@ -318,7 +317,7 @@ module Nokogiri
               ret, cur = date_parse_gday(dt, s, cur)
               return nil if ret != 0
 
-              return return_type_if_valid.call(XS_GDAY) == :ok ? dt : nil
+              return date_return_type_if_valid(dt, s, cur, XS_GDAY)[0] == :ok ? dt : nil
             end
 
             # it should be an xs:gMonthDay or xs:gMonth
@@ -331,14 +330,14 @@ module Nokogiri
             # is it an xs:gMonth?
             if byte_at(s, cur) == 0x2D
               cur += 1
-              return return_type_if_valid.call(XS_GMONTH) == :ok ? dt : nil
+              return date_return_type_if_valid(dt, s, cur, XS_GMONTH)[0] == :ok ? dt : nil
             end
 
             # it should be an xs:gMonthDay
             ret, cur = date_parse_gday(dt, s, cur)
             return nil if ret != 0
 
-            return return_type_if_valid.call(XS_GMONTHDAY) == :ok ? dt : nil
+            return date_return_type_if_valid(dt, s, cur, XS_GMONTHDAY)[0] == :ok ? dt : nil
           end
 
           # It's a right-truncated date or an xs:time.
@@ -348,7 +347,7 @@ module Nokogiri
             if ret == 0
               cur = ncur
               # it's an xs:time
-              r = return_type_if_valid.call(XS_TIME)
+              r, cur = date_return_type_if_valid(dt, s, cur, XS_TIME)
               return dt if r == :ok
               return nil if r == :error
             end
@@ -361,7 +360,7 @@ module Nokogiri
           return nil if ret != 0
 
           # is it an xs:gYear?
-          r = return_type_if_valid.call(XS_GYEAR)
+          r, cur = date_return_type_if_valid(dt, s, cur, XS_GYEAR)
           return dt if r == :ok
           return nil if r == :error
           return nil if byte_at(s, cur) != 0x2D
@@ -372,7 +371,7 @@ module Nokogiri
           return nil if ret != 0
 
           # is it an xs:gYearMonth?
-          r = return_type_if_valid.call(XS_GYEARMONTH)
+          r, cur = date_return_type_if_valid(dt, s, cur, XS_GYEARMONTH)
           return dt if r == :ok
           return nil if r == :error
           return nil if byte_at(s, cur) != 0x2D
@@ -383,7 +382,7 @@ module Nokogiri
           return nil if ret != 0 || !valid_date?(dt)
 
           # is it an xs:date?
-          r = return_type_if_valid.call(XS_DATE)
+          r, cur = date_return_type_if_valid(dt, s, cur, XS_DATE)
           return dt if r == :ok
           return nil if r == :error
           return nil if byte_at(s, cur) != 0x54 # 'T'
