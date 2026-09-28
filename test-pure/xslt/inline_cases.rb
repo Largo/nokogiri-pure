@@ -399,7 +399,7 @@ module XSLTInlineCases
     ["unicode", <<~X, "<d>日本語 é 𝄞</d>"],
       <xsl:template match="/"><r a="{d}"><xsl:value-of select="substring(d, 1, 2)"/>|<xsl:value-of select="string-length(d)"/>|<xsl:value-of select="translate(d, '日', 'X')"/></r></xsl:template>
     X
-    ["sort-lang-words", <<~X, "<w>" + %w[apple Apple APPLE apples app-le app_le a-b ab aB Ab AB a.b ábc abc Ábc 10 9 100 1a a1 _x x_ -x .x x. éclair Eclair École ecole côte cote coté côté straße strasse ß ss ü u ue Ü foo2 foo10 foo-bar foobar ñ n ö o oe œ æ ae Æ ø ¡hola hola ~tilde @at $d % ! 한국 中文 ω Ω].map { |w| "<i>\#{w.encode(xml: :text)}</i>" }.join + "<i>a b</i><i> ab</i><i>abc\u0301</i></w>"],
+    ["sort-lang-words", <<~X, "<w>" + %w[apple Apple APPLE apples app-le app_le a-b ab aB Ab AB a.b ábc abc Ábc 10 9 100 1a a1 _x x_ -x .x x. éclair Eclair École ecole côte cote coté côté straße strasse ß ss ü u ue Ü foo2 foo10 foo-bar foobar ñ n ö o oe œ æ ae Æ ø ¡hola hola ~tilde @at $d % ! 한국 中文 ω Ω].map { |w| "<i>#{w.encode(xml: :text)}</i>" }.join + "<i>a b</i><i> ab</i><i>abc\u0301</i></w>"],
       <xsl:output method="text"/>
       <xsl:template match="/"><xsl:for-each select="//i"><xsl:sort select="." lang="en-US"/><xsl:value-of select="."/>|</xsl:for-each>
       <xsl:for-each select="//i"><xsl:sort select="." lang="en" order="descending"/><xsl:value-of select="."/>|</xsl:for-each>
