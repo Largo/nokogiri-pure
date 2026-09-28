@@ -526,13 +526,63 @@ module Nokogiri
             @depth + args.length + 1 < XPATH_MAX_RECURSION_DEPTH
         end
 
+        # The result of a call of a string predicate (STD_STRING_PREDICATES / STRING_PREDICATES)
+        # with Op#pred_args, the way the function would compute it, or nil when the generic call
+        # has to run. +depth+ is the recursion depth inside the function op (the ARG chain walk
+        # that is skipped goes 3 levels deeper). For a registered (non-standard) function the
+        # lookup must have been cached already; of its call bookkeeping only the resets of
+        # @sorted & co. last.
+        def direct_pred(op, depth)
+          n = @context.node
+          return nil unless n && n.type != NAMESPACE_DECL && depth + 3 < XPATH_MAX_RECURSION_DEPTH
+
+          pa = op.pred_args
+          if (pr = op.std_pred)
+            res = pr.call(pred_hay(pa[0]), pa[1][1].value4)
+            check_error!
+            return res
+          end
+          return nil if op.std_meth
+          return nil unless (cache = @func_cache) && (entry = cache[op]) && (pr = STRING_PREDICATES[entry[0]])
+
+          check_error!
+          hay = pred_hay(pa[0])
+          @sorted = nil
+          @ns_free = nil
+          @sib_memo = nil
+          pr.call(hay, pa[1][1].value4)
+        end
+
         # the string value of the first argument ([kind, op] of Op#pred_args) as the string
-        # predicates see it: evaluated like #push_fast_args, then cast like CAST_TO_STRING
+        # predicates see it: evaluated like #push_fast_args, then cast like CAST_TO_STRING (the
+        # string isn't copied: the predicates only read it)
         def pred_hay(arg)
           kind, x = arg
           ctx = @context
           n = ctx.node
-          return node_to_string(n) if kind == :node
+          return simple_string_value(n) || node_to_string(n) if kind == :node
+
+          if x.attr_step && n.type == ELEMENT_NODE
+            # @name: the attribute_attr_name traversal, stopping at a second hit (which the
+            # general route below sorts)
+            name = x.value5
+            first = nil
+            a = n.properties
+            while a
+              if a.type == ATTRIBUTE_NODE && a.name == name && ((ns = a.ns).nil? || ns.prefix.nil?)
+                break if first
+
+                first = a
+              end
+              a = a.next
+            end
+            if a.nil?
+              @sorted = nil # (the discarded step result)
+              return "" if first.nil?
+
+              return simple_string_value(first) || node_to_string(first)
+            end
+          end
 
           seq = []
           plan = x.plan
@@ -542,7 +592,7 @@ module Nokogiri
           return +"" if seq.empty?
 
           XPath.node_set_sort(seq) if seq.length > 1
-          node_to_string(seq[0])
+          simple_string_value(seq[0]) || node_to_string(seq[0])
         end
 
         # push the values of the arguments +args+ (Op#fast_args), exactly as evaluating the
@@ -613,10 +663,8 @@ module Nokogiri
               check_error!
               return
             end
-            if (pr = op.std_pred) && fast_args_ok?(op.pred_args)
-              # contains(step, 'literal') & co.: the result, without the value stack traffic
-              @value_tab.push(pr.call(pred_hay(op.pred_args[0]), op.pred_args[1][1].value4))
-              check_error!
+            if op.std_pred && !(res = direct_pred(op, @depth)).nil?
+              @value_tab.push(res)
               return
             end
             frame = @value_tab.length
@@ -634,17 +682,8 @@ module Nokogiri
           end
 
           ctx = @context
-          if (pa = op.pred_args) && (cache = @func_cache) && (entry = cache[op]) &&
-              (pr = STRING_PREDICATES[entry[0]]) && fast_args_ok?(pa)
-            # a registered string predicate (nokogiri-builtin:css-class) of a context step and a
-            # literal, once resolved: its result, without the value stack traffic and the call
-            # bookkeeping (whose only lasting effect is on the fields reset here)
-            check_error!
-            hay = pred_hay(pa[0])
-            @sorted = nil
-            @ns_free = nil
-            @sib_memo = nil
-            @value_tab.push(pr.call(hay, pa[1][1].value4))
+          if op.pred_args && !(res = direct_pred(op, @depth)).nil?
+            @value_tab.push(res)
             return
           end
           frame = @value_tab.length
@@ -874,6 +913,13 @@ module Nokogiri
 
               comp_op_eval(op.c1)
               node_collect_and_test(op, nil, nil, true)
+              res = @value_tab.pop
+            when 13 # OP_FUNCTION
+              if op.pred_args && @depth < XPATH_MAX_RECURSION_DEPTH && !(res = direct_pred(op, @depth + 1)).nil?
+                return res
+              end
+
+              comp_op_eval(op)
               res = @value_tab.pop
             when 3 # OP_EQUAL
               if (step = op.eq_step) && (n = @context.node) && n.type != NAMESPACE_DECL &&

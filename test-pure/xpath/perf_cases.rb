@@ -117,3 +117,7 @@ end
   //namespace::*[contains(.,'urn')] //*[contains(.,'é')] //*[starts-with(normalize-space(.),'t')]
 ].each { |e| EXPRS << ["/", e, { ns: { "p" => "urn:p" } }] }
 EXPRS << ["/", "//*[contains(@p:k,'1')]"]
+%w[
+  //*[substring-before(.,'1')] //*[substring-after(@n,'1')] //*[concat(.,'x')] //*[string(@n)]
+  //*[boolean(contains(@class,'r'))] //*[not(starts-with(@n,'1'))] //*[contains(@n,'1') and nokogiri-builtin:css-class(@class,'x')]
+].each { |e| EXPRS << ["/", e] }
