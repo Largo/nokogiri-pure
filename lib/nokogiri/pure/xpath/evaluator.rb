@@ -237,7 +237,7 @@ module Nokogiri
         def node_to_number(node)
           return NAN if node.nil?
 
-          XPath.string_eval_number(node_to_string(node))
+          XPath.string_eval_number(simple_string_value(node) || node_to_string(node))
         end
 
         # ---- parser-context API (xmlXPathNewParserContext users such as XPointer) ------------
@@ -1928,7 +1928,7 @@ module Nokogiri
         # ---- comparisons / arithmetic -----------------------------------------------------
 
         # the string-value of +node+ when it is trivially consistent with xmlXPathNodeValHash
-        # (single text child / text-like node), else nil
+        # (single text child / text-like node), else nil. (Not a copy: for readers only.)
         def simple_string_value(node)
           case node.type
           when 2, 1 # ATTRIBUTE_NODE, ELEMENT_NODE
@@ -1973,7 +1973,7 @@ module Nokogiri
         def equal_node_set_float(arg, f, neq)
           ret = false
           arg.each do |node|
-            v = XPath.string_eval_number(node_to_string(node))
+            v = XPath.string_eval_number(simple_string_value(node) || node_to_string(node))
             if !v.nan?
               if !neq && v == f
                 return true
@@ -2167,7 +2167,7 @@ module Nokogiri
           when Float
             # xmlXPathCompareNodeSetFloat
             arg.each do |node|
-              v = XPath.string_eval_number(node_to_string(node))
+              v = XPath.string_eval_number(simple_string_value(node) || node_to_string(node))
               return true if compare_numbers(inf, strict, v, val)
             end
             false
@@ -2177,7 +2177,7 @@ module Nokogiri
             # xmlXPathCompareNodeSetString
             f = XPath.string_eval_number(val)
             arg.each do |node|
-              v = XPath.string_eval_number(node_to_string(node))
+              v = XPath.string_eval_number(simple_string_value(node) || node_to_string(node))
               return true if compare_numbers(inf, strict, v, f)
             end
             false

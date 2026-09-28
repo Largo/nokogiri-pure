@@ -506,14 +506,13 @@ module Nokogiri
         return NAN if c != 0x2E && (c.nil? || c < 0x30 || c > 0x39)
 
         ret = 0.0
-        ok = false
+        start = cur
         while c && c >= 0x30 && c <= 0x39
-          ret *= 10
-          ok = true
-          ret += (c - 0x30).to_f
+          ret = ret * 10 + (c - 0x30) # (the same double operations as *= 10, += digit.to_f)
           cur += 1
           c = str.getbyte(cur)
         end
+        ok = cur > start
         if c == 0x2E
           cur += 1
           c = str.getbyte(cur)

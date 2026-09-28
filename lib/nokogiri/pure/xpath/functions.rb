@@ -547,7 +547,7 @@ module Nokogiri
             if node.nil?
               @value_tab.push(0.0)
             else
-              @value_tab.push(XPath.string_eval_number(node_to_string(node)))
+              @value_tab.push(XPath.string_eval_number(simple_string_value(node) || node_to_string(node)))
             end
             return
           end
@@ -563,7 +563,11 @@ module Nokogiri
           xp_error(INVALID_TYPE) unless @value_tab.last.is_a?(Array)
           cur = @value_tab.pop
           res = 0.0
-          cur.each { |node| res += node_to_number(node) }
+          i = 0
+          while i < cur.length
+            res += node_to_number(cur[i])
+            i += 1
+          end
           @value_tab.push(res)
         end
 
