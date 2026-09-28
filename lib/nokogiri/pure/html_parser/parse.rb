@@ -1383,9 +1383,16 @@ module Nokogiri
           # fast path: "</name>" closing the current element, far enough from the end of the
           # buffer that no NEXT can grow the input
           ss = scanner
-          ss.pos = @cur
-          if (len = ss.skip(END_TAG_FAST)) && @buf.bytesize - @cur - len >= INPUT_CHUNK
-            name = cached_name(ss[1])
+          ss.pos = @cur + 2
+          if (name = @name) && (len = ss.skip(name)) && @buf.getbyte(@cur + 2 + len) == 0x3E
+            # "</" + the current element's name (as spelled in @name, i.e. lowercase) + ">": what
+            # END_TAG_FAST would match, without building the name
+            len += 3
+          else
+            ss.pos = @cur
+            name = (len = ss.skip(END_TAG_FAST)) && cached_name(ss[1])
+          end
+          if len && @buf.bytesize - @cur - len >= INPUT_CHUNK
             if name == @name && (@depth <= 0 || (name != "html" && name != "body" && name != "head"))
               @cur += len
               @col += len
