@@ -77,7 +77,8 @@ module Nokogiri
       class Op
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
-          :dos_op, :impure, :std_fn, :fused, :sorted_axis
+          :dos_op, :impure, :std_fn, :fused, :sorted_axis,
+          :eq_step, :eq_value
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -115,6 +116,7 @@ module Nokogiri
           end
           @steps.each { |op| XPath.precompute_op(self, op) }
           @steps.each { |op| XPath.precompute_dos_rewrite(op) if op.op == OP_COLLECT }
+          @steps.each { |op| XPath.precompute_equal(op) if op.op == OP_EQUAL }
           @root = @last >= 0 ? @steps[@last] : nil
           self
         end
@@ -158,6 +160,21 @@ module Nokogiri
               end
             end
           end
+        end
+      end
+
+      # "step = literal" / "literal = step" where the step is a fused context-node step
+      def self.precompute_equal(op)
+        c1 = op.c1
+        c2 = op.c2
+        return if c1.nil? || c2.nil?
+
+        if c1.op == OP_COLLECT && c1.fused && c2.op == OP_VALUE
+          op.eq_step = c1
+          op.eq_value = c2.value4
+        elsif c2.op == OP_COLLECT && c2.fused && c1.op == OP_VALUE
+          op.eq_step = c2
+          op.eq_value = c1.value4
         end
       end
 

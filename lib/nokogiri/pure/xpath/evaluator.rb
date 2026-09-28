@@ -402,6 +402,18 @@ module Nokogiri
               @value_tab[-1] = (@value_tab.last || arg2) unless @value_tab.empty?
             end
           when 3 # OP_EQUAL
+            if (step = op.eq_step) && (n = ctx.node) && n.type != NAMESPACE_DECL
+              # the node-set of the step compared with a literal (xmlXPathEqualNodeSetString /
+              # xmlXPathEqualNodeSetFloat), without the intermediate value-stack traffic
+              seq = []
+              plan = step.plan
+              FastCollect.__send__(plan[0], n, ctx.doc, step.value5, step.value4 ? op_uri(step) : nil, seq, plan[1])
+              neq = op.value == 0
+              v = op.eq_value
+              @value_tab.push(v.is_a?(String) ? equal_node_set_string(seq, v, neq) : equal_node_set_float(seq, v, neq))
+              @depth -= 1
+              return
+            end
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             equal = op.value != 0 ? equal_values : not_equal_values
@@ -707,6 +719,11 @@ module Nokogiri
             when 10 # OP_COLLECT
               return false if op.c1.nil?
 
+              if op.fused && (n = @context.node) && n.type != NAMESPACE_DECL
+                plan = op.plan
+                return FastCollect.exists?(plan[0], n, @context.doc, op.value5, op.value4 ? op_uri(op) : nil, plan[1])
+              end
+
               comp_op_eval(op.c1)
               node_collect_and_test(op, nil, nil, true)
               res = @value_tab.pop
@@ -714,7 +731,8 @@ module Nokogiri
               comp_op_eval(op)
               res = @value_tab.pop
             end
-            return res if res == true || res == false
+            return !res.empty? if res.is_a?(Array)
+            return res if res.equal?(true) || res.equal?(false)
             return is_predicate ? evaluate_predicate_result(res) : XPath.cast_to_boolean(res)
           end
         end

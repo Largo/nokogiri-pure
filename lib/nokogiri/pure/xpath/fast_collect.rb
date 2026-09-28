@@ -217,6 +217,22 @@ module Nokogiri
           AXIS_PRECEDING_SIBLING => ["preceding_sibling", nil],
         }.freeze
 
+        # a stand-in for the result sequence that stops the traversal at the first hit
+        class FoundSink
+          def <<(_node)
+            throw :xpath_found, true
+          end
+        end
+        FOUND = FoundSink.new
+
+        # does the traversal +sym+ produce any node? (the toBool/breakOnFirstHit mode)
+        def self.exists?(sym, ctxnode, doc, name, uri, arg)
+          catch(:xpath_found) do
+            __send__(sym, ctxnode, doc, name, uri, FOUND, arg)
+            false
+          end
+        end
+
         # [method, extra_arg] for a COLLECT op, or nil
         def self.plan_for(axis, test, type, prefix, name)
           kind = AXIS_KINDS[axis]
