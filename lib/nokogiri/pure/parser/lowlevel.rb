@@ -195,29 +195,29 @@ module Nokogiri
 
         # xmlSkipBlankChars
         def skip_blanks
-          @ss.pos = @cur
-          n = @ss.skip(BLANKS_RE)
+          ss = @ss
+          ss.pos = @cur
+          n = ss.skip(BLANKS_RE)
           return 0 if n.nil?
 
-          s = @cur
-          e = s + n
-          nl = 0
-          last_nl = nil
-          i = s
-          while i < e
-            if @buf.getbyte(i) == 0x0A
-              nl += 1
-              last_nl = i
+          # every "\n" starts a line; col = 1 + the bytes after the last one
+          if n == 1
+            if @buf.getbyte(@cur) == 0x0A
+              @line += 1
+              @col = 1
+            else
+              @col += 1
             end
-            i += 1
-          end
-          if nl > 0
-            @line += nl
-            @col = 1 + (e - last_nl - 1)
           else
-            @col += n
+            seg = @buf.byteslice(@cur, n)
+            if (nl = seg.byterindex("\n"))
+              @line += seg.count("\n")
+              @col = n - nl
+            else
+              @col += n
+            end
           end
-          @cur = e
+          @cur += n
           n
         end
 
