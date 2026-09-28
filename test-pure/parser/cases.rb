@@ -311,6 +311,13 @@ module ParserCases
         add.("bigfuzz_push", src, DEFAULT, nil, nil, [:push, 1 + frng.rand(40)]) if n % 4 == 1
       end
     end
+    [["<a>caf\xe9</a>".b, "ISO-8859-1"], ["<?xml version='1.0' encoding='UTF-8'?><a>caf\xe9</a>".b, "ISO-8859-1"],
+      ["<a>x</a>".encode("UTF-16LE").b, "UTF-16LE"], ["<a>\xe9</a>".b, "UTF-8"], ["<a>\x82\xa0</a>".b, "Shift_JIS"],
+      ["\xEF\xBB\xBF<a>x</a>".b, "ISO-8859-1"]].each do |src, enc|
+      add.("sax_enc", src, RECOVER, enc, nil, :sax)
+      add.("sax_enc_io", src, RECOVER, enc, nil, :sax_io)
+      add.("sax_enc_push", src, RECOVER, enc, nil, [:push, 2])
+    end
     add.("enc", "<a>\xe9</a>".b, DEFAULT, "ISO-8859-1")
     add.("enc", "<a>x</a>", DEFAULT, "bogus")
     add.("enc", "<?xml version='1.0' encoding='UTF-8'?><a>\xe9</a>".b, DEFAULT, "ISO-8859-1")

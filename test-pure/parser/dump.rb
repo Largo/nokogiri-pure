@@ -91,9 +91,9 @@ module ParserDump
     res
   end
 
-  def run_push(input, opts, chunk)
+  def run_push(input, opts, chunk, encoding = nil)
     rec = Recorder.new
-    parser = Nokogiri::XML::SAX::PushParser.new(rec)
+    parser = Nokogiri::XML::SAX::PushParser.new(rec, nil, encoding || "UTF-8")
     parser.options = opts
     res = { raised: [] }
     input.b.bytes.each_slice(chunk).with_index do |sl, i|
@@ -143,7 +143,7 @@ module ParserDump
     when :validate then run_validate(input, opts)
     when Array
       case mode[0]
-      when :push then run_push(input, opts, mode[1])
+      when :push then run_push(input, opts, mode[1], encoding)
       when :fragment then run_fragment(input, opts, mode[1])
       end
     end
