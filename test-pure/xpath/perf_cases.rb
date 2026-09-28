@@ -144,3 +144,8 @@ EXPRS << ["/", "position() = 1"] << ["/", "last() - position()"] << ["/", "count
   //@*/node() //@*/text()[1] //node()/processing-instruction()[1] //*/*[0] //*/*[-1] //*/node()[1] (/|/*)/node()
   //*/p:* //*/@p:* //*/@p:*[1] //*/p:*[1] //node()/node() //node()/* //*/@n //*/@* /node()/node()/node()[2]
 ].each { |e| EXPRS << ["/", e, { ns: { "p" => "urn:p" } }] }
+# comparisons of a context step with a literal
+%w[
+  //*[@n>35] //*[@n<=2] //*[3>@n] //*[@n>='39'] //*['2'<@n] //*[td>2.3] //*[text()<5] //*[@missing>1] //*[f>=10]
+  //*[@*>1] //*[@n>1\ div\ 0] //*[@n<-1\ div\ 0] //*[@n>0\ div\ 0] //*[.>3] //*[node()<'x'] //*[@n>=@n]
+].each { |e| EXPRS << ["/", e.gsub("\\ ", " ")] }
