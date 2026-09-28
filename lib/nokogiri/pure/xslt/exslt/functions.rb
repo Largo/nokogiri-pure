@@ -233,6 +233,24 @@ module Nokogiri
               return
             end
             ctxt.value_push(ret)
+          rescue SystemStackError
+            # The Ruby stack runs out long before libxslt's limits would be reached. Report the
+            # limit native libxslt would hit first, extrapolating from the current depths: the
+            # template depth (xsltMaxDepth, checked above) or the XPath recursion depth.
+            xdepth = ctxt.context.depth.to_f / XPath::XPATH_MAX_RECURSION_DEPTH
+            if xdepth > tctxt.depth.to_f / tctxt.max_template_depth
+              ctxt.xp_error(XPath::RECURSION_LIMIT_EXCEEDED) unless tctxt.stack_overflow_reported
+              tctxt.stack_overflow_reported = true
+              throw :xpath_abort
+            end
+            unless tctxt.stack_overflow_reported
+              XSLT.transform_error(tctxt, nil, nil,
+                "exsltFuncFunctionFunction: Potentially infinite recursion detected in " \
+                "function {#{function_uri}}#{function}.\n")
+              tctxt.stack_overflow_reported = true
+            end
+            tctxt.state = XSLT::STATE_STOPPED
+            nil
           ensure
             tctxt.depth -= 1
           end
