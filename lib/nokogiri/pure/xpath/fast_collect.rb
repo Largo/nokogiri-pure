@@ -587,7 +587,8 @@ module Nokogiri
         # +sym+, through a case on the name: __send__ with names varying at one call site makes
         # YJIT give up on the call (and run the traversal in the interpreter), and Method#call
         # costs more in the interpreter.
-        traversals = singleton_methods.grep(/\A(?:descendant|child|child_elem|attribute|following_sibling|preceding_sibling|self|parent|ancestor)_(?!or_self_|walk_)/).sort
+        axes = "descendant|child|child_elem|attribute|following_sibling|preceding_sibling|self|parent|ancestor"
+        traversals = singleton_methods.grep(/\A(?:#{axes})_(?!or_self_|walk_)/).sort
         counters = singleton_methods.grep(/\Acount_/).sort
         multis = singleton_methods.grep(/\Amulti_(?!range_|run)/).sort
         multi_ranges = singleton_methods.grep(/\Amulti_range_(?!run)/).sort

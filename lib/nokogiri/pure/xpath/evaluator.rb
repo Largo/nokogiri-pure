@@ -3,13 +3,6 @@
 module Nokogiri
   module Pure
     module XPath
-      # xmlXPathParserContext: the value stack and the evaluator (xmlXPathCompOpEval & friends).
-      #
-      # Errors: #xp_error (the XP_ERROR macro) reports the error and aborts the evaluation by
-      # raising XPath::Abort (#abort!), which the entry points (XPath.eval, XPath.compiled_eval,
-      # ...) rescue.
-      # #xpath_err (xmlXPathErr) only reports and records it; the evaluator aborts as soon as it
-      # notices ctxt.error != 0 after calling a function.
       # The unwinding of XP_ERROR & co. to the evaluation entry points. raise/rescue rather than
       # catch/throw: Kernel#catch runs its block from C, a native stack frame per nested
       # evaluation, which ruby.wasm's small native stack can't afford. (An Exception rather than a
@@ -18,6 +11,13 @@ module Nokogiri
       end
       NO_BACKTRACE = [].freeze
 
+      # xmlXPathParserContext: the value stack and the evaluator (xmlXPathCompOpEval & friends).
+      #
+      # Errors: #xp_error (the XP_ERROR macro) reports the error and aborts the evaluation by
+      # raising XPath::Abort (#abort!), which the entry points (XPath.eval, XPath.compiled_eval,
+      # ...) rescue.
+      # #xpath_err (xmlXPathErr) only reports and records it; the evaluator aborts as soon as it
+      # notices ctxt.error != 0 after calling a function.
       class ParserContext
         attr_accessor :error, :context, :comp, :value_tab, :ancestor, :xptr, :base, :cur_offset
         # the live recursion depth (ctxt->context->depth while evaluating)
@@ -638,9 +638,9 @@ module Nokogiri
         end
 
         # The value of a numeric expression made of number literals, position(), last(),
-        # count(sibling-axis::test), arithmetic and parentheses (see XPath.num_height), computed the way
-        # comp_op_eval would (same operand order, casts that are no-ops on numbers). The caller
-        # checks the recursion depth and that the context node isn't a namespace node.
+        # count(sibling-axis::test), arithmetic and parentheses (see XPath.num_height), computed
+        # the way comp_op_eval would (same operand order, casts that are no-ops on numbers). The
+        # caller checks the recursion depth and that the context node isn't a namespace node.
         def num_eval(op)
           case op.op
           when 11 # OP_VALUE
