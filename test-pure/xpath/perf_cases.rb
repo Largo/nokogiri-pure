@@ -125,3 +125,16 @@ EXPRS << ["/", "//*[contains(@p:k,'1')]"]
   //*[@n='3'] //*[@n!='3'] //*[@class='r1\ x'] //*[@n=3] //*[@missing='x'] //*[@missing!='x'] //*[@p:k='1'] //*[@k='2'] //*[@rel]
   //*[@p:k] //*[@*] //@*[@n] //text()[@n] //*[not(@n)] //*[@n='3']/@n //*[@id='d2'] //*[@class='c1']
 ].each { |e| EXPRS << ["/", e.gsub("\\ ", " "), { ns: { "p" => "urn:p" } }] }
+# numeric comparisons (CSS :nth-child & co.)
+%w[
+  //*[position()<3] //*[position()>=last()-1] //*[last()=1] //*[position()=last()] //*[1<position()]
+  //*[position()!=2] //*[-position()<-2] //*[position()*2=4] //*[position()div\ 2=1] //*[position()mod\ 2=0]
+  //*[(position()+1)mod\ 3=0] //*[position()=0\ div\ 0] //*[position()!=0\ div\ 0] //*[position()<1\ div\ 0]
+  //*[position()>-1\ div\ 0] //*[position()\ mod\ 0=1] //*[count(preceding-sibling::*)+1=position()]
+  //*[((count(preceding-sibling::*)+1)mod\ 3)=0] //*[((count(following-sibling::*)+1)>=1)\ and\ ((((count(following-sibling::*)+1)-1)mod\ 2)=0)]
+  //*[count(preceding-sibling::*)=count(following-sibling::*)] //*[(count(preceding-sibling::*))=(1)] //*[+count(preceding-sibling::*)=1]
+  //*[boolean(position()=2)] //*[(position()=2)=true()] //*[not(count(preceding-sibling::*)<2)]
+  //namespace::*[position()=1] //namespace::*[count(preceding-sibling::*)=0] //@*[count(preceding-sibling::*)=0]
+  count(//*[position()=last()]) //*[position()=1.5] //*[position()>=1.0] //*[-(-position())=2]
+].each { |e| EXPRS << ["/", e.gsub("\\ ", " ")] }
+EXPRS << ["/", "position() = 1"] << ["/", "last() - position()"] << ["/", "count(preceding-sibling::*) = 0"]

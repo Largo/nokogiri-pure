@@ -78,7 +78,7 @@ module Nokogiri
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
           :dos_op, :impure, :std_fn, :fused, :sorted_axis,
-          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step
+          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step, :num_cmp
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -123,6 +123,7 @@ module Nokogiri
             XPath.precompute_count(op)
             XPath.precompute_args(op)
           end
+          @steps.each { |op| XPath.precompute_num_cmp(op) if op.op == OP_EQUAL || op.op == OP_CMP }
           @root = @last >= 0 ? @steps[@last] : nil
           self
         end
@@ -251,6 +252,52 @@ module Nokogiri
         if kinds.length == 2 && kinds[0][0] != :value && kinds[1][0] == :value && kinds[1][1].value4.is_a?(String)
           op.pred_args = kinds
           op.std_pred = STD_STRING_PREDICATES[op.std_fn] if op.std_fn
+        end
+      end
+
+      # Comparisons of two numeric expressions made of number literals, position(), last(),
+      # count(sibling-axis::test), arithmetic and parentheses (CSS :nth-child & co.): ParserContext#num_eval
+      # computes them without the value stack. num_cmp is the recursion depth, relative to the
+      # comparison, down to which the generic evaluation would check the limit.
+      def self.precompute_num_cmp(op)
+        return if op.c1.nil? || op.c2.nil?
+
+        h1 = num_height(op.c1, 1)
+        h2 = h1 && num_height(op.c2, 1)
+        op.num_cmp = [h1, h2].max if h2
+      end
+
+      # the deepest level (from +level+) the generic evaluation of the numeric expression +op+
+      # reaches, or nil when #num_eval doesn't handle it
+      def self.num_height(op, level)
+        case op.op
+        when OP_VALUE
+          level if op.value4.is_a?(Float)
+        when OP_FUNCTION
+          if op.count_step
+            level + 2 # (its ARG and COLLECT)
+          elsif (op.std_fn == :fn_position || op.std_fn == :fn_last) && op.value == 0 && op.c1.nil?
+            level
+          end
+        when OP_PLUS
+          h1 = op.c1 && num_height(op.c1, level + 1)
+          return nil if h1.nil?
+
+          if op.value == 0 || op.value == 1
+            h2 = op.c2 && num_height(op.c2, level + 1)
+            h2 && [h1, h2].max
+          elsif op.c2.nil? && (op.value == 2 || op.value == 3)
+            h1
+          end
+        when OP_SORT
+          # (a parenthesized expression: sorting leaves a number alone)
+          op.c1 && num_height(op.c1, level + 1)
+        when OP_MULT
+          return nil unless op.value >= 0 && op.value <= 2
+
+          h1 = op.c1 && num_height(op.c1, level + 1)
+          h2 = h1 && op.c2 && num_height(op.c2, level + 1)
+          h2 && [h1, h2].max
         end
       end
 

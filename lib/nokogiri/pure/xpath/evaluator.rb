@@ -441,11 +441,25 @@ module Nokogiri
               @depth -= 1
               return
             end
+            if (h = op.num_cmp) && @depth - 1 + h < XPATH_MAX_RECURSION_DEPTH && (n = ctx.node) &&
+                n.type != NAMESPACE_DECL
+              r = equal_numbers(num_eval(op.c1), num_eval(op.c2))
+              @value_tab.push(op.value != 0 ? r : !r)
+              @depth -= 1
+              return
+            end
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             equal = op.value != 0 ? equal_values : not_equal_values
             @value_tab.push(equal)
           when 4 # OP_CMP
+            if (h = op.num_cmp) && @depth - 1 + h < XPATH_MAX_RECURSION_DEPTH && (n = ctx.node) &&
+                n.type != NAMESPACE_DECL
+              a = num_eval(op.c1)
+              @value_tab.push(compare_numbers(op.value != 0, op.value2 != 0, a, num_eval(op.c2)))
+              @depth -= 1
+              return
+            end
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             @value_tab.push(compare_values(op.value != 0, op.value2 != 0))
@@ -619,6 +633,50 @@ module Nokogiri
                 XPath.node_set_sort(seq)
               end
               @value_tab.push(seq)
+            end
+          end
+        end
+
+        # The value of a numeric expression made of number literals, position(), last(),
+        # count(sibling-axis::test), arithmetic and parentheses (see XPath.num_height), computed the way
+        # comp_op_eval would (same operand order, casts that are no-ops on numbers). The caller
+        # checks the recursion depth and that the context node isn't a namespace node.
+        def num_eval(op)
+          case op.op
+          when 11 # OP_VALUE
+            op.value4
+          when 13 # OP_FUNCTION
+            if (st = op.count_step)
+              v = count_siblings(st, @context.node).to_f
+              @sorted = nil if st.sorted_axis
+            elsif op.std_fn == :fn_position
+              pp = @context.proximity_position
+              xp_error(INVALID_CTXT_POSITION) if pp < 0
+              v = pp.to_f
+            else # last()
+              cs = @context.context_size
+              xp_error(INVALID_CTXT_SIZE) if cs < 0
+              v = cs.to_f
+            end
+            check_error!
+            v
+          when 17 # OP_SORT
+            num_eval(op.c1)
+          when 5 # OP_PLUS
+            a = num_eval(op.c1)
+            case op.value
+            when 0 then a - num_eval(op.c2)
+            when 1 then a + num_eval(op.c2)
+            when 2 then -a
+            else a
+            end
+          else # OP_MULT
+            a = num_eval(op.c1)
+            b = num_eval(op.c2)
+            case op.value
+            when 0 then a * b
+            when 1 then a / b
+            else b == 0 ? NAN : XPath.fmod(a, b)
             end
           end
         end
@@ -934,7 +992,21 @@ module Nokogiri
 
               comp_op_eval(op)
               res = @value_tab.pop
+            when 4 # OP_CMP
+              if (h = op.num_cmp) && @depth + h < XPATH_MAX_RECURSION_DEPTH && (n = @context.node) &&
+                  n.type != NAMESPACE_DECL
+                a = num_eval(op.c1)
+                return compare_numbers(op.value != 0, op.value2 != 0, a, num_eval(op.c2))
+              end
+
+              comp_op_eval(op)
+              res = @value_tab.pop
             when 3 # OP_EQUAL
+              if (h = op.num_cmp) && @depth + h < XPATH_MAX_RECURSION_DEPTH && (n = @context.node) &&
+                  n.type != NAMESPACE_DECL
+                r = equal_numbers(num_eval(op.c1), num_eval(op.c2))
+                return op.value != 0 ? r : !r
+              end
               if (step = op.eq_step) && (n = @context.node) && n.type != NAMESPACE_DECL &&
                   @depth < XPATH_MAX_RECURSION_DEPTH
                 # the fused "step = literal" of comp_op_eval, without the value stack
