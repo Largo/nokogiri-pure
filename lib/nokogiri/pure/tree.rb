@@ -1862,6 +1862,10 @@ module Nokogiri
 
         html = doc && doc.type == HTML_DOCUMENT_NODE
         keep_non_ascii = (doc && doc.encoding) || html
+        # fast path: nothing to escape
+        if keep_non_ascii || input.ascii_only?
+          return input.dup.force_encoding(Encoding::UTF_8) unless input.match?(html ? ENCODE_HTML_SPECIAL_RE : ENCODE_XML_SPECIAL_RE)
+        end
         out = +"".b
         bytes = input.b
         i = 0
@@ -1900,6 +1904,9 @@ module Nokogiri
         end
         out.force_encoding(Encoding::UTF_8)
       end
+
+      ENCODE_XML_SPECIAL_RE = /[<>&\x00-\x08\x0B-\x1F\x7F]/n
+      ENCODE_HTML_SPECIAL_RE = /[<>&\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/n
 
       def encode_entities_reentrant(doc, input)
         encode_entities_internal(doc, input, false)

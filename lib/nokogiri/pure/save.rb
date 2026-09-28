@@ -480,8 +480,32 @@ module Nokogiri
       BOOLEAN_ATTRS = %w[checked compact declare defer disabled ismap multiple nohref noresize noshade
         nowrap readonly selected].freeze
 
+      BOOLEAN_ATTR_CACHE = {} # name => bool (xmlStrcasecmp against htmlBooleanAttrs)
+
       def html_is_boolean_attr(name)
-        BOOLEAN_ATTRS.any? { |b| b.casecmp?(name) }
+        r = BOOLEAN_ATTR_CACHE[name]
+        return r unless r.nil?
+
+        r = BOOLEAN_ATTRS.any? { |b| b.casecmp?(name) }
+        BOOLEAN_ATTR_CACHE[name.frozen? ? name : name.dup.freeze] = r if BOOLEAN_ATTR_CACHE.size < 4096
+        r
+      end
+
+      URI_ATTR_CACHE = {} # name => :uri (href/action/src), :name, or false
+
+      def html_uri_attr_kind(name)
+        r = URI_ATTR_CACHE[name]
+        return r unless r.nil?
+
+        r = if name.casecmp?("href") || name.casecmp?("action") || name.casecmp?("src")
+          :uri
+        elsif name.casecmp?("name")
+          :name
+        else
+          false
+        end
+        URI_ATTR_CACHE[name.frozen? ? name : name.dup.freeze] = r if URI_ATTR_CACHE.size < 4096
+        r
       end
 
       def attr_dump_output(ctxt, cur)
@@ -1270,9 +1294,8 @@ module Nokogiri
           value = Tree.node_list_get_string(doc, cur.children, false)
           if value
             buf << "="
-            if cur.ns.nil? && cur.parent && cur.parent.ns.nil? &&
-                (cur.name.casecmp?("href") || cur.name.casecmp?("action") || cur.name.casecmp?("src") ||
-                 (cur.name.casecmp?("name") && cur.parent.name.casecmp?("a")))
+            kind = cur.ns.nil? && cur.parent && cur.parent.ns.nil? ? html_uri_attr_kind(cur.name) : false
+            if kind == :uri || (kind == :name && cur.parent.name.casecmp?("a"))
               tmp = value.sub(/\A[ \t\n\r]+/, "")
               write_quoted(buf, uri_escape_str(tmp, URI_ESCAPE_KEEP))
             else
@@ -1282,8 +1305,15 @@ module Nokogiri
         end
       end
 
+      HTML_INFO_CACHE = {} # name => elem desc or false
+
       def html_info(name)
-        HTMLParser.tag_lookup(name)
+        r = HTML_INFO_CACHE[name]
+        return r || nil unless r.nil?
+
+        r = HTMLParser.tag_lookup(name)
+        HTML_INFO_CACHE[name.frozen? ? name : name.dup.freeze] = r || false if HTML_INFO_CACHE.size < 4096
+        r
       end
 
       def inline?(info)
