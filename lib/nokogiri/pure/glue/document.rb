@@ -131,8 +131,8 @@ module Nokogiri
           )
         end
         if c_entity.nil?
-          if errors.empty? && err_code
-            errors << Nokogiri::Pure.wrap_error(Nokogiri::Pure::Parser.entity_add_error(err_code, name))
+          if errors.empty? && err_code && (add_err = Nokogiri::Pure::Parser.entity_add_error(err_code, name))
+            errors << Nokogiri::Pure.wrap_error(add_err)
           end
           Nokogiri::Pure.raise_aggregate(errors, "Could not create entity")
         end
