@@ -80,7 +80,7 @@ module ParserCases
   ].freeze
 
   FRAGMENTS = ["<b/>", "text", "<b>x</b><c/>", "<b>", "</x>", "<p:b/>", "<b xmlns='urn:q'/>", "&amp;&e;", "<b a='1' a='2'/>",
-    "<!-- c --><?pi?>", "<![CDATA[x]]>", "", " ", "<b><c></b>", "x<y", "<b p:a='1'/>"].freeze
+    "<!-- c --><?pi?>", "<![CDATA[x]]>", "", " ", "<b><c></b>", "x<y", "<b p:a='1'/>", "<b>\u00e9</b>", "<é/>", "\xff".b].freeze
   CONTEXTS = ["<root/>", "<root xmlns:p='urn:p'><c ctx='1'/></root>", "<!DOCTYPE r [<!ENTITY e 'E'>]><r/>",
     "<?xml version='1.0' encoding='ISO-8859-1'?><r/>"].freeze
 

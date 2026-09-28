@@ -81,6 +81,7 @@ module Nokogiri
           return [out, true] unless chunk.is_a?(String)
           break if chunk.empty?
 
+          chunk = chunk.byteslice(0, 4000) if chunk.bytesize > 4000 # noko_io_read copies at most len bytes
           out << chunk.b
           sizes << chunk.bytesize if sizes
         end
@@ -100,8 +101,9 @@ module Nokogiri
         ctxt = Ctxt.new
         ctxt.use_options(options)
         sizes = []
-        bytes, _err = read_all_io(io, sizes)
+        bytes, err = read_all_io(io, sizes)
         input = ctxt.new_input_from_bytes(bytes, url, encoding, raw_chunks: sizes)
+        input.pending_error ||= ErrCode::IO_UNKNOWN if err
         ctxt.parse_document_with(input)
       end
 

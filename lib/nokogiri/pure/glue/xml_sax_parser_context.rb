@@ -94,9 +94,10 @@ module Nokogiri
             io = inp.io
             inp.io = nil
             sizes = []
-            bytes, = Nokogiri::Pure::Parser.read_all_io(io, sizes)
+            bytes, err = Nokogiri::Pure::Parser.read_all_io(io, sizes)
             inp.raw_chunks = sizes
             inp.set_raw(bytes)
+            inp.pending_error ||= Nokogiri::Pure::ErrCode::IO_UNKNOWN if err
             ctxt.refresh_buffer
           end
           ctxt.sax = sax_parser.instance_variable_get(:@__native)
