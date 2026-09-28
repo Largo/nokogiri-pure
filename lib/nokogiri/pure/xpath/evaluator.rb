@@ -907,6 +907,19 @@ module Nokogiri
               return false if op.c1.nil?
 
               if op.fused && (n = @context.node) && n.type != NAMESPACE_DECL
+                if op.attr_step
+                  # [@name]
+                  return false if n.type != ELEMENT_NODE
+
+                  name = op.value5
+                  a = n.properties
+                  while a
+                    return true if a.type == ATTRIBUTE_NODE && a.name == name && ((ns = a.ns).nil? || ns.prefix.nil?)
+
+                    a = a.next
+                  end
+                  return false
+                end
                 plan = op.plan
                 return FastCollect.exists?(plan[2], n, @context.doc, op.value5, op.value4 ? op_uri(op) : nil, plan[1])
               end
@@ -925,11 +938,31 @@ module Nokogiri
               if (step = op.eq_step) && (n = @context.node) && n.type != NAMESPACE_DECL &&
                   @depth < XPATH_MAX_RECURSION_DEPTH
                 # the fused "step = literal" of comp_op_eval, without the value stack
+                v = op.eq_value
+                neq = op.value == 0
+                if step.attr_step && v.is_a?(String) && n.type == ELEMENT_NODE
+                  # @name = 'literal': equal_node_set_string of one attribute or none
+                  name = step.value5
+                  first = nil
+                  a = n.properties
+                  while a
+                    if a.type == ATTRIBUTE_NODE && a.name == name && ((ns = a.ns).nil? || ns.prefix.nil?)
+                      break if first
+
+                      first = a
+                    end
+                    a = a.next
+                  end
+                  if a.nil?
+                    return false if first.nil?
+
+                    sv = simple_string_value(first)
+                    return neq ? sv != v : sv == v if sv
+                  end
+                end
                 seq = []
                 plan = step.plan
                 plan[2].call(n, @context.doc, step.value5, step.value4 ? op_uri(step) : nil, seq, plan[1])
-                v = op.eq_value
-                neq = op.value == 0
                 return v.is_a?(String) ? equal_node_set_string(seq, v, neq) : equal_node_set_float(seq, v, neq)
               end
 

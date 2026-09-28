@@ -121,3 +121,7 @@ EXPRS << ["/", "//*[contains(@p:k,'1')]"]
   //*[substring-before(.,'1')] //*[substring-after(@n,'1')] //*[concat(.,'x')] //*[string(@n)]
   //*[boolean(contains(@class,'r'))] //*[not(starts-with(@n,'1'))] //*[contains(@n,'1') and nokogiri-builtin:css-class(@class,'x')]
 ].each { |e| EXPRS << ["/", e] }
+%w[
+  //*[@n='3'] //*[@n!='3'] //*[@class='r1\ x'] //*[@n=3] //*[@missing='x'] //*[@missing!='x'] //*[@p:k='1'] //*[@k='2'] //*[@rel]
+  //*[@p:k] //*[@*] //@*[@n] //text()[@n] //*[not(@n)] //*[@n='3']/@n //*[@id='d2'] //*[@class='c1']
+].each { |e| EXPRS << ["/", e.gsub("\\ ", " "), { ns: { "p" => "urn:p" } }] }

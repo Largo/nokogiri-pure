@@ -137,6 +137,8 @@ module Nokogiri
         when OP_COLLECT
           op.plan = FastCollect.plan_for(op.value, op.value2, op.value3, op.value4, op.value5)
           op.sorted_axis = ParserContext::SORTED_AXES.include?(op.value)
+          # an unprefixed @name step
+          op.attr_step = true if op.plan && op.plan[0] == :attribute_attr_name && op.value4.nil?
           # "axis::test" applied to the context node, without predicates
           c1 = op.c1
           op.fused = !op.plan.nil? && !c1.nil? && c1.op == OP_NODE && c1.c1.nil? && c1.c2.nil? && op.c2.nil?
@@ -251,9 +253,6 @@ module Nokogiri
         if kinds.length == 2 && kinds[0][0] != :value && kinds[1][0] == :value && kinds[1][1].value4.is_a?(String)
           op.pred_args = kinds
           op.std_pred = STD_STRING_PREDICATES[op.std_fn] if op.std_fn
-          # an unprefixed @name step
-          x = kinds[0][1]
-          x.attr_step = true if kinds[0][0] != :node && x.plan[0] == :attribute_attr_name && x.value4.nil?
         end
       end
 
