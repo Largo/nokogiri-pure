@@ -7,6 +7,7 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UPSTREAM="${NOKOGIRI_UPSTREAM:-$ROOT/../nokogiri-upstream}"
 cd "$UPSTREAM"
+export MT_NO_PLUGINS=1
 files=()
 args=()
 for a in "$@"; do
@@ -15,4 +16,4 @@ done
 if [ ${#files[@]} -eq 0 ]; then
   mapfile -t files < <(find test -name 'test_*.rb' | sort)
 fi
-exec ruby -W0 -I"$ROOT/lib" -Itest -e 'i = ARGV.index("--"); files = ARGV.shift(i); ARGV.shift; files.each { |f| require File.expand_path(f) }' -- "${files[@]}" -- "${args[@]}"
+exec ruby -W0 -I"$ROOT/lib" -Itest -e 'gem "minitest", "~> 5.0"; i = ARGV.index("--"); files = ARGV.shift(i); ARGV.shift; files.each { |f| require File.expand_path(f) }' -- "${files[@]}" -- "${args[@]}"

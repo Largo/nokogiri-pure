@@ -8,12 +8,22 @@ module Nokogiri
   module Pure
     STUBS = []
 
+    # Stubs live in a module included into (or extended onto) the target class, so that the real
+    # definitions in the class itself override them without "method redefined" warnings.
+    STUB_MODULES = {}
+
     def self.stub(mod, name, singleton, visibility)
       target = singleton ? mod.singleton_class : mod
+      stub_mod = STUB_MODULES[target] ||= Module.new.tap { |m| target.include(m) }
       label = "#{mod}#{singleton ? "." : "#"}#{name}"
       STUBS << [target, name.to_sym, label]
-      target.define_method(name) { |*_args, **_kw, &_blk| raise NotImplementedError, "nokogiri-pure: #{label} is not implemented yet" }
-      target.__send__(visibility, name) if visibility != :public
+      stub_mod.define_method(name) { |*_args, **_kw, &_blk| raise NotImplementedError, "nokogiri-pure: #{label} is not implemented yet" }
+      stub_mod.__send__(visibility, name) if visibility != :public
+    end
+
+    # the native methods that still resolve to a stub
+    def self.unimplemented
+      STUBS.select { |target, name, _| (m = target.instance_method(name) rescue nil) && STUB_MODULES.value?(m.owner) }.map(&:last)
     end
   end
 end
