@@ -83,6 +83,8 @@ Notes:
   serialising, XPath/CSS, `traverse`). Recursion in *your* code through `each`/blocks is limited to a
   few dozen levels on wasm, e.g. a Builder block nested ~60 deep.
 - Loading everything takes ~2 s in ruby.wasm (Node 20).
+- When mounting gem directories yourself, leave out compiled extensions (`*.so`): ruby.wasm cannot
+  load them, and e.g. racc only falls back to pure Ruby if `racc/cparse.so` is absent.
 
 ## Why
 

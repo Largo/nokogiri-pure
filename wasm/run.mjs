@@ -19,6 +19,9 @@ async function tree(dir) {
   const entries = new Map();
   for (const name of await readdir(dir)) {
     if (name === "node_modules" || name === ".git") continue;
+    // native extensions can't load in ruby.wasm; leaving them out lets gems fall back to pure Ruby
+    // (e.g. racc/cparse.so, which `gem install racc` may place inside lib/)
+    if (/\.(so|bundle|dll|dylib)$/.test(name)) continue;
     const full = join(dir, name);
     entries.set(name, (await stat(full)).isDirectory() ? new Directory(await tree(full)) : new File(await readFile(full)));
   }
