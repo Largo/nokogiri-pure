@@ -219,6 +219,9 @@ module Nokogiri
         end
 
         raise RuntimeError, rb_error_str unless rb_error_str.empty?
+        # (libxslt returned no result without reporting anything, e.g. an empty
+        # <xsl:message terminate="yes"/>: the C glue wraps a NULL document and crashes)
+        raise RuntimeError, "Uninitialized Nokogiri::XML::Document struct (null data pointer)" if c_result_document.nil?
 
         Pure.wrap_document(Nokogiri::XML::Document, c_result_document)
       end

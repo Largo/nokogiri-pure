@@ -61,7 +61,6 @@ module Nokogiri
             file = node.url
           elsif !node.is_a?(XmlNs)
             line = Tree.get_line_no(node) || 0
-            line = 0 if line < 0
             file = node.doc.url if node.doc&.url
             name = node.name if node.name
           end
