@@ -2456,6 +2456,70 @@ module Nokogiri
           true
         end
 
+        FAST_NUMERIC_REF = /&#(?:[xX]([0-9A-Fa-f]{1,6})|([0-9]{1,7}));/n
+
+        # A character reference in the data state that the character reference states would
+        # decode without any error: a named reference terminated by ';', or a numeric one
+        # whose value needs no replacement. Emits its (first) character exactly like they do;
+        # returns false (having touched nothing) otherwise.
+        def fast_char_ref(output)
+          start = @start
+          input = @input
+          if input.getbyte(start + 1) == 0x23
+            ss = (@scanner ||= StringScanner.new(input))
+            ss.pos = start
+            return false unless (len = ss.skip(FAST_NUMERIC_REF))
+
+            code = (hex = ss[1]) ? hex.to_i(16) : ss[2].to_i
+            return false if code == 0 || code > MAX_CHAR || (code >= 0xD800 && code <= 0xDFFF) ||
+              (code >= 0xFDD0 && code <= 0xFDEF) || (code & 0xFFFF) >= 0xFFFE ||
+              code == 0x0D || ((code < 0x1F || (code >= 0x7F && code <= 0x9F)) && !Util.ascii_isspace(code))
+
+            @character_reference_code = code
+            cp0 = code
+            cp1 = NO_CHAR
+          else
+            match = Util.match_named_char_ref(input, start + 1, @end)
+            return false unless match
+
+            size, cps = match
+            return false unless input.getbyte(start + size) == 0x3b
+
+            if cps.is_a?(Array)
+              cp0, cp1 = cps
+            else
+              cp0 = cps
+              cp1 = NO_CHAR
+            end
+            len = size + 1
+          end
+          # set_mark at the '&'; the iterator moves over the reference (ASCII, no newline)
+          iter_mark
+          @return_state = LEX_DATA
+          @column += len
+          @offset += len
+          @start = start + len
+          read_char
+          @state = LEX_DATA
+          # flush_char_ref: emit_char with the next char to be reconsumed (no iter_next)
+          @buffered_emit_char = cp1
+          output.type = get_char_token_type(cp0)
+          output.character = cp0
+          output.line = @token_start_line
+          output.column = @token_start_column
+          output.offset = @token_start_offset
+          orig = @token_start
+          output.orig_start = orig
+          @token_start = @start
+          @token_start_line = @line
+          @token_start_column = @column
+          @token_start_offset = @offset
+          tlen = @start - orig
+          tlen -= 1 if tlen > 0 && input.getbyte(orig + tlen - 1) == 0x0d
+          output.orig_len = tlen
+          true
+        end
+
         # gumbo_lex
         def lex(output)
           if @buffered_emit_char != NO_CHAR
@@ -2470,7 +2534,10 @@ module Nokogiri
 
           handlers = HANDLERS
           while true
-            return if @state == LEX_DATA && @current == 0x3c && fast_tag(output)
+            if @state == LEX_DATA
+              c = @current
+              return if (c == 0x3c && fast_tag(output)) || (c == 0x26 && fast_char_ref(output))
+            end
 
             result = __send__(handlers[@state], @current, output)
             should_advance = !@reconsume
