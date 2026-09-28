@@ -267,10 +267,15 @@ module Nokogiri
           :options, :recovery, :keep_blanks, :disable_sax, :well_formed, :err_no, :instate,
           :encoding, :linenumbers, :record_info, :pedantic, :replace_entities, :validate,
           :dict_names, :loadsubset, :nb_errors, :nb_warnings, :error_handler, :valid,
-          :input_flags, :filename, :line, :col, :cur, :buf, :encoder, :check_index,
+          :input_flags, :filename, :line, :col, :cur, :encoder, :check_index,
           :end_check_state, :node_infos, :input_id, :space_tab, :standalone, :version,
           :last_error, :has_input, :_private
-        attr_reader :sax_flags
+        attr_reader :sax_flags, :buf
+
+        def buf=(buf)
+          @buf = buf
+          @scanner = nil
+        end
 
         def initialize(sax = nil, user_data = nil)
           @dict_names = 1
@@ -317,6 +322,7 @@ module Nokogiri
         def reset_input
           @has_input = false
           @buf = +"".b
+          @scanner = nil
           @cur = 0
           @line = 1
           @col = 1
@@ -584,6 +590,7 @@ module Nokogiri
             rest = bytes_at(@cur, @buf.bytesize - @cur)
             @raw = rest + @raw
             @buf = +"".b
+            @scanner = nil
             @cur = 0
             @base = 0
             @buf_generation += 1

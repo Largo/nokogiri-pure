@@ -244,10 +244,7 @@ module Nokogiri
 
         # StringScanner-based anchored match at +pos+ (no MatchData on @buf); returns String or nil
         def scan_at(pos, re)
-          ss = @scanner
-          if ss.nil? || !ss.string.equal?(@buf)
-            ss = @scanner = StringScanner.new(@buf)
-          end
+          ss = (@scanner ||= StringScanner.new(@buf))
           ss.pos = pos
           ss.scan(re)
         end
@@ -280,11 +277,7 @@ module Nokogiri
 
         # a StringScanner over @buf (strings it returns are copies, never shared with @buf)
         def scanner
-          ss = @scanner
-          if ss.nil? || !ss.string.equal?(@buf)
-            ss = @scanner = StringScanner.new(@buf)
-          end
-          ss
+          @scanner ||= StringScanner.new(@buf) # (reset whenever @buf is replaced)
         end
 
         NAME_CACHE = {} # rubocop:disable Style/MutableConstant
@@ -382,7 +375,7 @@ module Nokogiri
             sax_start_element("p", nil)
             return 1
           end
-          if NO_CONTENT_ELEMENTS.include?(tag)
+          if tag == "html" || tag == "head" # NO_CONTENT_ELEMENTS
             auto_close("p")
             check_implied("p")
             name_push("p")
@@ -420,10 +413,10 @@ module Nokogiri
           last = last.prev while last && last.type == COMMENT_NODE
           if last.nil?
             return false if @node.type != ELEMENT_NODE && !@node.content.nil?
-            return false if ALLOW_PCDATA.include?(@name)
+            return false if ALLOW_PCDATA_SET.key?(@name)
           elsif last.type == TEXT_NODE
             return false
-          elsif ALLOW_PCDATA.include?(last.name)
+          elsif ALLOW_PCDATA_SET.key?(last.name)
             return false
           end
           true
@@ -849,8 +842,8 @@ module Nokogiri
 
         # htmlParseCharDataInternal
         def parse_char_data_internal(readahead = 0)
-          buf = +"".b
-          buf << readahead if readahead != 0
+          # (buf is only allocated when needed; a run copied from the input becomes buf itself)
+          buf = readahead != 0 ? (+"".b << readahead) : nil
           cur = current_char
           l = @clen
           while cur != 0x3C && cur != 0x26 && cur != 0 && @disable_sax <= 1
@@ -859,7 +852,7 @@ module Nokogiri
             # the input
             if (l >= 2 || (cur < 0x80 && cur == @buf.getbyte(@cur))) &&
                 (n = text_run_length((@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII))
-              lim = HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize
+              lim = buf ? HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize : HTML_PARSER_BIG_BUFFER_SIZE
               if growable?
                 g = @buf.bytesize - INPUT_CHUNK - @cur
                 lim = g if g < lim
@@ -871,9 +864,14 @@ module Nokogiri
                 n = lim
               end
               run = bytes_at_cur(n)
-              buf << run
               advance_run(run)
+              if buf
+                buf << run
+              else
+                buf = run
+              end
             else
+              buf ||= +"".b
               if ChValid.char?(cur)
                 copy_buf(l, buf, cur)
               else
@@ -883,13 +881,13 @@ module Nokogiri
             end
             if buf.bytesize >= HTML_PARSER_BIG_BUFFER_SIZE
               deliver_chars(buf)
-              buf = +"".b
+              buf = nil
               shrink_macro
             end
             cur = current_char
             l = @clen
           end
-          deliver_chars(buf) unless buf.empty?
+          deliver_chars(buf) if buf && !buf.empty?
         end
 
         # htmlParseCharData

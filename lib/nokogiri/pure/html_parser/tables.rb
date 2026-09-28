@@ -1037,11 +1037,14 @@ module Nokogiri
         "small", "span", "strike", "strong", "td", "th", "tt", "u", "var",
       ].freeze
 
+      ALLOW_PCDATA_SET = ALLOW_PCDATA.to_h { |n| [n, true] }.freeze
+
       ENTITY_BY_NAME = {}.tap do |h|
         ENTITIES_TABLE.each { |e| h[e.name] ||= e }
       end.freeze
 
       TAG_CACHE = {} # rubocop:disable Style/MutableConstant
+      TAG_NOT_CACHED = Object.new.freeze
 
       module_function
 
@@ -1066,6 +1069,9 @@ module Nokogiri
       # htmlTagLookup (bsearch with xmlStrcasecmp over html40ElementTable)
       def tag_lookup(tag)
         return nil if tag.nil?
+
+        found = TAG_CACHE.fetch(tag, TAG_NOT_CACHED)
+        return found unless found.equal?(TAG_NOT_CACHED)
 
         tag = tag.to_s
         return TAG_CACHE[tag] if TAG_CACHE.key?(tag)
