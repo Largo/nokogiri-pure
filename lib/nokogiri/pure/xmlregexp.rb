@@ -1843,35 +1843,40 @@ module Nokogiri
       # ------------------------------------------------------------------
 
       # xmlFARegExec. +content+ is a String; it is walked as codepoints (see input_codepoints).
+      #
+      # Same control flow as the C function; for speed the execution context (state, index,
+      # transno, counts and the rollback stack of xmlFARegExecSave/xmlFARegExecRollBack) lives
+      # in local variables instead of an ExecCtxt, with those two helpers inlined.
       def fa_reg_exec(comp, content)
-        exec = ExecCtxt.new
         input = input_codepoints(content)
-        exec.input_string = input
-        exec.index = 0
-        exec.nb_push = 0
-        exec.determinist = 1
-        exec.status = XML_REGEXP_OK
-        exec.comp = comp
         states = comp.states
-        exec.state = states[0]
-        exec.transno = 0
-        exec.transcount = 0
         counters = comp.counters
         counts = counters.empty? ? nil : Array.new(counters.size, 0)
-        exec.counts = counts
-        error = false
-        while exec.status == XML_REGEXP_OK && exec.state &&
-            (input[exec.index] != 0 || exec.state.type != XML_REGEXP_FINAL_STATE)
+        status = XML_REGEXP_OK
+        state = states[0]
+        index = 0
+        transno = 0
+        nb_push = 0
+        # rollback stack (xmlRegExecRollback: state, index, nextbranch, counts)
+        rb_state = []
+        rb_index = []
+        rb_next = []
+        rb_counts = []
+        nb_rb = 0
+
+        while status == XML_REGEXP_OK && state &&
+            (input[index] != 0 || state.type != XML_REGEXP_FINAL_STATE)
           # If end of input on non-terminal state, rollback, however we may still have epsilon
           # like transition for counted transitions on counters, in that case don't break too
           # early. Additionally, if we are working on a range like "AB{0,2}", where B is not
           # present, we don't want to break.
           len = 1
           action = nil
-          if input[exec.index] == 0 && counts.nil?
+          state_trans = state.trans
+          if input[index] == 0 && counts.nil?
             # if there is a transition, we must check if atom allows minOccurs of 0
-            if exec.transno < exec.state.trans.size
-              trans = exec.state.trans[exec.transno]
+            if transno < state_trans.size
+              trans = state_trans[transno]
               if trans.to >= 0
                 atom = trans.atom
                 action = :rollback unless atom.min == 0 && atom.max > 0
@@ -1882,12 +1887,10 @@ module Nokogiri
           end
 
           if action.nil?
-            exec.transcount = 0
-            state_trans = exec.state.trans
-            while exec.transno < state_trans.size
-              trans = state_trans[exec.transno]
+            while transno < state_trans.size
+              trans = state_trans[transno]
               if trans.to < 0
-                exec.transno += 1
+                transno += 1
                 next
               end
               atom = trans.atom
@@ -1895,7 +1898,7 @@ module Nokogiri
               deter = 1
               if trans.count >= 0
                 if counts.nil?
-                  exec.status = XML_REGEXP_INTERNAL_ERROR
+                  status = XML_REGEXP_INTERNAL_ERROR
                   action = :error
                   break
                 end
@@ -1906,16 +1909,23 @@ module Nokogiri
                 deter = 0 if ret == 1 && counter.min != counter.max
               elsif atom.nil?
                 # epsilon transition left at runtime
-                exec.status = XML_REGEXP_INTERNAL_ERROR
+                status = XML_REGEXP_INTERNAL_ERROR
                 break
-              elsif input[exec.index] != 0
-                codepoint = input[exec.index]
+              elsif (codepoint = input[index]) != 0
                 if codepoint < 0
-                  exec.status = XML_REGEXP_INVALID_UTF8
+                  status = XML_REGEXP_INVALID_UTF8
                   action = :error
                   break
                 end
-                ret = reg_check_character(atom, codepoint)
+                # xmlRegCheckCharacter, with the CHARVAL / ANYCHAR cases inlined for the
+                # codepoints where IS_CHAR is trivially true
+                ret = if codepoint >= 0x20 && codepoint <= 0xd7ff && atom.type == XML_REGEXP_CHARVAL
+                  codepoint == atom.codepoint ? 1 : 0
+                elsif codepoint >= 0x20 && codepoint <= 0xd7ff && atom.type == XML_REGEXP_ANYCHAR
+                  atom.neg != 0 ? 0 : 1
+                else
+                  reg_check_character(atom, codepoint)
+                end
                 if ret == 1 && atom.min >= 0 && atom.max > 0
                   to = states[trans.to]
                   # this is a multiple input sequence. If there is a counter associated
@@ -1923,63 +1933,74 @@ module Nokogiri
                   # maximum limit in which case get to next transition
                   if trans.counter >= 0
                     if counts.nil?
-                      exec.status = XML_REGEXP_INTERNAL_ERROR
+                      status = XML_REGEXP_INTERNAL_ERROR
                       action = :error
                       break
                     end
-                    counter = counters[trans.counter]
-                    if counts[trans.counter] >= counter.max
-                      exec.transno += 1
+                    if counts[trans.counter] >= counters[trans.counter].max
+                      transno += 1
                       next # for loop on transitions
                     end
                   end
                   # Save before incrementing
-                  if state_trans.size > exec.transno + 1
-                    fa_reg_exec_save(exec)
-                    if exec.status != XML_REGEXP_OK
+                  if state_trans.size > transno + 1
+                    # xmlFARegExecSave
+                    if nb_push > MAX_PUSH
+                      status = XML_REGEXP_INTERNAL_LIMIT
                       action = :error
                       break
                     end
+                    nb_push += 1
+                    rb_state[nb_rb] = state
+                    rb_index[nb_rb] = index
+                    rb_next[nb_rb] = transno + 1
+                    if counts
+                      (c = rb_counts[nb_rb]) ? c.replace(counts) : (rb_counts[nb_rb] = counts.dup)
+                    end
+                    nb_rb += 1
                   end
                   counts[trans.counter] += 1 if trans.counter >= 0
-                  exec.transcount = 1
+                  transcount = 1
                   loop do
                     # Try to progress as much as possible on the input
-                    break if exec.transcount == atom.max
+                    break if transcount == atom.max
 
-                    exec.index += len
+                    index += len
                     # End of input: stop here
-                    if input[exec.index] == 0
-                      exec.index -= len
+                    if input[index] == 0
+                      index -= len
                       break
                     end
-                    if exec.transcount >= atom.min
-                      transno = exec.transno
-                      state = exec.state
-                      # The transition is acceptable save it
-                      exec.transno = -1 # trick
-                      exec.state = to
-                      fa_reg_exec_save(exec)
-                      if exec.status != XML_REGEXP_OK
+                    if transcount >= atom.min
+                      # The transition is acceptable save it (xmlFARegExecSave with the
+                      # transno = -1 / state = to trick)
+                      if nb_push > MAX_PUSH
+                        status = XML_REGEXP_INTERNAL_LIMIT
                         action = :error
                         break
                       end
-                      exec.transno = transno
-                      exec.state = state
+                      nb_push += 1
+                      rb_state[nb_rb] = to
+                      rb_index[nb_rb] = index
+                      rb_next[nb_rb] = 0
+                      if counts
+                        (c = rb_counts[nb_rb]) ? c.replace(counts) : (rb_counts[nb_rb] = counts.dup)
+                      end
+                      nb_rb += 1
                     end
-                    codepoint = input[exec.index]
+                    codepoint = input[index]
                     if codepoint < 0
-                      exec.status = XML_REGEXP_INVALID_UTF8
+                      status = XML_REGEXP_INVALID_UTF8
                       action = :error
                       break
                     end
                     ret = reg_check_character(atom, codepoint)
-                    exec.transcount += 1
+                    transcount += 1
                     break unless ret == 1
                   end
                   break if action == :error
 
-                  ret = 0 if exec.transcount < atom.min
+                  ret = 0 if transcount < atom.min
                   # If the last check failed but one transition was found possible, rollback
                   ret = 0 if ret < 0
                   if ret == 0
@@ -1988,7 +2009,7 @@ module Nokogiri
                   end
                   if trans.counter >= 0
                     if counts.nil?
-                      exec.status = XML_REGEXP_INTERNAL_ERROR
+                      status = XML_REGEXP_INTERNAL_ERROR
                       action = :error
                       break
                     end
@@ -1997,77 +2018,88 @@ module Nokogiri
                 elsif ret == 0 && atom.min == 0 && atom.max > 0
                   # we don't match on the codepoint, but minOccurs of 0 says that's ok.
                   # Setting len to 0 inhibits stepping over the codepoint.
-                  exec.transcount = 1
                   len = 0
                   ret = 1
                 end
               elsif atom.min == 0 && atom.max > 0
                 # another spot to match when minOccurs is 0
-                exec.transcount = 1
                 len = 0
                 ret = 1
               end
               if ret == 1
                 if trans.nd == 1 ||
-                    (trans.count >= 0 && deter == 0 && state_trans.size > exec.transno + 1)
-                  fa_reg_exec_save(exec)
-                  if exec.status != XML_REGEXP_OK
+                    (trans.count >= 0 && deter == 0 && state_trans.size > transno + 1)
+                  # xmlFARegExecSave
+                  if nb_push > MAX_PUSH
+                    status = XML_REGEXP_INTERNAL_LIMIT
                     action = :error
                     break
                   end
+                  nb_push += 1
+                  rb_state[nb_rb] = state
+                  rb_index[nb_rb] = index
+                  rb_next[nb_rb] = transno + 1
+                  if counts
+                    (c = rb_counts[nb_rb]) ? c.replace(counts) : (rb_counts[nb_rb] = counts.dup)
+                  end
+                  nb_rb += 1
                 end
                 if trans.counter >= 0
                   # make sure we don't go over the counter maximum value
                   if counts.nil?
-                    exec.status = XML_REGEXP_INTERNAL_ERROR
+                    status = XML_REGEXP_INTERNAL_ERROR
                     action = :error
                     break
                   end
-                  counter = counters[trans.counter]
-                  if counts[trans.counter] >= counter.max
-                    exec.transno += 1
+                  if counts[trans.counter] >= counters[trans.counter].max
+                    transno += 1
                     next # for loop on transitions
                   end
                   counts[trans.counter] += 1
                 end
                 if trans.count >= 0 && trans.count < REGEXP_ALL_COUNTER
                   if counts.nil?
-                    exec.status = XML_REGEXP_INTERNAL_ERROR
+                    status = XML_REGEXP_INTERNAL_ERROR
                     action = :error
                     break
                   end
                   counts[trans.count] = 0
                 end
-                exec.state = states[trans.to]
-                exec.transno = 0
-                exec.index += len if trans.atom
+                state = states[trans.to]
+                transno = 0
+                index += len if trans.atom
                 action = :progress
                 break
               elsif ret < 0
-                exec.status = XML_REGEXP_INTERNAL_ERROR
+                status = XML_REGEXP_INTERNAL_ERROR
                 break
               end
-              exec.transno += 1
+              transno += 1
             end
           end
           next if action == :progress
+          break if action == :error
 
-          if action == :error
-            error = true
-            break
-          end
-          if action == :rollback || exec.transno != 0 || exec.state.trans.empty?
-            # Failed to find a way out
-            exec.determinist = 0
-            fa_reg_exec_roll_back(exec)
+          if action == :rollback || transno != 0 || state_trans.empty?
+            # Failed to find a way out: xmlFARegExecRollBack
+            next if status != XML_REGEXP_OK
+
+            if nb_rb <= 0
+              status = XML_REGEXP_NOT_FOUND
+              next
+            end
+            nb_rb -= 1
+            state = rb_state[nb_rb]
+            index = rb_index[nb_rb]
+            transno = rb_next[nb_rb]
+            counts&.replace(rb_counts[nb_rb])
           end
         end
-        _ = error
-        return XML_REGEXP_INTERNAL_ERROR if exec.state.nil?
-        return 1 if exec.status == XML_REGEXP_OK
-        return 0 if exec.status == XML_REGEXP_NOT_FOUND
+        return XML_REGEXP_INTERNAL_ERROR if state.nil?
+        return 1 if status == XML_REGEXP_OK
+        return 0 if status == XML_REGEXP_NOT_FOUND
 
-        exec.status
+        status
       end
 
       # ------------------------------------------------------------------
