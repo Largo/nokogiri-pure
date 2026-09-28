@@ -1,0 +1,7 @@
+<element name="a" xmlns="http://relaxng.org/ns/structure/1.0" xml:base="sub/">
+  <externalRef href="_ext.rng"/>
+  <element name="b" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes#"><data type="int"/></element>
+  <element name="c" datatypeLibrary=""><data type="token"/></element>
+  <element name="d" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"><data type="int" datatypeLibrary="http://www.w3.org/2001/XML Schema-datatypes"/></element>
+  <element name="e" datatypeLibrary="http://www.w3.org/2001/%58MLSchema-datatypes"><data type="int"/></element>
+</element>

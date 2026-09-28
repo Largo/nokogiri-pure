@@ -29,6 +29,7 @@ def unordered(r)
   return r unless r.is_a?(Hash)
 
   r = r.dup
+  r["stderr"] = r["stderr"].lines.sort if r["stderr"].is_a?(String)
   if r["parse"].is_a?(Hash) && r["parse"]["errors"]
     r["parse"] = r["parse"].merge("errors" => r["parse"]["errors"].sort_by(&:to_s),
                                   "message" => r["parse"]["message"].to_s.lines.sort)

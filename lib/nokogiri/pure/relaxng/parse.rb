@@ -27,11 +27,24 @@ module Nokogiri
         Schemas::Types.validate_nc_name(value, 0) != 0
       end
 
+      def uri_parser
+        Pure.const_defined?(:Parser) && Pure::Parser.const_defined?(:URIParser) ? Pure::Parser::URIParser : nil
+      end
+
       # xmlParseURI: nil or {scheme:, fragment:, ...}
       def parse_uri(str)
+        if (up = uri_parser)
+          u = up.parse(str)
+          return u && { scheme: u.scheme, fragment: u.fragment }
+        end
         return nil unless Schemas::Types.parse_uri_ok(str)
 
         URI_.parse(str) || {}
+      end
+
+      # xmlBuildURI
+      def build_uri(uri, base)
+        (up = uri_parser) ? up.build_uri(uri, base) : URI_.build_uri(uri, base)
       end
 
       # xmlRelaxNGNormExtSpace (returns the normalized copy)
@@ -418,7 +431,7 @@ module Nokogiri
                     skip_children = true
                   else
                     base = Tree.node_get_base(cur.doc, cur)
-                    url = URI_.build_uri(href, base)
+                    url = build_uri(href, base)
                     if url.nil?
                       p_err(ctxt, cur, ErrCode::RNGP_HREF_ERROR,
                         "Failed to compute URL for externalRef %s\n", href)
@@ -446,7 +459,7 @@ module Nokogiri
                   skip_children = true
                 else
                   base = Tree.node_get_base(cur.doc, cur)
-                  url = URI_.build_uri(href, base)
+                  url = build_uri(href, base)
                   if url.nil?
                     p_err(ctxt, cur, ErrCode::RNGP_HREF_ERROR, "Failed to compute URL for include %s\n", href)
                     delete = cur

@@ -1,0 +1,9 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <include href="sub/_inc space.rng"/>
+  <include href="sub/%5Finc%20space.rng"/>
+  <include href="./sub/../sub/_inc%20space.rng"/>
+  <include href="file:sub/x.rng"/>
+  <include href="http://[bad/x.rng"/>
+  <include href=""/>
+  <start combine="choice"><element name="z" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"><data type="int"/></element></start>
+</grammar>
