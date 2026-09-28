@@ -285,9 +285,20 @@ module Nokogiri
             return [s.force_encoding(Encoding::UTF_8), nil, 0]
           end
 
+          n = s.bytesize
+          if holdback && n > 0
+            # common in push mode: valid data followed by a sequence cut at the chunk end; the loop
+            # below would copy the valid part and hold the incomplete tail back
+            k = n - 1
+            k -= 1 while k > 0 && k > n - 4 && (s.getbyte(k) & 0xC0) == 0x80
+            if s.getbyte(k) >= 0xC0 && utf8_seq(s, k, n) < 0
+              head = s.byteslice(0, k).force_encoding(Encoding::UTF_8)
+              return [head, [], n - k] if head.valid_encoding?
+            end
+          end
+
           out = +"".b
           bad = []
-          n = s.bytesize
           i = 0
           held = 0
           while i < n

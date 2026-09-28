@@ -99,6 +99,17 @@ end
 x << "</doc>\n"
 docs["dtd"] = x
 
+# non-ASCII text (Japanese/German prose with CDATA and comments)
+JA = %w[東京 大阪 日本語 文書 解析 速度 改善 テスト 構造 要素 属性 名前空間].freeze
+x = +"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bücher>\n"
+1500.times do |i|
+  x << "  <buch nr=\"#{i}\" titel=\"Grüße aus Köln #{i}\">\n    <!-- Eintrag #{i} -->\n"
+  x << "    <inhalt>#{Array.new(40) { JA.sample }.join("、")}。Straße für Größe #{i}.</inhalt>\n"
+  x << "    <code><![CDATA[if (a < b && c > d) { return \"ß\"; }]]></code>\n  </buch>\n"
+end
+x << "</bücher>\n"
+docs["utf8"] = x
+
 docs.select! { |k, _| only.include?(k) } if only
 
 class NullSax < Nokogiri::XML::SAX::Document; end

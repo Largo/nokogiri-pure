@@ -729,6 +729,28 @@ module Nokogiri
           return unless cmp?("CDATA[")
 
           skip(6)
+          if @input.pending_error.nil? && (term = @buf.byteindex("]]>", @cur))
+            # fast path: the section up to the first "]]>" has only allowed chars and no CR
+            len = term - @cur
+            buf = @buf.byteslice(@cur, len)
+            if len <= max_length && !buf.match?(CDATA_SPECIAL_RE)
+              if (nl = buf.byterindex("\n"))
+                @line += buf.count("\n")
+                @col = 4 + buf.byteslice(nl + 1, len - nl - 1).length
+              else
+                @col += buf.length + 3
+              end
+              @cur = term + 3
+              if @disable_sax == 0
+                if (cb = @sax.cdata_block)
+                  cb.call(@user_data, buf)
+                elsif (cb = @sax.characters)
+                  cb.call(@user_data, buf)
+                end
+              end
+              return
+            end
+          end
           r = cur_char
           unless Chars.char?(r)
             fatal_err(ErrCode::ERR_CDATA_NOT_FINISHED)
@@ -757,7 +779,8 @@ module Nokogiri
               seg = @buf.byteslice(@cur, n)
               buf << seg
               advance_text(n)
-              if n >= 2
+              # (the last two chars: a run of 2+ bytes can be a single multibyte char)
+              if seg.length >= 2
                 pending = [seg[-2].ord, seg[-1].ord]
               else
                 pending = [pending[1], seg.ord]
@@ -793,6 +816,7 @@ module Nokogiri
             end
           end
         end
+        CDATA_SPECIAL_RE = /[\r\x00-\x08\x0B\x0C\x0E-\x1F\uFFFD\uFFFE\uFFFF]/
         CDATA_PLAIN_RE = /[^\]\r\x00-\x08\x0B\x0C\x0E-\x1F\uFFFD\uFFFE\uFFFF]+/
 
         def buf_without_last_chars(buf, n)

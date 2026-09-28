@@ -946,6 +946,35 @@ module Nokogiri
 
         # xmlParseCharDataComplex
         def parse_char_data_complex(partial)
+          if @input.pending_error.nil?
+            # fast path: plain chars up to '<', '&' or the end of the input are delivered in the
+            # same XML_PARSER_BIG_BUFFER_SIZE pieces as by the loop below
+            ss = @ss
+            ss.pos = @cur
+            if (n = ss.skip(CHAR_DATA_COMPLEX_RE)) && ((c = @buf.getbyte(@cur + n)).nil? || c == 0x3C || c == 0x26)
+              run = @buf.byteslice(@cur, n)
+              if (nl = run.byterindex("\n"))
+                @line += run.count("\n")
+                @col = 1 + run.byteslice(nl + 1, n - nl - 1).length
+              else
+                @col += run.length
+              end
+              @cur += n
+              if n < XML_PARSER_BIG_BUFFER_SIZE
+                emit_complex_chars(run)
+              else
+                pos = 0
+                while n - pos >= XML_PARSER_BIG_BUFFER_SIZE
+                  cut = pos + XML_PARSER_BIG_BUFFER_SIZE
+                  cut += 1 while cut < n && (run.getbyte(cut) & 0xC0) == 0x80
+                  emit_complex_chars(run.byteslice(pos, cut - pos))
+                  pos = cut
+                end
+                emit_complex_chars(run.byteslice(pos, n - pos)) if pos < n
+              end
+              return
+            end
+          end
           out = +""
           cur = cur_char
           while cur != 0x3C && cur != 0x26 && Chars.char?(cur)
