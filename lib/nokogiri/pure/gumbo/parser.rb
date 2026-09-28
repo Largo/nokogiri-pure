@@ -1759,8 +1759,46 @@ module Nokogiri
           end
         end
 
+        # What handle_in_body_start_tag does with a start tag, by tag: 1 = "any other start tag",
+        # 2 = the block-start branch, 3 = the formatting-element branch, 0 = one of the other
+        # special cases (the whole chain below). Mirrors the order of the checks there.
+        IN_BODY_START_KIND = Array.new(TAG_LAST + 1) do |tag|
+          if tag == TAG_HTML || IN_BODY_HEAD_TAGS[tag] != 0 || tag == TAG_BODY || tag == TAG_FRAMESET
+            0
+          elsif IN_BODY_BLOCK_START[tag] != 0
+            2
+          elsif HEADING_TAGS[tag] != 0 || PRE_LISTING[tag] != 0 || tag == TAG_FORM || tag == TAG_LI ||
+              DD_DT_TAGS[tag] != 0 || tag == TAG_PLAINTEXT || tag == TAG_BUTTON || tag == TAG_A
+            0
+          elsif FORMATTING_START[tag] != 0
+            3
+          elsif tag == TAG_NOBR || APPLET_MARQUEE_OBJECT[tag] != 0 || tag == TAG_TABLE || IN_BODY_VOID[tag] != 0 ||
+              tag == TAG_INPUT || PARAM_SOURCE_TRACK[tag] != 0 || tag == TAG_HR || tag == TAG_TEXTAREA ||
+              tag == TAG_XMP || tag == TAG_IFRAME || tag == TAG_NOEMBED || tag == TAG_NOSCRIPT ||
+              tag == TAG_SELECT || OPTGROUP_OPTION[tag] != 0 || RB_RTC[tag] != 0 || RP_RT[tag] != 0 ||
+              tag == TAG_MATH || tag == TAG_SVG || IN_BODY_IGNORED_START[tag] != 0
+            0
+          else
+            1
+          end
+        end.freeze
+
         def handle_in_body_start_tag(token)
           tag = token.tag
+          case IN_BODY_START_KIND[tag]
+          when 1
+            reconstruct_active_formatting_elements
+            insert_element_from_token(token)
+            return
+          when 2
+            maybe_implicitly_close_p_tag(token)
+            insert_element_from_token(token)
+            return
+          when 3
+            reconstruct_active_formatting_elements
+            add_formatting_element(insert_element_from_token(token))
+            return
+          end
           if tag == TAG_HTML
             parser_add_parse_error(token)
             if has_open_element(TAG_TEMPLATE)
