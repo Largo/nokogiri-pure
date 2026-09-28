@@ -747,8 +747,13 @@ module Nokogiri
           node = @node
           namespace = nil
           if prefix
-            namespace = ns_lookup_sax(prefix)
-            namespace = Tree.search_ns(node.doc, node, prefix) if namespace.nil? && prefix == "xml"
+            if prefix == "xml"
+              # (xmlParserNsLookupSax returns NULL for "xml")
+              namespace = Tree.search_ns(node.doc, node, prefix)
+            else
+              idx = @ns_hash.fetch(prefix, INT_MAX)
+              namespace = idx == INT_MAX || idx < @min_ns_index ? nil : @ns_extra[idx][0]
+            end
           end
           ret = XmlAttr.new(localname, node.doc)
           ret.parent = node
@@ -874,7 +879,13 @@ module Nokogiri
             nb_attributes -= nb_defaulted
           end
           if uri && ret.ns.nil?
-            ret.ns = ns_lookup_sax(prefix)
+            # xmlParserNsLookupSax
+            if prefix.nil?
+              idx = @ns_default_index
+              ret.ns = idx == INT_MAX || idx < @min_ns_index ? nil : @ns_extra[idx][0]
+            else
+              ret.ns = ns_lookup_sax(prefix)
+            end
             ret.ns = Tree.search_ns(doc, ret, prefix) if ret.ns.nil? && prefix == "xml"
             if ret.ns.nil?
               Tree.new_ns(ret, nil, prefix)
