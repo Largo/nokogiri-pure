@@ -8,9 +8,28 @@
 # same classes and methods that ext/nokogiri/*.c defines.
 
 require "stringio"
+require_relative "pure/version"
 
 module Nokogiri
   module Pure
+    # ruby.wasm compiles Ruby code on the JS engine's native stack, where every AST level costs a
+    # large frame and every enclosing `require` eats into the budget, so loading deep files from a
+    # deeply nested require fails with "Maximum call stack size exceeded". ruby.wasm switches Fibers
+    # with Asyncify (unwind to the top-level loop, rewind into the fiber), so a fresh Fiber always
+    # starts on a *shallow* native stack: loading code inside one makes the budget independent of
+    # how deep the caller is. Elsewhere this just yields.
+    WASM = RUBY_PLATFORM.include?("wasm")
+
+    def self.load_shallow(&block)
+      return yield unless WASM
+      return yield if Thread.current[:__nokogiri_pure_shallow]
+
+      Fiber.new do
+        Thread.current[:__nokogiri_pure_shallow] = true
+        block.call
+      end.resume
+    end
+
     LIBXML_VERSION = "2.13.9"
     LIBXSLT_VERSION = "1.1.43"
   end
@@ -111,18 +130,20 @@ module Nokogiri
   module Test; end
 end
 
-require_relative "pure/util"
-require_relative "pure/tree"
-require_relative "pure/errors"
-require_relative "pure/wrap"
-require_relative "pure/encoding"
-require_relative "pure/save"
-require_relative "pure/xpath"
-require_relative "pure/c14n"
-require_relative "pure/xpointer"
-require_relative "pure/xinclude"
-require_relative "pure/xslt"
-require_relative "pure/parser" if File.exist?(File.join(__dir__, "pure", "parser.rb"))
+Nokogiri::Pure.load_shallow do
+  require_relative "pure/util"
+  require_relative "pure/tree"
+  require_relative "pure/errors"
+  require_relative "pure/wrap"
+  require_relative "pure/encoding"
+  require_relative "pure/save"
+  require_relative "pure/xpath"
+  require_relative "pure/c14n"
+  require_relative "pure/xpointer"
+  require_relative "pure/xinclude"
+  require_relative "pure/xslt"
+  require_relative "pure/parser" if File.exist?(File.join(__dir__, "pure", "parser.rb"))
 
-Dir[File.join(__dir__, "pure", "glue", "*.rb")].sort.each { |f| require f }
-Nokogiri::Pure.init_class_table
+  Dir[File.join(__dir__, "pure", "glue", "*.rb")].sort.each { |f| require f }
+  Nokogiri::Pure.init_class_table
+end

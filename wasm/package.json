@@ -1,0 +1,11 @@
+{
+  "name": "nokogiri-pure-wasm",
+  "private": true,
+  "description": "Runs nokogiri-pure under ruby.wasm (Ruby 4.0, browser WASI shim). See run.mjs.",
+  "type": "module",
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2",
+    "@ruby/4.0-wasm-wasi": "2.10.1",
+    "@ruby/wasm-wasi": "2.10.1"
+  }
+}
