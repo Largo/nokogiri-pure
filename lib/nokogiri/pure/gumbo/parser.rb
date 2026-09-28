@@ -1763,6 +1763,12 @@ module Nokogiri
         # What handle_in_body_start_tag does with a start tag, by tag: 1 = "any other start tag",
         # 2 = the block-start branch, 3 = the formatting-element branch, 0 = one of the other
         # special cases (the whole chain below). Mirrors the order of the checks there.
+        # (as lists rather than one long `||` chain: deep ASTs overflow ruby.wasm's compile stack)
+        IN_BODY_SPECIAL_START_TAGS = [TAG_NOBR, TAG_TABLE, TAG_INPUT, TAG_HR, TAG_TEXTAREA, TAG_XMP, TAG_IFRAME,
+          TAG_NOEMBED, TAG_NOSCRIPT, TAG_SELECT, TAG_MATH, TAG_SVG].freeze
+        IN_BODY_SPECIAL_START_TABLES = [APPLET_MARQUEE_OBJECT, IN_BODY_VOID, PARAM_SOURCE_TRACK, OPTGROUP_OPTION, RB_RTC,
+          RP_RT, IN_BODY_IGNORED_START].freeze
+
         IN_BODY_START_KIND = Array.new(TAG_LAST + 1) do |tag|
           if tag == TAG_HTML || IN_BODY_HEAD_TAGS[tag] != 0 || tag == TAG_BODY || tag == TAG_FRAMESET
             0
@@ -1773,11 +1779,7 @@ module Nokogiri
             0
           elsif FORMATTING_START[tag] != 0
             3
-          elsif tag == TAG_NOBR || APPLET_MARQUEE_OBJECT[tag] != 0 || tag == TAG_TABLE || IN_BODY_VOID[tag] != 0 ||
-              tag == TAG_INPUT || PARAM_SOURCE_TRACK[tag] != 0 || tag == TAG_HR || tag == TAG_TEXTAREA ||
-              tag == TAG_XMP || tag == TAG_IFRAME || tag == TAG_NOEMBED || tag == TAG_NOSCRIPT ||
-              tag == TAG_SELECT || OPTGROUP_OPTION[tag] != 0 || RB_RTC[tag] != 0 || RP_RT[tag] != 0 ||
-              tag == TAG_MATH || tag == TAG_SVG || IN_BODY_IGNORED_START[tag] != 0
+          elsif IN_BODY_SPECIAL_START_TAGS.include?(tag) || IN_BODY_SPECIAL_START_TABLES.any? { |t| t[tag] != 0 }
             0
           else
             1
