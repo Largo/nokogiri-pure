@@ -893,8 +893,15 @@ module Nokogiri
               buf = nil
               shrink_macro
             end
-            cur = current_char
-            l = @clen
+            # CUR_CHAR(l), for a plain ASCII char that can't make it grow the input
+            c = @buf.getbyte(@cur)
+            if c && c < 0x80 && c != 0 && @buf.bytesize - @cur >= INPUT_CHUNK
+              cur = c
+              l = @clen = 1
+            else
+              cur = current_char
+              l = @clen
+            end
           end
           deliver_chars(buf) if buf && !buf.empty?
         end

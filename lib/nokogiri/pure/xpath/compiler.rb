@@ -78,7 +78,7 @@ module Nokogiri
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
           :dos_op, :impure, :std_fn, :fused, :sorted_axis,
-          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step, :num_cmp, :multi, :multi_range
+          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step, :num_cmp, :multi, :multi_range, :cmp_step, :cmp_value, :cmp_swap
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -124,6 +124,7 @@ module Nokogiri
             XPath.precompute_args(op)
           end
           @steps.each { |op| XPath.precompute_num_cmp(op) if op.op == OP_EQUAL || op.op == OP_CMP }
+          @steps.each { |op| XPath.precompute_cmp(op) if op.op == OP_CMP }
           @root = @last >= 0 ? @steps[@last] : nil
           self
         end
@@ -303,6 +304,23 @@ module Nokogiri
           h1 = op.c1 && num_height(op.c1, level + 1)
           h2 = h1 && op.c2 && num_height(op.c2, level + 1)
           h2 && [h1, h2].max
+        end
+      end
+
+      # "step < literal" / "literal < step" & co. where the step is a fused context-node step
+      def self.precompute_cmp(op)
+        c1 = op.c1
+        c2 = op.c2
+        return if c1.nil? || c2.nil?
+
+        if c1.op == OP_COLLECT && c1.fused && c2.op == OP_VALUE
+          op.cmp_step = c1
+          op.cmp_value = c2.value4
+          op.cmp_swap = false
+        elsif c2.op == OP_COLLECT && c2.fused && c1.op == OP_VALUE
+          op.cmp_step = c2
+          op.cmp_value = c1.value4
+          op.cmp_swap = true
         end
       end
 

@@ -1039,6 +1039,7 @@ module Nokogiri
 
         def has_an_element_in_specific_scope(expected, negate, tags)
           open_elements = @open_elements
+          single = expected.is_a?(Integer)
           i = open_elements.length - 1
           while i >= 0
             node = open_elements[i]
@@ -1049,7 +1050,7 @@ module Nokogiri
             node_tag = node.tag
             node_ns = node.tag_namespace
             if node_ns == NAMESPACE_HTML
-              if expected.is_a?(Integer)
+              if single
                 return true if node_tag == expected
               elsif expected.include?(node_tag)
                 return true

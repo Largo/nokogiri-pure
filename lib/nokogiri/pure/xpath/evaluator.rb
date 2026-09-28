@@ -460,6 +460,11 @@ module Nokogiri
               @depth -= 1
               return
             end
+            if op.cmp_step && @depth < XPATH_MAX_RECURSION_DEPTH && (n = ctx.node) && n.type != NAMESPACE_DECL
+              @value_tab.push(compare_step(op, n))
+              @depth -= 1
+              return
+            end
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             @value_tab.push(compare_values(op.value != 0, op.value2 != 0))
@@ -679,6 +684,20 @@ module Nokogiri
             else b == 0 ? NAN : XPath.fmod(a, b)
             end
           end
+        end
+
+        # a comparison of a fused context-node step with a literal (Op#cmp_step), from the
+        # context node +n+: compare_values without the value stack
+        def compare_step(op, n)
+          step = op.cmp_step
+          seq = []
+          plan = step.plan
+          FastCollect.run(plan[0], n, @context.doc, step.value5, step.value4 ? op_uri(step) : nil, seq, plan[1])
+          # (what the generic route leaves behind: the discarded step result)
+          @sorted = nil if step.sorted_axis
+          @ns_free = nil
+          inf = op.value != 0
+          compare_node_set_value(op.cmp_swap ? !inf : inf, op.value2 != 0, seq, op.cmp_value)
         end
 
         # count(<sibling axis>::test) from +n+ for the fused COLLECT op +st+. The memo lives for
@@ -997,6 +1016,10 @@ module Nokogiri
                   n.type != NAMESPACE_DECL
                 a = num_eval(op.c1)
                 return compare_numbers(op.value != 0, op.value2 != 0, a, num_eval(op.c2))
+              end
+              if op.cmp_step && @depth + 1 < XPATH_MAX_RECURSION_DEPTH && (n = @context.node) &&
+                  n.type != NAMESPACE_DECL
+                return compare_step(op, n)
               end
 
               comp_op_eval(op)
