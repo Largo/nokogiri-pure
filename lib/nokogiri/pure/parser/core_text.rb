@@ -187,8 +187,29 @@ module Nokogiri
 
         # ---- character references ---------------------------------------------------------------
 
+        CHAR_REF_DEC_RE = /&#([0-9]{1,7});/
+        CHAR_REF_HEX_RE = /&#x([0-9a-fA-F]{1,6});/
+
         # xmlParseCharRef
         def parse_char_ref
+          if @input.pending_error.nil?
+            # fast path: a short well-formed reference to an allowed char
+            ss = @ss
+            ss.pos = @cur
+            n = if @buf.getbyte(@cur + 2) == 0x78
+              (m = ss.skip(CHAR_REF_HEX_RE)) && (val = ss[1].to_i(16))
+              m
+            else
+              (m = ss.skip(CHAR_REF_DEC_RE)) && (val = ss[1].to_i)
+              m
+            end
+            if n && val < 0x110000 && Chars.char?(val)
+              @cur += n
+              @col += n
+              return val
+            end
+            val = nil
+          end
           val = 0
           count = 0
           if cur_byte == 0x26 && nxt(1) == 0x23 && nxt(2) == 0x78
@@ -757,18 +778,24 @@ module Nokogiri
         # pieces at 4000-byte read boundaries like in libxml2.
         def parse_char_data_internal(partial)
           # Fast path: a run of plain ASCII text/blanks (no CR, ']' or controls) ending at '<' or '&'
-          # inside the current read window. libxml2 delivers it as one chunk; the areBlanks
-          # dispatch below is the one its loop applies to such a run.
+          # inside the current read window: libxml2 delivers it as one chunk, with the areBlanks
+          # dispatch below (the one its loop applies to such a run). A run ending at a non-ASCII
+          # char is delivered the same way, then xmlParseCharDataComplex takes over (as in C).
           inp = @input
           if inp.pending_error.nil?
             cur = @cur
             ss = @ss
             ss.pos = cur
-            if (n = ss.skip(TEXT_RUN_RE))
-              buf = @buf
-              e = cur + n
-              c = buf.getbyte(e)
-              if (c == 0x3C || c == 0x26) && (inp.windows.nil? || e < inp.window_limit(cur))
+            n = ss.skip(TEXT_RUN_RE) || 0
+            buf = @buf
+            e = cur + n
+            c = buf.getbyte(e)
+            if c ? ((c == 0x3C || c == 0x26 || (c >= 0x80 && @disable_sax == 0)) &&
+                    (inp.windows.nil? || e < inp.window_limit(cur))) :
+                # a run up to the end of the input: delivered, then xmlParseCharDataComplex finds
+                # nothing (with SAX disabled, C restores line/col: left to the slow path)
+                (@disable_sax == 0 && e == @end && (inp.windows.nil? || inp.window_limit(cur) >= e))
+              if n > 0
                 tmp = buf.byteslice(cur, n)
                 if (nl = tmp.byterindex("\n"))
                   @line += tmp.count("\n")
@@ -777,24 +804,26 @@ module Nokogiri
                   @col += n
                 end
                 @cur = e
-                return if @disable_sax != 0
-
-                sax = @sax
-                chars = sax.characters
-                if !sax.ignorable_whitespace.equal?(chars) && ((c = tmp.getbyte(0)) == 0x20 || c == 0x0A || c == 0x09)
-                  if are_blanks(tmp, 0)
-                    sax.ignorable_whitespace&.call(@user_data, tmp)
+                if @disable_sax == 0
+                  sax = @sax
+                  chars = sax.characters
+                  if !sax.ignorable_whitespace.equal?(chars) && ((c0 = tmp.getbyte(0)) == 0x20 || c0 == 0x0A || c0 == 0x09)
+                    if are_blanks(tmp, 0)
+                      sax.ignorable_whitespace&.call(@user_data, tmp)
+                    else
+                      chars&.call(@user_data, tmp)
+                      self.space = -2 if space == -1
+                    end
+                  elsif chars.equal?(SAX2::CHARACTERS)
+                    @user_data.sax2_text(tmp, TEXT_NODE)
                   else
                     chars&.call(@user_data, tmp)
-                    self.space = -2 if space == -1
                   end
-                elsif chars.equal?(SAX2::CHARACTERS)
-                  @user_data.sax2_text(tmp, TEXT_NODE)
-                else
-                  chars&.call(@user_data, tmp)
                 end
-                return
               end
+              return if c.nil? || c < 0x80
+
+              return parse_char_data_complex(partial)
             end
           end
           line = @line
@@ -973,11 +1002,19 @@ module Nokogiri
           return if @disable_sax != 0
 
           sax = @sax
-          if are_blanks(str, 0)
+          chars = sax.characters
+          if chars.equal?(sax.ignorable_whitespace)
+            # (areBlanks returns 0 right away)
+            if chars.equal?(SAX2::CHARACTERS)
+              @user_data.sax2_text(str, TEXT_NODE)
+            else
+              chars&.call(@user_data, str)
+            end
+          elsif are_blanks(str, 0)
             sax.ignorable_whitespace&.call(@user_data, str)
           else
-            sax.characters&.call(@user_data, str)
-            self.space = -2 if !sax.characters.equal?(sax.ignorable_whitespace) && space == -1
+            chars&.call(@user_data, str)
+            self.space = -2 if space == -1
           end
         end
 

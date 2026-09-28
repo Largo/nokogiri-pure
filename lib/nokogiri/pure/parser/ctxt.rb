@@ -382,7 +382,9 @@ module Nokogiri
             @end = @buf.bytesize
             @line = inp.line
             @col = inp.col
-            @ss = StringScanner.new(@buf)
+            ss = inp.scanner
+            ss = inp.scanner = StringScanner.new(@buf) unless ss && ss.string.equal?(@buf)
+            @ss = ss
           else
             @buf = +""
             @cur = 0

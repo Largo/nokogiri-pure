@@ -1088,7 +1088,11 @@ module Nokogiri
             return if value == 0
 
             if @disable_sax == 0 && (cb = @sax.characters)
-              cb.call(@user_data, utf8_chr(value))
+              if cb.equal?(SAX2::CHARACTERS)
+                @user_data.sax2_text(utf8_chr(value), TEXT_NODE)
+              else
+                cb.call(@user_data, utf8_chr(value))
+              end
             end
             return
           end

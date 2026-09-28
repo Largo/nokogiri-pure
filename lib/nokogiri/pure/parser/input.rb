@@ -13,7 +13,8 @@ module Nokogiri
       class Input
         attr_accessor :buf, :cur, :line, :col, :flags, :entity, :filename, :id, :version,
           :consumed, :raw, :raw_done, :decoder, :bad, :pending_error, :buf_error, :trailing_partial,
-          :eof, :held, :free_base, :encoder_name, :io, :io_error, :windows, :raw_chunks
+          :eof, :held, :free_base, :encoder_name, :io, :io_error, :windows, :raw_chunks,
+          :scanner # a StringScanner over buf kept by the parser between input switches
 
         def initialize
           @buf = +""
@@ -40,6 +41,7 @@ module Nokogiri
           @io_error = nil
           @windows = nil
           @raw_chunks = nil
+          @scanner = nil
           reset_window_cache
         end
 
