@@ -45,7 +45,7 @@ Dir.mktmpdir do |dir|
     next unless verbose || fails <= 20
 
     puts "=== FAIL #{kind} ##{i} opts=#{c[1]} enc=#{c[2].inspect} mode=#{c[5].inspect} input=#{c[0].inspect[0, 300]}"
-    %i[exception message crash bt xml errors tree url log pos raised nodes doc].each do |k|
+    %i[exception message crash bt xml errors tree url log pos raised nodes doc verrors ids].each do |k|
       next if a[i][k] == b[i][k]
 
       puts "  #{k}:"

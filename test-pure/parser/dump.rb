@@ -119,6 +119,14 @@ module ParserDump
     { exception: e.class.name, message: e.message }
   end
 
+  def run_validate(input, opts)
+    d = Nokogiri::XML::Document.read_memory(input, nil, nil, opts)
+    errs = d.validate
+    { verrors: errs&.map { |e| err(e) }&.sort, errors: d.errors.map { |e| err(e) }, ids: (d.xpath("//*[@id]").map { |n| n["id"] } rescue nil) }
+  rescue => e
+    { exception: e.class.name, message: e.message }
+  end
+
   def run_io(input, opts, encoding)
     d = Nokogiri::XML::Document.read_io(StringIO.new(input), nil, encoding, opts)
     { xml: d.to_xml, tree: node(d), errors: d.errors.map { |e| err(e) } }
@@ -131,6 +139,7 @@ module ParserDump
     when nil, :doc then run(input, opts, encoding, url)
     when :sax then run_sax(input, opts, encoding)
     when :io then run_io(input, opts, encoding)
+    when :validate then run_validate(input, opts)
     when Array
       case mode[0]
       when :push then run_push(input, opts, mode[1])
@@ -143,7 +152,7 @@ module ParserDump
     d = Nokogiri::XML::Document.read_memory(input, url, encoding, opts)
     xml = begin
       # notation tables are hash-ordered (randomized) in libxml2
-      d.to_xml.gsub(/(?:^<!NOTATION[^\n]*\n)+/) { |m| m.lines.sort.join }
+      d.to_xml.gsub(/(?:^<!NOTATION .*? >\n)+/m) { |m| m.scan(/<!NOTATION .*? >\n/m).sort.join }
     rescue => e
       "to_xml raised #{e.class}"
     end

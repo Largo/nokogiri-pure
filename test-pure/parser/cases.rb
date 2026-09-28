@@ -84,6 +84,33 @@ module ParserCases
   CONTEXTS = ["<root/>", "<root xmlns:p='urn:p'><c ctx='1'/></root>", "<!DOCTYPE r [<!ENTITY e 'E'>]><r/>",
     "<?xml version='1.0' encoding='ISO-8859-1'?><r/>"].freeze
 
+  VALID = [
+    "<!DOCTYPE a [<!ELEMENT a (b,c)><!ELEMENT b EMPTY><!ELEMENT c (#PCDATA)>]><a><b/><c>x</c></a>",
+    "<!DOCTYPE a [<!ELEMENT a (b,c)><!ELEMENT b EMPTY><!ELEMENT c (#PCDATA)>]><a><c>x</c><b/></a>",
+    "<!DOCTYPE a [<!ELEMENT a (b,c)><!ELEMENT b EMPTY><!ELEMENT c (#PCDATA)>]><a><b>t</b></a>",
+    "<!DOCTYPE a [<!ELEMENT a (b|c)*><!ELEMENT b EMPTY><!ELEMENT c ANY>]><a>text<b/></a>",
+    "<!DOCTYPE a [<!ELEMENT a (#PCDATA|b)*><!ELEMENT b EMPTY>]><a>x<b/>y<c/></a>",
+    "<!DOCTYPE a [<!ELEMENT a (#PCDATA)>]><a>x<!-- c --><?p?><b/></a>",
+    "<!DOCTYPE a [<!ELEMENT a (b+)><!ELEMENT b EMPTY>]><a/>",
+    "<!DOCTYPE a [<!ELEMENT a (b?,c*)><!ELEMENT b EMPTY><!ELEMENT c EMPTY>]><a><c/><c/><b/></a>",
+    "<!DOCTYPE a [<!ELEMENT a ((b,c)|(b,d))><!ELEMENT b EMPTY><!ELEMENT c EMPTY><!ELEMENT d EMPTY>]><a><b/><d/></a>",
+    "<!DOCTYPE a [<!ELEMENT a EMPTY><!ATTLIST a x CDATA #REQUIRED y (p|q) 'p' z ID #IMPLIED>]><a y='r' z='1x'/>",
+    "<!DOCTYPE a [<!ELEMENT a (b*)><!ELEMENT b EMPTY><!ATTLIST b id ID #IMPLIED ref IDREF #IMPLIED refs IDREFS #IMPLIED>]><a><b id='x' ref='y'/><b id='x' refs='x z'/></a>",
+    "<!DOCTYPE a [<!ELEMENT a EMPTY><!ATTLIST a f CDATA #FIXED 'v'>]><a f='w'/>",
+    "<!DOCTYPE a [<!ELEMENT a EMPTY><!ATTLIST a n NOTATION (x) #IMPLIED><!NOTATION x SYSTEM 'x'>]><a n='y'/>",
+    "<!DOCTYPE a [<!ELEMENT a EMPTY><!ATTLIST a e ENTITY #IMPLIED es ENTITIES #IMPLIED><!ENTITY u SYSTEM 'u' NDATA x><!NOTATION x SYSTEM 'x'><!ENTITY t 'txt'>]><a e='t' es='u v'/>",
+    "<!DOCTYPE b [<!ELEMENT a EMPTY>]><a/>", "<!DOCTYPE a [<!ELEMENT a EMPTY>]><a>x</a>", "<!DOCTYPE a [<!ELEMENT a EMPTY>]><a><b/></a>",
+    "<!DOCTYPE a [<!ELEMENT a ANY><!ELEMENT a EMPTY>]><a/>", "<!DOCTYPE a [<!ELEMENT a (#PCDATA|b|b)*>]><a/>",
+    "<!DOCTYPE a [<!ELEMENT a ((b,c)|(b,d))>]><a/>", "<!DOCTYPE a [<!ELEMENT a (b)><!ATTLIST a id ID 'x'>]><a/>",
+    "<!DOCTYPE a [<!ELEMENT a ANY><!ATTLIST a xmlns CDATA #FIXED 'urn:x'>]><a xmlns='urn:y'/>",
+    "<!DOCTYPE p:a [<!ELEMENT p:a (p:b)><!ELEMENT p:b EMPTY><!ATTLIST p:a xmlns:p CDATA #FIXED 'urn:p'>]><p:a xmlns:p='urn:p'><p:b/></p:a>",
+    "<!DOCTYPE a [<!ELEMENT a (b)><!ELEMENT b (#PCDATA)><!ENTITY e '<b>x</b>'>]><a>&e;</a>",
+    "<!DOCTYPE a [<!ELEMENT a (b)><!ELEMENT b EMPTY>]><a>\n  <b/>\n</a>", "<!DOCTYPE a [<!ELEMENT a (b)><!ELEMENT b EMPTY>]><a><![CDATA[x]]><b/></a>",
+    "<!DOCTYPE a [<!ELEMENT a (b,(c|d)+,e?)*><!ELEMENT b EMPTY><!ELEMENT c EMPTY><!ELEMENT d EMPTY><!ELEMENT e EMPTY>]><a><b/><c/><d/><b/><e/></a>",
+    "<!DOCTYPE a><a/>", "<a/>", "<!DOCTYPE a [<!ATTLIST a x CDATA #IMPLIED>]><a x='1' y='2'/>",
+    "<!DOCTYPE a [<!ELEMENT a EMPTY><!ATTLIST a x NMTOKEN #IMPLIED y NMTOKENS #IMPLIED z IDREF #IMPLIED>]><a x='a b' y=' a  b ' z='1'/>",
+  ].freeze
+
   FIXTURES = %w[staff.xml address_book.xml po.xml atom.xml snuggles.xml valid_bar.xml bogus.xml exslt.xml
     iso-8859-1.xml namespace_pressure_test.xml xinclude.xml to_be_xincluded.xml shift_jis.xml].freeze
 
@@ -152,6 +179,12 @@ module ParserCases
       add.("fuzz", src, n.even? ? DEFAULT : STRICT)
       add.("fuzzsax", src, RECOVER, nil, nil, :sax) if n % 5 == 0
       add.("fuzzpush", src, DEFAULT, nil, nil, [:push, 1 + rng.rand(9)]) if n % 5 == 1
+    end
+    VALID.each do |v|
+      add.("valid_parse", v, DEFAULT | DTDVALID)
+      add.("valid_parse_strict", v, STRICT | DTDVALID)
+      add.("validate", v, DEFAULT, nil, nil, :validate)
+      add.("valid_sax", v, 1 | 16, nil, nil, [:push, 3])
     end
     add.("enc", "<a>\xe9</a>".b, DEFAULT, "ISO-8859-1")
     add.("enc", "<a>x</a>", DEFAULT, "bogus")
