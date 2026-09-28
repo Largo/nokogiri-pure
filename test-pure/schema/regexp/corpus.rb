@@ -7,6 +7,8 @@ require "nokogiri/pure/xmlregexp"
 
 module RegexpCorpus
   SUITES = %w[syntax errors categories blocks fuzz_regexp fuzz_bad models fuzz_models programs].freeze
+  # extra seeds, run explicitly: ruby run_diff.rb fuzz_regexp2 fuzz_models2 programs2
+  EXTRA_SUITES = %w[fuzz_regexp2 fuzz_models2 programs2].freeze
   X = Nokogiri::Pure::XmlRegexp
 
   POOL = (%w[a b c d e x y z A B Z 0 1 5 9 _ - . : ; , ! ? * + ( ) [ ] { } | \\ ^ $ # @ / ' " & < > = ~ `] +
@@ -260,9 +262,13 @@ module RegexpCorpus
     out
   end
 
-  def suite_fuzz_regexp
-    rng = Random.new(5)
-    Array.new(2500) do
+  def suite_fuzz_regexp2 = suite_fuzz_regexp(29, 4000)
+  def suite_fuzz_models2 = suite_fuzz_models(31, 1500)
+  def suite_programs2 = suite_programs(37, 1500)
+
+  def suite_fuzz_regexp(seed = 5, n = 2500)
+    rng = Random.new(seed)
+    Array.new(n) do
       g = Gen.new(rng)
       pat, samp = g.alternation(0)
       samples = Array.new(6) { samp.call }.uniq
@@ -383,19 +389,19 @@ module RegexpCorpus
     end
   end
 
-  def suite_fuzz_models
-    rng = Random.new(13)
-    Array.new(700) do
+  def suite_fuzz_models(seed = 13, n = 700)
+    rng = Random.new(seed)
+    Array.new(n) do
       t = random_tree(rng)
       t = ["seq", 1, 1, [t]] unless %w[seq choice all].include?(t[0])
       model_case(t, runs_for(rng, t, 10))
     end
   end
 
-  def suite_programs
-    rng = Random.new(17)
+  def suite_programs(seed = 17, n = 700)
+    rng = Random.new(seed)
     toks = %w[a b c]
-    Array.new(700) do
+    Array.new(n) do
       prog = []
       nstates = 1
       st = -> { rng.rand(6) == 0 ? nil : rng.rand(nstates) }
