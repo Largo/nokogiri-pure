@@ -21,8 +21,7 @@ module Nokogiri
 
         # "<name>" or "<name/>" at @cur
         def lean_start_tag
-          return false if @disable_sax != 0 || @validate != 0 || @in_subset != 0 || @atts_default ||
-            @input.pending_error
+          return false if @disable_sax != 0 || @validate != 0 || @in_subset != 0 || @input.pending_error
 
           limit = (@options & PARSE_HUGE) != 0 ? 2048 : 256
           return false if @name_tab.length > limit || @node_tab.length > limit
@@ -42,15 +41,19 @@ module Nokogiri
 
             idx = @ns_hash.fetch(prefix, INT_MAX)
             return false if idx == INT_MAX || idx < @min_ns_index || @ns_tab[idx][1].empty?
+
+            lname = qname.byteslice(colon + 1, n - colon - 1)
+          else
+            lname = qname
           end
+          # (no attribute defaulted from the DTD for this element)
+          return false if @atts_default && @atts_default[[lname, prefix]]
+
           e = cur + 1 + n
           dcol = n + 1
           atts = nil
           if b.getbyte(e) == 0x20
-            # attributes: single-space separated, unprefixed, not xmlns, plain values, distinct names
-            return false if @atts_special
-
-            atts, e, dcol = lean_attributes(e, dcol)
+            atts, e, dcol = lean_attributes(e, dcol, prefix, lname)
             return false if atts.nil?
           end
           # xmlParseElementStart: spacePush
@@ -67,7 +70,7 @@ module Nokogiri
           @ns_element_id += 1
           if colon
             prefix = -prefix
-            name = -qname.byteslice(colon + 1, n - colon - 1)
+            name = -lname
             uri = @ns_tab[idx][1]
           else
             name = -qname
@@ -153,7 +156,7 @@ module Nokogiri
         # dcol], or nil if the general path is needed. Taken: single-space separated, no xmlns
         # declarations, prefixes bound in scope (or "xml" without an xml:lang check or an invalid
         # xml:space), plain values, distinct local names.
-        def lean_attributes(e, dcol)
+        def lean_attributes(e, dcol, eprefix, elocal)
           ss = @ss
           b = @buf
           atts = []
@@ -173,6 +176,9 @@ module Nokogiri
             return nil if name == "xmlns" || n > XML_MAX_NAME_LENGTH
 
             value = ss[3] || ss[4]
+            # a value the DTD normalizes is taken as is only without spaces
+            return nil if @atts_special && value.include?(" ") && special_attr?(eprefix, elocal, prefix, name)
+
             atts << name << prefix << value
             dcol += 1 + (value.ascii_only? ? n : n - value.bytesize + value.length)
             e += 1 + n
