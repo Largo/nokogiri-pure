@@ -355,7 +355,10 @@ module XSLTInlineCases
       <xsl:template match="/"><r><xsl:value-of select="count(document('does-not-exist.xml'))"/></r></xsl:template>
     X
     ["document-uris", <<~X],
-      <xsl:template match="/"><r><xsl:value-of select="count(document('a b.xml'))"/>|<xsl:value-of select="count(document('default.xml#i2'))"/>|<xsl:value-of select="document('default.xml#xpointer(//item[3])')"/>|<xsl:value-of select="count(document('default.xml', /))"/>|<xsl:value-of select="count(document(//nothing))"/>|<xsl:value-of select="count(document('%64efault.xml'))"/></r></xsl:template>
+      <xsl:template match="/"><r><xsl:value-of select="count(document('default.xml#i2'))"/>|<xsl:value-of select="document('default.xml#xpointer(//item[3])')"/>|<xsl:value-of select="count(document('default.xml', /))"/>|<xsl:value-of select="count(document(//nothing))"/>|<xsl:value-of select="count(document('%64efault.xml'))"/></r></xsl:template>
+    X
+    ["document-bad-uri", <<~X],
+      <xsl:template match="/"><r><xsl:value-of select="count(document('a b.xml'))"/></r></xsl:template>
     X
     ["document-nodeset-arg", <<~X],
       <xsl:template match="/"><xsl:variable name="names"><n>default.xml</n><n>default.xml</n></xsl:variable><r><xsl:value-of select="count(document(exsl:node-set($names)/n)//item)"/></r></xsl:template>
