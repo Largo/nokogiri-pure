@@ -36,6 +36,23 @@ module Nokogiri
           @buf.byteindex(str, start)
         end
 
+        # at the end of push input: an incomplete trailing UTF-8 sequence that was held back is
+        # handed to the parser (xmlCurrentChar sees it as incomplete); for converted input, bytes
+        # left in the decoder make "Truncated multi-byte sequence at EOF"
+        def flush_held_bytes
+          inp = @input
+          return if inp.raw.nil?
+
+          if inp.decoder
+            inp.trailing_partial = true if inp.decoder.pending? && inp.pending_error.nil?
+          elsif inp.held.to_i > 0
+            save_registers
+            inp.eof = true
+            inp.fill
+            refresh_buffer
+          end
+        end
+
         # xmlParseLookupChar
         def lookup_char(c)
           start = @check_index == 0 ? @cur + 1 : @cur + @check_index
@@ -210,9 +227,39 @@ module Nokogiri
           end
         end
 
+        # xmlParserShrink for the push parser: drop consumed input (keeping LINE_LEN bytes)
+        def push_shrink
+          inp = @input
+          return if @cur <= 4096 || !inp.equal?(@input_tab[0])
+
+          drop = @cur - LINE_LEN
+          if inp.raw
+            if inp.decoder
+              inp.raw = inp.raw.byteslice(inp.raw_done, inp.raw.bytesize - inp.raw_done)
+              inp.raw_done = 0
+            else
+              rq = inp.raw_offset(drop)
+              inp.raw = inp.raw.byteslice(rq, inp.raw.bytesize - rq)
+              inp.raw_done -= rq
+            end
+          end
+          if inp.bad
+            inp.bad = inp.bad.filter_map { |b| b[0] >= drop ? [b[0] - drop, b[1], b[2]] : nil }
+            inp.bad = nil if inp.bad.empty?
+          end
+          inp.buf = @buf.byteslice(drop, @buf.bytesize - drop)
+          inp.consumed += drop
+          @cur -= drop
+          inp.cur = @cur
+          @buf = inp.buf
+          @ss = StringScanner.new(@buf)
+          @end = @buf.bytesize
+        end
+
         # xmlParseTryOrFinish
         def parse_try_or_finish(terminate)
           ret = 0
+          push_shrink if @instate != XML_PARSER_START && @instate != XML_PARSER_XML_DECL
           while @disable_sax == 0
             avail = @end - @cur
             break if avail < 1
@@ -522,12 +569,8 @@ module Nokogiri
           end
           if chunk && !chunk.empty?
             return @err_no if push_bytes(chunk, eof: false) < 0
-          elsif terminate
-            push_bytes("".b, eof: true)
           end
-          if terminate && @input.held.to_i > 0
-            push_bytes("".b, eof: true)
-          end
+          flush_held_bytes if terminate
 
           parse_try_or_finish(terminate)
 

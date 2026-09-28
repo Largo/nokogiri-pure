@@ -767,7 +767,10 @@ module Nokogiri
           end
           ctxt.nodemem = -1
           append_child(ctxt, ret)
-          return if ctxt.node_push(ret) < 0
+          if ctxt.node_push(ret) < 0
+            Tree.unlink_node(ret)
+            return
+          end
 
           if nb_defaulted != 0 && (ctxt.loadsubset & XML_COMPLETE_ATTRS) == 0
             nb_attributes -= nb_defaulted

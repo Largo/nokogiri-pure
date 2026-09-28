@@ -1295,7 +1295,7 @@ module Nokogiri
         # xmlNewEntityInputStream
         def new_entity_input_stream(ent)
           if ent.content
-            input = new_input_string(ent.content)
+            input = new_input_string(Ctxt.c_string(ent.content))
           elsif ent.uri
             input = Loader.load_external_entity(ent.uri, ent.external_id, self)
           else

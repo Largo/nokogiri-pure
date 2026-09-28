@@ -13,7 +13,7 @@ module Nokogiri
       class Input
         attr_accessor :buf, :cur, :line, :col, :flags, :entity, :filename, :id, :version,
           :consumed, :raw, :raw_done, :decoder, :bad, :pending_error, :buf_error, :trailing_partial,
-          :eof, :held, :free_base, :encoder_name, :io, :io_error
+          :eof, :held, :free_base, :encoder_name, :io, :io_error, :windows, :raw_chunks
 
         def initialize
           @buf = +""
@@ -38,6 +38,56 @@ module Nokogiri
           @encoder_name = nil
           @io = nil
           @io_error = nil
+          @windows = nil
+          @raw_chunks = nil
+        end
+
+        READ_CHUNK = 4000
+
+        # raw offsets where libxml2's successive 4000-byte reads end (xmlParserInputBufferGrow)
+        def raw_boundaries
+          return @raw_boundaries if @raw_boundaries
+
+          total = @raw ? @raw.bytesize : @buf.bytesize
+          out = []
+          if @raw_chunks
+            acc = 0
+            @raw_chunks.each do |n|
+              acc += n
+              out << acc if acc < total
+            end
+          else
+            q = READ_CHUNK
+            while q < total
+              out << q
+              q += READ_CHUNK
+            end
+          end
+          @raw_boundaries = out
+        end
+
+        # buffer offset for raw offset +q+ in identity (UTF-8) mode
+        def buf_offset(q)
+          return q if @bad.nil? || @bad.empty?
+
+          n = 0
+          @bad.each { |b| n += 1 if b[0] - 2 * n < q }
+          q + 2 * n
+        end
+
+        # buffer offsets where the reads end (pull mode)
+        def compute_windows
+          @windows = raw_boundaries.map { |q| buf_offset(q) }
+        end
+
+        # first read boundary at least INPUT_CHUNK bytes after +pos+ (else the buffer end)
+        def window_limit(pos)
+          w = @windows
+          return @buf.bytesize if w.nil?
+
+          target = pos + INPUT_CHUNK
+          i = w.bsearch_index { |x| x >= target }
+          i ? w[i] : @buf.bytesize
         end
 
         def encoder?
@@ -50,7 +100,9 @@ module Nokogiri
           @raw_done = 0
           @eof = eof
           @buf = +""
+          @raw_boundaries = nil
           fill
+          compute_windows if eof
         end
 
         # Convert pending raw bytes into buf
@@ -61,6 +113,10 @@ module Nokogiri
           return if rest <= 0 && !(@eof && @decoder)
 
           chunk = @raw_done.zero? && rest == @raw.bytesize ? @raw : @raw.byteslice(@raw_done, rest)
+          if @decoder && @eof && @windows && !@raw_boundaries.empty?
+            fill_windowed
+            return
+          end
           if @decoder
             out, status = @decoder.convert(chunk, @eof)
             if status == :ok
@@ -84,6 +140,29 @@ module Nokogiri
             @held = held
             append(str)
           end
+        end
+
+        # decode the rest of raw read-chunk by read-chunk, recording where each read ends in buf
+        def fill_windowed
+          bounds = raw_boundaries.select { |q| q > @raw_done }
+          @windows = @windows.select { |w| w < @buf.bytesize }
+          start = @raw_done
+          (bounds + [@raw.bytesize]).each_with_index do |q, i|
+            last = i == bounds.size
+            piece = @raw.byteslice(start, q - start)
+            out, status = @decoder.convert(piece, last)
+            append(out)
+            start = q
+            if status == :error
+              @raw_done = @raw.bytesize
+              @pending_error = ErrCode::ERR_INVALID_ENCODING
+              return
+            elsif status == :partial
+              @trailing_partial = true
+            end
+            @windows << @buf.bytesize unless last
+          end
+          @raw_done = @raw.bytesize
         end
 
         def append(str)
@@ -113,6 +192,7 @@ module Nokogiri
           @encoder_name = handler.name
           @raw_done = q
           @held = 0
+          @windows = @windows&.select { |w| w < pos }
           fill
         end
 

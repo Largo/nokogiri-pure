@@ -69,7 +69,7 @@ module Nokogiri
       module_function
 
       # read everything from a Ruby IO like noko_io_read; returns [bytes, error?]
-      def read_all_io(io)
+      def read_all_io(io, sizes = nil)
         out = +"".b
         loop do
           chunk = begin
@@ -82,6 +82,7 @@ module Nokogiri
           break if chunk.empty?
 
           out << chunk.b
+          sizes << chunk.bytesize if sizes
         end
         [out, false]
       end
@@ -98,8 +99,9 @@ module Nokogiri
       def read_io(io, url, encoding, options)
         ctxt = Ctxt.new
         ctxt.use_options(options)
-        bytes, _err = read_all_io(io)
-        input = ctxt.new_input_from_bytes(bytes, url, encoding)
+        sizes = []
+        bytes, _err = read_all_io(io, sizes)
+        input = ctxt.new_input_from_bytes(bytes, url, encoding, raw_chunks: sizes)
         ctxt.parse_document_with(input)
       end
 

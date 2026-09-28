@@ -350,6 +350,12 @@ module Nokogiri
 
         # xmlNewInputFromFile
         def new_input_from_file(ctxt, filename)
+          if filename.downcase.start_with?("http://")
+            # libxml2's nanohttp client: without network access the fetch fails and
+            # xmlCheckHTTPInput reports a load error for the (not yet named) input
+            ctxt&.err_io(ErrCode::IO_LOAD_ERROR, "<null>")
+            return nil
+          end
           code, bytes = open_resource(filename)
           if bytes.nil?
             ctxt&.err_io(code, filename)

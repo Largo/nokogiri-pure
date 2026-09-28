@@ -370,11 +370,9 @@ module Nokogiri
             @ss.pos = @cur
             n = @ss.skip(ASCII_NAME_RE)
             nc = @buf.getbyte(@cur + n)
-            if nc && nc > 0 && nc < 0x80
-              if n > max_length
-                fatal_err(ErrCode::ERR_NAME_TOO_LONG, "Name")
-                return nil
-              end
+            # (a name longer than the limit always crosses libxml2's 4000-byte read chunks, which
+            # makes the fast path give up: the complex path reports the error)
+            if nc && nc > 0 && nc < 0x80 && n <= max_length
               ret = -@buf.byteslice(@cur, n)
               @cur += n
               @col += n
@@ -481,11 +479,7 @@ module Nokogiri
             n = @ss.skip(ASCII_NCNAME_RE)
             if @cur + n < @end
               nc = @buf.getbyte(@cur + n)
-              if nc > 0 && nc < 0x80
-                if n > max_length
-                  fatal_err(ErrCode::ERR_NAME_TOO_LONG, "NCName")
-                  return nil
-                end
+              if nc > 0 && nc < 0x80 && n <= max_length
                 ret = -@buf.byteslice(@cur, n)
                 @cur += n
                 @col += n
@@ -734,7 +728,9 @@ module Nokogiri
           end
         end
 
-        # xmlParseCharDataInternal
+        # xmlParseCharDataInternal. The fast path scans up to the end of the data libxml2 has
+        # read so far (it stops at the buffer's NUL terminator), so long runs are delivered in
+        # pieces at 4000-byte read boundaries like in libxml2.
         def parse_char_data_internal(partial)
           line = @line
           col = @col
@@ -743,18 +739,21 @@ module Nokogiri
           buf = @buf
           ss = @ss
           sax = @sax
+          lim = @input.windows ? @input.window_limit(@cur) : @end
           while true
             # get_more_space
             while true
-              if buf.getbyte(inp) == 0x20
+              if inp < lim && buf.getbyte(inp) == 0x20
                 ss.pos = inp
                 n = ss.skip(SPACES_RE)
+                n = lim - inp if inp + n > lim
                 inp += n
                 @col += n
               end
-              if buf.getbyte(inp) == 0x0A
+              if inp < lim && buf.getbyte(inp) == 0x0A
                 ss.pos = inp
                 n = ss.skip(NEWLINES_RE)
+                n = lim - inp if inp + n > lim
                 @line += n
                 @col = 1
                 inp += n
@@ -762,7 +761,7 @@ module Nokogiri
               end
               break
             end
-            if buf.getbyte(inp) == 0x3C
+            if inp < lim && buf.getbyte(inp) == 0x3C
               nbchar = inp - @cur
               if nbchar > 0
                 tmp = buf.byteslice(@cur, nbchar)
@@ -786,20 +785,22 @@ module Nokogiri
               ss.pos = inp
               n = ss.skip(TEST_CHAR_DATA_RE)
               if n
+                n = lim - inp if inp + n > lim
                 inp += n
                 @col += n
               end
-              c = buf.getbyte(inp)
+              c = inp < lim ? buf.getbyte(inp) : nil
               if c == 0x0A
                 ss.pos = inp
                 n = ss.skip(NEWLINES_RE)
+                n = lim - inp if inp + n > lim
                 @line += n
                 @col = 1
                 inp += n
                 next
               end
               if c == 0x5D
-                if buf.getbyte(inp + 1) == 0x5D && buf.getbyte(inp + 2) == 0x3E
+                if buf.getbyte(inp + 1) == 0x5D && buf.getbyte(inp + 2) == 0x3E && inp + 2 < lim
                   fatal_err(ErrCode::ERR_MISPLACED_CDATA_END)
                   @cur = inp + 1
                   return
@@ -831,14 +832,14 @@ module Nokogiri
               end
             end
             @cur = inp
-            c = buf.getbyte(inp)
+            c = inp < lim ? buf.getbyte(inp) : nil
             if c == 0x0D
-              if buf.getbyte(inp + 1) == 0x0A
+              if inp + 1 < lim && buf.getbyte(inp + 1) == 0x0A
                 @cur = inp + 1
                 inp += 2
                 @line += 1
                 @col = 1
-                c = buf.getbyte(inp)
+                c = inp < lim ? buf.getbyte(inp) : nil
                 break unless c && ((c >= 0x20 && c <= 0x7F) || c == 0x09 || c == 0x0A)
 
                 next
@@ -847,6 +848,7 @@ module Nokogiri
             return if c == 0x3C || c == 0x26
 
             grow
+            lim = @input.windows ? @input.window_limit(@cur) : @end
             inp = @cur
             c = buf.getbyte(inp)
             break unless c && ((c >= 0x20 && c <= 0x7F) || c == 0x09 || c == 0x0A)

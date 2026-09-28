@@ -93,7 +93,9 @@ module Nokogiri
           if (inp = ctxt.input) && inp.io
             io = inp.io
             inp.io = nil
-            bytes, = Nokogiri::Pure::Parser.read_all_io(io)
+            sizes = []
+            bytes, = Nokogiri::Pure::Parser.read_all_io(io, sizes)
+            inp.raw_chunks = sizes
             inp.set_raw(bytes)
             ctxt.refresh_buffer
           end

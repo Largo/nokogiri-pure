@@ -145,6 +145,14 @@ module ParserCases
     ["<?xml version='1.0' encoding='UTF-8'?><a>\xe9</a>".b, nil], ["\xEF\xBB\xBF<?xml version='1.0' encoding='UTF-16'?><a/>".b, nil],
   ].freeze
 
+  LONG = [
+    "<a>#{"x" * 10_000}</a>", "<r><a>#{"x" * 3000}</a><b>#{"y" * 3000}</b></r>", "<a>#{"x y\n" * 3000}</a>",
+    "<a>#{"x" * 3998}\r\ny</a>", "<a>#{"x" * 3996}]]>y</a>", "<a>#{" " * 3997}\n\n<b/></a>",
+    "<?xml version='1.0' encoding='ISO-8859-1'?><a>#{"x" * 9000}</a>", "<?xml version='1.0' encoding='UTF-16'?>".encode("UTF-16LE").b + "<a>#{"x" * 9000}</a>".encode("UTF-16LE").b,
+    "\xFF\xFE".b + "<a>#{"x" * 9000}</a>".encode("UTF-16LE").b, "<a>#{"é" * 100}#{"x" * 5000}</a>",
+    "<!DOCTYPE a [<!ENTITY e '#{"z" * 9000}'>]><a>&e;</a>", "<a b='#{"v" * 9000}'>#{"t" * 9000}</a>",
+  ].freeze
+
   FIXTURES = %w[staff.xml address_book.xml po.xml atom.xml snuggles.xml valid_bar.xml bogus.xml exslt.xml
     iso-8859-1.xml namespace_pressure_test.xml xinclude.xml to_be_xincluded.xml shift_jis.xml].freeze
 
@@ -239,6 +247,40 @@ module ParserCases
       add.("encoded", e, STRICT, enc)
       add.("encoded_push", e, DEFAULT, nil, nil, [:push, 3])
       add.("encoded_io", e, DEFAULT, enc, nil, :io)
+    end
+    tdir = "/root/workspace/nokogiri-pure-ref/libxml2-2.13.9/test"
+    skip_dirs = %w[HTML threads scripts regexp expr automata pattern URI XPath catalogs]
+    Dir.glob(File.join(tdir, "**", "*")).sort.each do |f|
+      next unless File.file?(f) && File.size(f) < 200_000
+      next if f =~ /\.(py|c|h|sh|txt|md|gz|html?|sgml|rnc|ent|dtd|mod)$/ || skip_dirs.any? { |d| f.include?("/test/#{d}/") }
+
+      data = File.binread(f)
+      add.("libxml2", data, DEFAULT, nil, f)
+      add.("libxml2_ent", data, DEFAULT | NOENT | DTDLOAD | DTDATTR, nil, f)
+      add.("libxml2_valid", data, DEFAULT | DTDVALID, nil, f) if data.include?("DOCTYPE")
+      add.("libxml2_sax", data, RECOVER, nil, nil, :sax) if data.bytesize < 20_000
+    end
+    BASIC.first(90).each do |b|
+      add.("nocdata", b, DEFAULT | NOCDATA)
+      add.("old10", b, DEFAULT | OLD10)
+      add.("nsclean", b, DEFAULT | NSCLEAN)
+      add.("pedantic", b, DEFAULT | 128)
+    end
+    big = +"<r>\n"
+    70_000.times { big << "<i/>\n" }
+    big << "<last>t</last>\n<?pi?><!--c--></r>"
+    add.("biglines", big, DEFAULT)
+    add.("biglines", big, DEFAULT & ~BIG_LINES)
+    add.("deep", ("<a>" * 300) + ("</a>" * 300), DEFAULT)
+    add.("deep", ("<a>" * 300) + ("</a>" * 300), DEFAULT | HUGE)
+    add.("deep", ("<a>" * 3000) + ("</a>" * 3000), DEFAULT | HUGE)
+    add.("longname", "<#{"n" * 60_000}/>", DEFAULT)
+    add.("longname", "<#{"n" * 60_000}/>", DEFAULT | HUGE)
+    add.("longtext", "<a>#{"x" * 10_000_050}</a>", DEFAULT) if ENV["SLOW"]
+    LONG.each do |l|
+      add.("long_sax", l, RECOVER, nil, nil, :sax)
+      add.("long_io_sax", l, RECOVER, nil, nil, :sax_io)
+      add.("long", l, DEFAULT)
     end
     add.("enc", "<a>\xe9</a>".b, DEFAULT, "ISO-8859-1")
     add.("enc", "<a>x</a>", DEFAULT, "bogus")

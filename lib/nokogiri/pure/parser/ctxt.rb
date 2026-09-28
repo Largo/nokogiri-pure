@@ -450,9 +450,10 @@ module Nokogiri
         end
 
         # xmlNewInputString / xmlNewInputMemory helpers: a new input over +bytes+
-        def new_input_from_bytes(bytes, filename = nil, encoding = nil, eof: true)
+        def new_input_from_bytes(bytes, filename = nil, encoding = nil, eof: true, raw_chunks: nil)
           input = new_input_stream
           input.filename = filename&.dup
+          input.raw_chunks = raw_chunks
           input.set_raw(bytes, eof: eof)
           switch_input_encoding_name(input, encoding) if encoding
           input
@@ -469,6 +470,7 @@ module Nokogiri
             input.bad = bad
           end
           input.buf = s
+          input.compute_windows if s.bytesize > Input::READ_CHUNK
           input
         end
 

@@ -12,6 +12,22 @@ module Nokogiri
         }.freeze
         MB_RUN_RE = /[\u0080-￼\u{10000}-\u{10FFFF}]+/
 
+        # "ent->content[0] = 0": the C string becomes empty but the bytes after it remain
+        def self.clear_content(ent)
+          c = ent.content
+          return if c.nil? || c.empty?
+
+          ent.content = ("\0".b + c.b.byteslice(1..)).force_encoding(Encoding::UTF_8)
+        end
+
+        # the content of an entity as the C string libxml2 sees (up to the first NUL)
+        def self.c_string(s)
+          return s if s.nil?
+
+          i = s.b.index("\0")
+          i ? s.byteslice(0, i) : s
+        end
+
         # xmlUTF8MultibyteLen at the current position (buffer is valid UTF-8): returns the byte
         # length, or 0 for a replaced invalid byte.
         def utf8_multibyte_len(errmsg)
@@ -242,13 +258,13 @@ module Nokogiri
               elsif s.getbyte(pos + 1) == 0x23
                 val, pos = parse_string_char_ref(s, pos)
                 if val == 0
-                  pent.content = +""
+                  Ctxt.clear_content(pent)
                   break
                 end
               else
                 name, pos = parse_string_entity_ref(s, pos)
                 if name.nil?
-                  pent.content = +""
+                  Ctxt.clear_content(pent)
                   break
                 end
                 ent = lookup_general_entity(name, true)
@@ -323,7 +339,7 @@ module Nokogiri
               flush.call
               val, pos = parse_string_char_ref(s, pos)
               if val == 0
-                pent.content = +"" if pent
+                Ctxt.clear_content(pent) if pent
                 break
               end
               if val == 0x20
@@ -337,7 +353,7 @@ module Nokogiri
               flush.call
               name, pos = parse_string_entity_ref(s, pos)
               if name.nil?
-                pent.content = +"" if pent
+                Ctxt.clear_content(pent) if pent
                 break
               end
               ent = lookup_general_entity(name, true)
@@ -516,7 +532,7 @@ module Nokogiri
               else
                 check_entity_in_att_value(ent, input_nr) if (ent.flags & flags) != flags
                 if parser_entity_check(ent.expanded_size) != 0
-                  ent.content = +""
+                  Ctxt.clear_content(ent)
                   return [nil, false]
                 end
                 buf.add("&")

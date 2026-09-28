@@ -129,7 +129,7 @@ module ParserDump
 
   def run_io(input, opts, encoding)
     d = Nokogiri::XML::Document.read_io(StringIO.new(input), nil, encoding, opts)
-    { xml: d.to_xml, tree: node(d), errors: d.errors.map { |e| err(e) } }
+    { xml: d.to_xml.gsub(/(?:^<!NOTATION .*? >\n)+/m) { |m| m.scan(/<!NOTATION .*? >\n/m).sort.join }, tree: node(d), errors: d.errors.map { |e| err(e) } }
   rescue => e
     { exception: e.class.name, message: e.message }
   end
@@ -138,6 +138,7 @@ module ParserDump
     case mode
     when nil, :doc then run(input, opts, encoding, url)
     when :sax then run_sax(input, opts, encoding)
+    when :sax_io then run_sax(StringIO.new(input), opts, encoding)
     when :io then run_io(input, opts, encoding)
     when :validate then run_validate(input, opts)
     when Array

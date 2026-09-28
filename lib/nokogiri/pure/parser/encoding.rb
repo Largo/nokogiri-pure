@@ -30,6 +30,18 @@ module Nokogiri
           @dead = false
         end
 
+        # are there bytes of an incomplete sequence buffered in the converter?
+        def pending?
+          return false if @dead || @conv.nil?
+
+          dst = +""
+          r = @conv.primitive_convert(+"".b, dst, nil, nil)
+          @dead = true
+          r == :incomplete_input
+        rescue StandardError
+          false
+        end
+
         # Convert +src+ (binary). +flush+ = true means no more input will follow.
         # Returns [utf8_output, status] with status :ok, :error (invalid bytes, output stops before
         # them), or :partial (trailing incomplete sequence kept back / at EOF).
