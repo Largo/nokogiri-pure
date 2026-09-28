@@ -266,6 +266,9 @@ module Nokogiri
 
         DEFAULT = new.freeze
       end
+
+      # a NULL SAX handler (ctxt->sax == NULL): no callbacks at all
+      NullSAX = Object.new.freeze
     end
   end
 end

@@ -256,7 +256,7 @@ module Nokogiri
           :dict_names, :loadsubset, :nb_errors, :nb_warnings, :error_handler, :valid,
           :input_flags, :filename, :line, :col, :cur, :buf, :encoder, :check_index,
           :end_check_state, :node_infos, :input_id, :space_tab, :standalone, :version,
-          :last_error, :has_input
+          :last_error, :has_input, :_private
         attr_reader :sax_flags
 
         def initialize(sax = nil, user_data = nil)
@@ -698,7 +698,7 @@ module Nokogiri
           nil
         end
 
-        def deliver_error(err, level, _domain)
+        def deliver_error(err, level, domain)
           allowed = (@options & PARSE_NOERROR) == 0 &&
             (level != Level::WARNING || (@options & PARSE_NOWARNING) == 0)
           if allowed && @error_handler
@@ -707,6 +707,9 @@ module Nokogiri
             @sax.serror(@user_data, err)
           elsif Errors.handler
             Errors.report(err)
+          elsif allowed && (domain == Domain::VALID || domain == Domain::DTD)
+            # vctxt channel: xmlParserValidityError/Warning print to stderr; nothing to deliver
+            nil
           elsif allowed
             if level == Level::WARNING
               @sax.warning(@user_data, err.message) if @sax_flags[:warning]
