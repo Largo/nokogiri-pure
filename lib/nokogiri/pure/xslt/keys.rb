@@ -329,10 +329,6 @@ module Nokogiri
         return loader.call(uri, options) if loader
         return nil unless Pure.const_defined?(:Parser) && Pure::Parser.const_defined?(:Ctxt)
 
-        # xmlFileOpen retries with the %-unescaped file name
-        if uri.include?("%") && uri !~ %r{\A[A-Za-z][A-Za-z0-9+.-]*://(?!/)} && !File.exist?(uri.sub(%r{\Afile://}, ""))
-          uri = uri.gsub(/%([0-9A-Fa-f]{2})/) { Regexp.last_match(1).hex.chr }
-        end
         pctxt = Pure::Parser::Ctxt.new
         pctxt.use_options(options)
         input = Pure::Parser::Loader.load_external_entity(uri, nil, pctxt)
@@ -476,7 +472,7 @@ module Nokogiri
           return -1
         end
         base = Tree.node_get_base(style.doc, cur)
-        uri = URI_.build_uri(uri_ref, base)
+        uri = XSLT.build_uri(uri_ref, base)
         if uri.nil?
           transform_error(nil, style, cur, "xsl:import : invalid URI reference #{uri_ref}\n")
           return -1
@@ -514,7 +510,7 @@ module Nokogiri
           return -1
         end
         base = Tree.node_get_base(style.doc, cur)
-        uri = URI_.build_uri(uri_ref, base)
+        uri = XSLT.build_uri(uri_ref, base)
         if uri.nil?
           transform_error(nil, style, cur, "xsl:include : invalid URI reference #{uri_ref}\n")
           return -1

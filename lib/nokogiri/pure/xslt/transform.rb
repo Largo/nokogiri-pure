@@ -961,10 +961,10 @@ module Nokogiri
           transform_error(ctxt, nil, inst, "xsltDocumentElem: href/URI-Reference not found\n")
           return
         end
-        filename = URI_.build_uri(url, ctxt.output_file)
+        filename = XSLT.build_uri(url, ctxt.output_file)
         if filename.nil?
           esc = uri_escape_str(url, ":/.?,")
-          filename = URI_.build_uri(esc, ctxt.output_file) if esc
+          filename = XSLT.build_uri(esc, ctxt.output_file) if esc
         end
         if filename.nil?
           transform_error(ctxt, nil, inst, "xsltDocumentElem: URL computation failed for #{url}\n")

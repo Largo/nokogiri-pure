@@ -665,6 +665,20 @@ module Nokogiri
         buf.result
       end
 
+      def uri_parser
+        Pure.const_defined?(:Parser) && Pure::Parser.const_defined?(:URIParser) ? Pure::Parser::URIParser : nil
+      end
+
+      # xmlBuildURI
+      def build_uri(uri, base)
+        (up = uri_parser) ? up.build_uri(uri, base) : URI_.build_uri(uri, base)
+      end
+
+      # xmlParseURI: nil when the reference is invalid
+      def parse_uri(str)
+        (up = uri_parser) ? up.parse(str) : URI_.parse(str)
+      end
+
       # xsltGetUTF8Char: returns [codepoint, len] or [-1, 0]
       def get_utf8_char(str, pos = 0)
         c = str.getbyte(pos)

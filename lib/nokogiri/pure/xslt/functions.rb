@@ -120,7 +120,7 @@ module Nokogiri
         obj = ctxt.value_pop
         tctxt = xpath_get_transform_context(ctxt)
         url = obj
-        parsed = URI_.parse(url)
+        parsed = XSLT.parse_uri(url)
         if parsed.nil?
           transform_error(tctxt, nil, nil, "document() : failed to parse URI '#{url}'\n")
           ctxt.value_push([])
@@ -140,7 +140,7 @@ module Nokogiri
         elsif tctxt&.style&.doc
           base = Tree.node_get_base(tctxt.style.doc, tctxt.style.doc)
         end
-        uri = URI_.build_uri(url, base)
+        uri = XSLT.build_uri(url, base)
         if uri.nil?
           if tctxt&.style&.doc && tctxt.style.doc.url.nil?
             ctxt.value_push([tctxt.style.doc])
