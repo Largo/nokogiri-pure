@@ -752,8 +752,14 @@ module Nokogiri
           text_node.text = buffer.dup
           text_node.line = @text_start_line
 
-          target, index = get_appropriate_insertion_location(nil)
-          insert_node(text_node, target, index) unless target.type == NODE_DOCUMENT
+          if @foster_parent_insertions
+            target, index = get_appropriate_insertion_location(nil)
+            insert_node(text_node, target, index) unless target.type == NODE_DOCUMENT
+          elsif @output.root
+            # (get_appropriate_insertion_location without foster parenting: the current node)
+            target = @open_elements[-1]
+            append_node(target, text_node) unless target.type == NODE_DOCUMENT
+          end
 
           buffer.clear
           @text_type = NODE_WHITESPACE
@@ -811,8 +817,12 @@ module Nokogiri
 
         def insert_element(node, is_reconstructing_formatting_elements)
           maybe_flush_text_node_buffer unless is_reconstructing_formatting_elements
-          target, index = get_appropriate_insertion_location(nil)
-          insert_node(node, target, index)
+          if @foster_parent_insertions
+            target, index = get_appropriate_insertion_location(nil)
+            insert_node(node, target, index)
+          else
+            append_node(@output.root ? @open_elements[-1] : @output.document, node)
+          end
           @open_elements << node
         end
 
@@ -3104,6 +3114,7 @@ module Nokogiri
             @text_type = NODE_TEXT
             @frameset_ok = false if body_like || !html_path
           end
+          true
         end
 
         # the main loop of gumbo_parse_with_options
@@ -3123,11 +3134,16 @@ module Nokogiri
             else
               acn = adjusted_current_node
               tokenizer.set_is_adjusted_current_node_foreign(!acn.nil? && acn.tag_namespace != NAMESPACE_HTML)
+              if !@ignore_next_linefeed && open_elements.length <= max_tree_depth && bulk_text(acn)
+                # the text run stood for character tokens handled one per iteration: the next token
+                # starts a new iteration (the run may have reconstructed formatting elements)
+                acn = adjusted_current_node
+                tokenizer.set_is_adjusted_current_node_foreign(!acn.nil? && acn.tag_namespace != NAMESPACE_HTML)
+              end
               if open_elements.length > max_tree_depth
                 @output.status = STATUS_TREE_TOO_DEEP
                 token.type = TOKEN_EOF
               else
-                bulk_text(acn) unless @ignore_next_linefeed
                 tokenizer.lex(token)
               end
             end

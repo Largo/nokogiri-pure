@@ -55,20 +55,50 @@ module Nokogiri
         node.line = line if line < 65535
       end
 
+      NAME_CACHE = {} # rubocop:disable Style/MutableConstant
+      NUL = "\0".b.freeze
+
+      # the interned UTF-8 name (up to the first NUL) for a gumbo tag/attribute name
+      def xml_name(name)
+        NAME_CACHE[name] || begin
+          NAME_CACHE.clear if NAME_CACHE.size > 2000
+          NAME_CACHE[name.frozen? ? name : name.dup.freeze] = -utf8(cstr(name.dup))
+        end
+      end
+
+      # xmlAddChild(parent, cur) for a freshly created, unlinked node of +parent+'s document: a
+      # plain append unless text nodes would be merged (then Tree.add_child does it)
+      def append_child(parent, cur)
+        last = parent.last
+        if (last && cur.type == TEXT_NODE && last.type == TEXT_NODE) || !cur.doc.equal?(parent.doc)
+          Tree.add_child(parent, cur)
+          return
+        end
+        cur.parent = parent
+        cur.prev = last
+        if last
+          last.next = cur
+        else
+          parent.children = cur
+        end
+        parent.last = cur
+      end
+
       # build_tree: construct the libxml2 tree rooted at xml_output_node from the gumbo tree rooted
       # at gumbo_node.
       def build_tree(doc, xml_output_node, gumbo_node)
         xml_root = nil
         xml_node = xml_output_node
         child_index = 0
+        children = gumbo_node.children
 
         while true
-          children = gumbo_node.children
           if child_index >= children.length
             return if xml_node.equal?(xml_output_node)
 
             child_index = gumbo_node.index_within_parent + 1
             gumbo_node = gumbo_node.parent
+            children = gumbo_node.children
             xml_node = xml_node.parent
             xml_root = nil if xml_node.equal?(xml_output_node)
             next
@@ -76,28 +106,24 @@ module Nokogiri
           gumbo_child = children[child_index]
           child_index += 1
 
-          case gumbo_child.type
-          when G::NODE_TEXT, G::NODE_WHITESPACE
-            xml_child = Tree.new_doc_text(doc, utf8(cstr(gumbo_child.text)))
-            set_line(xml_child, gumbo_child.line)
-            Tree.add_child(xml_node, xml_child)
-          when G::NODE_CDATA
-            xml_child = Tree.new_cdata_block(doc, utf8(gumbo_child.text))
-            set_line(xml_child, gumbo_child.line)
-            Tree.add_child(xml_node, xml_child)
-          when G::NODE_COMMENT
-            xml_child = Tree.new_doc_comment(doc, utf8(cstr(gumbo_child.text)))
-            set_line(xml_child, gumbo_child.line)
-            Tree.add_child(xml_node, xml_child)
-          when G::NODE_ELEMENT, G::NODE_TEMPLATE
+          type = gumbo_child.type
+          if type == G::NODE_TEXT || type == G::NODE_WHITESPACE
+            text = gumbo_child.text
+            text = text.byteslice(0, text.index(NUL)) if text.include?(NUL)
+            xml_child = Tree.new_doc_text(doc, text.force_encoding(Encoding::UTF_8))
+            line = gumbo_child.line
+            xml_child.line = line if line < 65535
+            append_child(xml_node, xml_child)
+          elsif type == G::NODE_ELEMENT || type == G::NODE_TEMPLATE
             name = gumbo_child.name
             name = if name.frozen? && G::TAG_NAMES[gumbo_child.tag].equal?(name)
               UTF8_TAG_NAMES[gumbo_child.tag]
             else
-              utf8(cstr(name.dup))
+              xml_name(name)
             end
             xml_child = Tree.new_doc_node(doc, nil, name, nil)
-            set_line(xml_child, gumbo_child.line)
+            line = gumbo_child.line
+            xml_child.line = line if line < 65535
             xml_root = xml_child if xml_root.nil?
             ns = case gumbo_child.tag_namespace
             when G::NAMESPACE_SVG
@@ -106,9 +132,14 @@ module Nokogiri
               lookup_or_add_ns(doc, xml_root, MATHML_NS, "math")
             end
             Tree.set_ns(xml_child, ns) if ns
-            Tree.add_child(xml_node, xml_child)
+            append_child(xml_node, xml_child)
 
-            gumbo_child.attributes.each do |attr|
+            attributes = gumbo_child.attributes
+            i = 0
+            n = attributes.length
+            while i < n
+              attr = attributes[i]
+              i += 1
               ns = case attr.attr_namespace
               when G::ATTR_NAMESPACE_XLINK
                 lookup_or_add_ns(doc, xml_root, XLINK_NS, "xlink")
@@ -117,12 +148,23 @@ module Nokogiri
               when G::ATTR_NAMESPACE_XMLNS
                 lookup_or_add_ns(doc, xml_root, XMLNS_NS, "xmlns")
               end
-              Tree.new_ns_prop(xml_child, ns, utf8(cstr(attr.name.dup)), utf8(cstr(attr.value.dup)))
+              value = attr.value.dup
+              value = value.byteslice(0, value.index(NUL)) if value.include?(NUL)
+              Tree.new_ns_prop(xml_child, ns, xml_name(attr.name), value.force_encoding(Encoding::UTF_8))
             end
 
             child_index = 0
             gumbo_node = gumbo_child
+            children = gumbo_node.children
             xml_node = xml_child
+          elsif type == G::NODE_CDATA
+            xml_child = Tree.new_cdata_block(doc, utf8(gumbo_child.text))
+            set_line(xml_child, gumbo_child.line)
+            append_child(xml_node, xml_child)
+          elsif type == G::NODE_COMMENT
+            xml_child = Tree.new_doc_comment(doc, utf8(cstr(gumbo_child.text)))
+            set_line(xml_child, gumbo_child.line)
+            append_child(xml_node, xml_child)
           end
         end
       end
