@@ -760,16 +760,19 @@ module Nokogiri
 
         if val1.length * val2.length <= 64
           init_nr = val1.length
-          val2.each do |n2|
+          k = 0
+          while k < val2.length
+            n2 = val2[k]
+            k += 1
             skip = false
+            n2_ns = n2.type == NAMESPACE_DECL
             j = 0
             while j < init_nr
               n1 = val1[j]
-              if n1.equal?(n2)
+              if n1 == n2
                 skip = true
                 break
-              elsif n1.type == NAMESPACE_DECL && n2.type == NAMESPACE_DECL &&
-                  n1.next.equal?(n2.next) && n1.prefix == n2.prefix
+              elsif n2_ns && n1.type == NAMESPACE_DECL && n1.next.equal?(n2.next) && n1.prefix == n2.prefix
                 skip = true
                 break
               end
@@ -777,13 +780,16 @@ module Nokogiri
             end
             next if skip
 
-            val1 << (n2.type == NAMESPACE_DECL ? node_set_dup_ns(n2.next, n2) : n2)
+            val1 << (n2_ns ? node_set_dup_ns(n2.next, n2) : n2)
           end
           return val1
         end
 
         seen, ns_seen = membership_tables(val1)
-        val2.each do |n2|
+        k = 0
+        while k < val2.length
+          n2 = val2[k]
+          k += 1
           next if seen[n2]
           if n2.type == NAMESPACE_DECL
             next if ns_seen && ns_seen[[n2.next.__id__, n2.prefix]]
