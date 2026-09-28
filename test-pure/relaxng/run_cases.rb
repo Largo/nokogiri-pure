@@ -45,40 +45,65 @@ Dir.chdir(here)
 results = {}
 saved_stderr = STDERR.dup
 err_file = File.join(Dir.tmpdir, "rng-stderr-#{mode}-#{Process.pid}.txt")
+def run_case(c, r)
+  $last_aggregate = nil
+  schema = begin
+    File.open(c["schema"]) { |f| Nokogiri::XML::RelaxNG(f) }
+  rescue Nokogiri::XML::SyntaxError => e
+    r["parse"] = { "ok" => false, "class" => e.class.name, "message" => js(e.message),
+                   "errors" => ($last_aggregate || [e]).map { |x| ser(x) } }
+    nil
+  rescue => e
+    r["parse"] = { "ok" => false, "class" => e.class.name, "message" => e.message }
+    nil
+  end
+  return unless schema
+
+  r["parse"] = { "ok" => true, "errors" => schema.errors.map { |x| ser(x) } }
+  r["instances"] = c["instances"].map do |inst|
+    doc = File.open(inst) { |f| Nokogiri::XML(f) }
+    errs = schema.validate(doc)
+    { "file" => inst, "errors" => errs.map { |x| ser(x) } }
+  rescue => e
+    { "file" => inst, "exception" => "#{e.class}: #{e.message}", "bt" => e.backtrace&.first(8) }
+  end
+end
+
+# each case runs in a forked child with a wall-clock limit (libxml2 itself can take
+# exponential time on some schema / instance pairs, and Timeout cannot interrupt C code)
+LIMIT = (ENV["CASE_TIMEOUT"] || 30).to_i
 cases.each do |c|
   r = results[c["id"]] = {}
   STDERR.reopen(err_file, "w")
   STDERR.sync = true
-  begin
-    Timeout.timeout(60) do
-      $last_aggregate = nil
-      schema = begin
-        File.open(c["schema"]) { |f| Nokogiri::XML::RelaxNG(f) }
-      rescue Nokogiri::XML::SyntaxError => e
-        r["parse"] = { "ok" => false, "class" => e.class.name, "message" => js(e.message),
-                       "errors" => ($last_aggregate || [e]).map { |x| ser(x) } }
-        nil
-      rescue => e
-        r["parse"] = { "ok" => false, "class" => e.class.name, "message" => e.message }
-        nil
-      end
-      if schema
-        r["parse"] = { "ok" => true, "errors" => schema.errors.map { |x| ser(x) } }
-        r["instances"] = c["instances"].map do |inst|
-          doc = File.open(inst) { |f| Nokogiri::XML(f) }
-          errs = schema.validate(doc)
-          { "file" => inst, "errors" => errs.map { |x| ser(x) } }
-        rescue => e
-          { "file" => inst, "exception" => "#{e.class}: #{e.message}", "bt" => e.backtrace&.first(8) }
-        end
-      end
+  rd, wr = IO.pipe
+  pid = fork do
+    rd.close
+    res = {}
+    begin
+      run_case(c, res)
+    rescue Exception => e # rubocop:disable Lint/RescueException
+      res["crash"] = "#{e.class}: #{e.message}"
+      res["bt"] = e.backtrace&.first(12)
     end
-  rescue Timeout::Error
-    r["timeout"] = true
-  rescue Exception => e # rubocop:disable Lint/RescueException
-    r["crash"] = "#{e.class}: #{e.message}"
-    r["bt"] = e.backtrace&.first(12)
+    STDERR.flush
+    wr.write(JSON.generate(res))
+    wr.close
+    exit!(0)
   end
+  wr.close
+  data = +""
+  reader = Thread.new { data << rd.read }
+  if reader.join(LIMIT)
+    Process.wait(pid)
+    r.merge!(JSON.parse(data)) unless data.empty?
+  else
+    Process.kill(:KILL, pid)
+    Process.wait(pid)
+    reader.kill
+    r["timeout"] = true
+  end
+  rd.close
   STDERR.flush
   err = File.binread(err_file)
   r["stderr"] = js(err) unless err.empty?
