@@ -741,6 +741,7 @@ module Nokogiri
             if buf.bytesize >= HTML_PARSER_BIG_BUFFER_SIZE
               flush_script(buf)
               buf = +"".b
+              shrink_macro
             end
             cur = current_char
             l = @clen
@@ -804,6 +805,7 @@ module Nokogiri
             if buf.bytesize >= HTML_PARSER_BIG_BUFFER_SIZE
               deliver_chars(buf)
               buf = +"".b
+              shrink_macro
             end
             cur = current_char
             l = @clen
@@ -1356,6 +1358,7 @@ module Nokogiri
             else
               parse_char_data
             end
+            shrink_macro
             grow_macro
           end
         end

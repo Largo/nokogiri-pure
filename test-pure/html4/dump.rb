@@ -25,6 +25,8 @@ def run_case(c)
   when :mem then Nokogiri::HTML4::Document.read_memory(input, url, enc, opts)
   when :io then Nokogiri::HTML4::Document.read_io(StringIO.new(input), url, enc, opts)
   when :parse then Nokogiri::HTML4(input, url, enc, opts)
+  when :parseio then Nokogiri::HTML4(StringIO.new(input), url, enc, opts)
+  when :parsefrag then (f = Nokogiri::HTML4.fragment(input); return [[:frag, f.to_html.b, f.errors.map(&:to_s)]])
   end
   out = []
   out << [:encoding, doc.encoding, doc.url]

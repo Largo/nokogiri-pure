@@ -104,12 +104,17 @@ module HTML4Cases
     ].each do |s, enc|
       cases << [:mem, s.b, nil, enc, DEF]
       cases << [:io, s.b, nil, enc, DEF]
+      cases << [:parse, s.b, nil, enc, DEF]
+      cases << [:parseio, s.b, nil, enc, DEF]
+      cases << [:parse, s.dup.force_encoding("ISO-8859-1"), nil, nil, DEF]
     end
     Dir[File.join(FILES, "*.html")].sort.each do |f|
       data = File.binread(f)
       cases << [:mem, data, f, nil, DEF]
       cases << [:mem, data, f, "UTF-8", DEF]
       cases << [:io, data, f, nil, DEF]
+      cases << [:parse, data, f, nil, DEF]
+      cases << [:parseio, data, f, nil, DEF]
     end
     fuzz(400, 42).each { |s| cases << [:mem, s, nil, "UTF-8", DEF] }
     fuzz(100, 7).each { |s| cases << [:mem, s, nil, "UTF-8", 0] }

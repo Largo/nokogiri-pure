@@ -140,6 +140,15 @@ module Nokogiri
           doc = ctxt.my_doc
           return if fullname.nil? || doc.nil?
 
+          if ctxt.validate != 0 && doc.ext_subset.nil? &&
+              (doc.int_subset.nil? ||
+               (doc.int_subset.notations.nil? && doc.int_subset.elements.nil? &&
+                doc.int_subset.attributes.nil? && doc.int_subset.entities.nil?))
+            ctxt.ctxt_err(Domain::DTD, 94, Level::ERROR, nil, nil, nil, 0, "Validation failed: no DTD found !")
+            ctxt.valid = 0
+            ctxt.validate = 0
+          end
+
           ret = Tree.new_doc_node(doc, nil, fullname)
           append_child(ctxt, ret)
           if ctxt.node_push(ret) < 0
@@ -218,7 +227,7 @@ module Nokogiri
           elsif last.type == type && (type != TEXT_NODE || last.name.equal?(STRING_TEXT) || last.name == STRING_TEXT)
             max_length = (ctxt.options & PARSE_HUGE) != 0 ? MAX_HUGE_LENGTH : MAX_TEXT_LENGTH
             if str.bytesize > max_length || last.content.bytesize > max_length - str.bytesize
-              ctxt.fatal_err(Err::RESOURCE_LIMIT, nil)
+              ctxt.fatal_err(Err::RESOURCE_LIMIT, "Text node too long, try XML_PARSE_HUGE")
               ctxt.halt_parser
               return
             end

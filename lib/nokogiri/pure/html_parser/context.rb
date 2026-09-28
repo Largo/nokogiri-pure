@@ -318,6 +318,7 @@ module Nokogiri
           @readcb_eof = false
           @consumed = 0
           @buf_generation = 0
+          @base = 0
           @clen = 0
           @input_pushed = true
         end
@@ -452,11 +453,40 @@ module Nokogiri
           return 0 if progressive?
           return 0 if @encoder.nil? && @readcb.nil?
           return -1 if @buf_error != 0
+
+          max_length = (@options & PARSE_HUGE) != 0 ? MAX_HUGE_LENGTH : MAX_TEXT_LENGTH
+          if @cur - @base > max_length
+            fatal_err(Err::RESOURCE_LIMIT, "Buffer size limit exceeded, try XML_PARSE_HUGE\n")
+            halt_parser
+            return -1
+          end
           return 0 if @buf.bytesize - @cur >= INPUT_CHUNK
 
           ret = buffer_grow(INPUT_CHUNK)
           ctxt_err_io(@buf_error, nil) if ret < 0
           ret
+        end
+
+        # SHRINK
+        def shrink_macro
+          if !progressive? && @cur - @base > 2 * INPUT_CHUNK && @buf.bytesize - @cur < 2 * INPUT_CHUNK
+            parser_shrink
+          end
+        end
+
+        LINE_LEN = 80
+
+        # xmlParserShrink (the consumed data is kept; only input->base moves)
+        def parser_shrink
+          return unless @has_input
+          return if !progressive? && @encoder.nil? && @readcb.nil?
+
+          used = @cur - @base
+          if used > INPUT_CHUNK
+            res = used - LINE_LEN
+            @base += res
+            @consumed += res
+          end
         end
 
         # xmlParserInputBufferGrow
@@ -530,6 +560,7 @@ module Nokogiri
             @raw = rest + @raw
             @buf = +"".b
             @cur = 0
+            @base = 0
             @buf_generation += 1
             nbchars = char_enc_input
             if nbchars < 0
