@@ -55,8 +55,8 @@ module Nokogiri
 
       # xmlXPtrEval (subset: shorthand pointers and xpointer()/xpath1() schemes)
       def xpointer_eval(str, ctx)
-        if Pure.const_defined?(:XPointer) && Pure::XPointer.respond_to?(:eval)
-          return Pure::XPointer.eval(str, ctx)
+        if Pure.const_defined?(:XPointer) && Pure::XPointer.respond_to?(:xptr_eval)
+          return Pure::XPointer.xptr_eval(str, ctx)
         end
 
         if (m = /\A\s*(?:xpointer|xpath1)\((.*)\)\s*\z/m.match(str))

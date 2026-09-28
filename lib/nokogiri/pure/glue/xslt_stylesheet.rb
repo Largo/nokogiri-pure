@@ -88,18 +88,27 @@ module Nokogiri
         XPath.marshal_funcall(pctxt, nargs, handler, function_name)
       end
 
-      # noko_xml_document_has_wrapped_blank_nodes_p
+      # noko_xml_document_has_wrapped_blank_nodes_p: libxml2's node cache is emulated by the
+      # wrapper back-pointers (_private) on the nodes themselves
       def has_wrapped_blank_nodes?(c_document)
-        rb_doc = c_document._ruby_doc
-        return false if rb_doc.nil?
+        return false if c_document._ruby_doc.nil?
 
-        cache = rb_doc.instance_variable_get(:@node_cache)
-        return false if cache.nil?
+        cur = c_document.children
+        while cur
+          return true if cur._private && (cur.type == TEXT_NODE || cur.type == CDATA_SECTION_NODE) &&
+            Tree.is_blank_node(cur)
 
-        cache.any? do |rb_node|
-          node = rb_node.instance_variable_get(:@__native)
-          node && Tree.is_blank_node(node)
+          if cur.children && cur.type != ENTITY_REF_NODE && cur.type != DTD_NODE
+            cur = cur.children
+            next
+          end
+          while cur.next.nil?
+            cur = cur.parent
+            return false if cur.nil? || cur.equal?(c_document)
+          end
+          cur = cur.next
         end
+        false
       end
 
       INIT_FUNC = ->(ctxt, uri) { XSLTGlue.init_func(ctxt, uri) }
