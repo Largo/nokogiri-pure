@@ -90,6 +90,7 @@ module Nokogiri
         EMPTY = "".b.freeze
 
         attr_reader :state, :input, :line, :current
+        attr_writer :is_adjusted_current_node_foreign # (set_is_adjusted_current_node_foreign)
 
         def initialize(parser, input, tab_stop)
           @parser = parser

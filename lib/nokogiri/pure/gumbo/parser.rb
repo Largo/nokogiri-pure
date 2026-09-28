@@ -925,7 +925,7 @@ module Nokogiri
         end
 
         def is_open_element(node)
-          @open_elements.any? { |n| n.equal?(node) }
+          @open_elements.include?(node) # (Node has no ==: identity)
         end
 
         def clone_node(node)
@@ -1290,7 +1290,7 @@ module Nokogiri
         end
 
         def index_of(vector, element)
-          vector.index { |e| e.equal?(element) } || -1
+          vector.index(element) || -1 # (Node has no ==: identity)
         end
 
         def vector_remove(vector, element)
@@ -3134,8 +3134,8 @@ module Nokogiri
             if @reprocess_current_token
               @reprocess_current_token = false
             else
-              acn = adjusted_current_node
-              tokenizer.set_is_adjusted_current_node_foreign(!acn.nil? && acn.tag_namespace != NAMESPACE_HTML)
+              acn = open_elements.length == 1 && @fragment_ctx ? @fragment_ctx : open_elements[-1]
+              tokenizer.is_adjusted_current_node_foreign = !acn.nil? && acn.tag_namespace != NAMESPACE_HTML
               if !@ignore_next_linefeed && open_elements.length <= max_tree_depth &&
                   (tokenizer.current != 0x3c || tokenizer.state == LEX_PLAINTEXT) && bulk_text(acn)
                 # the text run stood for character tokens handled one per iteration: the next token
