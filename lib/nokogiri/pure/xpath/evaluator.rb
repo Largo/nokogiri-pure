@@ -344,14 +344,14 @@ module Nokogiri
           @depth += 1
           case op.op
           when 10 # OP_COLLECT
-            if (c1 = op.c1) && c1.op == OP_NODE && c1.c1.nil? && c1.c2.nil? && op.c2.nil? && op.plan &&
-                (n = ctx.node) && n.type != NAMESPACE_DECL
+            if op.fused && (n = ctx.node) && n.type != NAMESPACE_DECL
               # "axis::test" from the context node: same as pushing the node-set of the context
               # node and running the collector's single-node fast path
               seq = []
-              FastCollect.__send__(op.plan[0], n, ctx.doc, op.value5, op_uri(op), seq, op.plan[1])
+              plan = op.plan
+              FastCollect.__send__(plan[0], n, ctx.doc, op.value5, op.value4 ? op_uri(op) : nil, seq, plan[1])
               @value_tab.push(seq)
-              @sorted = seq if SORTED_AXES.include?(op.value)
+              @sorted = seq if op.sorted_axis
             elsif (d = op.dos_op) && (op.impure.nil? || pure_functions?(op.impure))
               comp_op_eval(d.c1)
               node_collect_and_test(d, nil, nil, false)
@@ -527,6 +527,7 @@ module Nokogiri
           old_func_uri = ctx.function_uri
           ctx.function = op.value4
           ctx.function_uri = uri
+          @sorted = nil # (an extension function may hand back a reordered node-set)
           func.call(self, nargs)
           ctx.function = old_func
           ctx.function_uri = old_func_uri

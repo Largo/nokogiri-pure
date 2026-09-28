@@ -77,7 +77,7 @@ module Nokogiri
       class Op
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
-          :dos_op, :impure, :std_fn
+          :dos_op, :impure, :std_fn, :fused, :sorted_axis
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -128,6 +128,10 @@ module Nokogiri
         case op.op
         when OP_COLLECT
           op.plan = FastCollect.plan_for(op.value, op.value2, op.value3, op.value4, op.value5)
+          op.sorted_axis = ParserContext::SORTED_AXES.include?(op.value)
+          # "axis::test" applied to the context node, without predicates
+          c1 = op.c1
+          op.fused = !op.plan.nil? && !c1.nil? && c1.op == OP_NODE && c1.c1.nil? && c1.c2.nil? && op.c2.nil?
           # xmlXPathIsPositionalPredicate on the first predicate
           if (pred = op.c2)
             max = positional_predicate(pred)
