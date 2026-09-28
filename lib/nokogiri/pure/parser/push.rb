@@ -577,7 +577,7 @@ module Nokogiri
 
           cur_base = @cur
           max_length = option?(PARSE_HUGE) ? XML_MAX_HUGE_LENGTH : XML_MAX_LOOKUP_LIMIT
-          if cur_base > max_length && false
+          if cur_base > max_length
             fatal_err(ErrCode::ERR_RESOURCE_LIMIT, "Buffer size limit exceeded, try XML_PARSE_HUGE\n")
             halt
           end
