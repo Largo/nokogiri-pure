@@ -314,7 +314,8 @@ module Nokogiri
         old_pos = xp.proximity_position
         old_size = xp.context_size
         old_ns = xp.namespaces
-        len.times do |i|
+        i = 0
+        while i < len
           ctxt.inst = sort
           xp.context_size = len
           xp.proximity_position = i + 1
@@ -344,6 +345,7 @@ module Nokogiri
             ctxt.state = STATE_STOPPED
             results[i] = nil
           end
+          i += 1
         end
         ctxt.inst = old_inst
         xp.node = old_node
@@ -395,7 +397,8 @@ module Nokogiri
         number = []
         desc = []
         locale = []
-        nbsorts.times do |j|
+        j = 0
+        while j < nbsorts
           comp = sorts[j].psvi
           if comp.stype.nil? && comp.has_stype
             stype = eval_attr_value_template(ctxt, sorts[j], "data-type", nil)
@@ -433,6 +436,7 @@ module Nokogiri
             comp.lang
           end
           locale[j] = lang ? ctxt.new_locale.call(lang, comp.lower_first) : nil
+          j += 1
         end
 
         len = list.length

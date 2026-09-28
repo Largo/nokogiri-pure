@@ -93,9 +93,11 @@ module Nokogiri
         FUNC_FOREACH => :for_each, FUNC_DOCUMENT => :document_elem,
       }.freeze
 
+      # a callable for an instruction implementation. A lambda (whose #call the VM dispatches
+      # without a native frame), not a Method object (Method#call re-enters the VM from C).
       def instr_func(sym)
         @instr_funcs ||= {}
-        @instr_funcs[sym] ||= XSLT.method(sym)
+        @instr_funcs[sym] ||= ->(ctxt, node, inst, comp) { XSLT.__send__(sym, ctxt, node, inst, comp) }
       end
 
       # xsltNewStylePreComp

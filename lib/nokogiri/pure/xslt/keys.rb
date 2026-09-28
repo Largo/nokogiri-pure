@@ -258,7 +258,10 @@ module Nokogiri
 
           xp.context_size = 1
           xp.proximity_position = 1
-          match_list.each do |cur|
+          mi = 0
+          while mi < match_list.length
+            cur = match_list[mi]
+            mi += 1
             next unless real_node?(cur)
 
             ctxt.node = cur

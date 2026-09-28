@@ -165,7 +165,11 @@ module Nokogiri
             # If there are any parameters
             if param_node
               args = Array.new(nargs)
-              (nargs - 1).downto(0) { |i| args[i] = ctxt.value_pop }
+              ai = nargs - 1
+              while ai >= 0
+                args[ai] = ctxt.value_pop
+                ai -= 1
+              end
 
               # Prepare to process params in reverse order. First, go to the beginning of the
               # param chain.
@@ -178,7 +182,8 @@ module Nokogiri
               end
               # i has total # params found, nargs is number which are present as arguments
               # from the caller. Calculate the number of un-set parameters
-              func.nargs.times do |j|
+              j = 0
+              while j < func.nargs
                 param = XSLT.parse_stylesheet_caller_param(tctxt, param_node)
                 if param.nil?
                   XSLT.local_variable_pop(tctxt, new_base, -2)
@@ -192,6 +197,7 @@ module Nokogiri
                 param.next = params
                 params = param
                 param_node = param_node.next
+                j += 1
               end
             end
 

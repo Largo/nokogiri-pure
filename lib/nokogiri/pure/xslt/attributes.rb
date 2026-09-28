@@ -289,7 +289,13 @@ module Nokogiri
           attr_sets = inst.children&.content if inst.type == ATTRIBUTE_NODE
           return if attr_sets.nil?
         end
-        each_token(attr_sets) do |curstr|
+        tokens = attr_sets.split(/[ \t\n\r]+/)
+        ti = 0
+        while ti < tokens.length
+          curstr = tokens[ti]
+          ti += 1
+          next if curstr.empty?
+
           unless valid_qname?(curstr)
             transform_error(ctxt, nil, inst, "The name '#{curstr}' in use-attribute-sets is not a valid QName.\n")
             return
@@ -305,7 +311,13 @@ module Nokogiri
             ns_uri = ns.href
           end
           set = ctxt.style.attribute_sets&.[]([ncname, ns_uri])
-          set&.attrs&.each do |a|
+          next if set.nil?
+
+          attrs = set.attrs
+          ai = 0
+          while ai < attrs.length
+            a = attrs[ai]
+            ai += 1
             attribute(ctxt, node, a, a.psvi)
           end
         end

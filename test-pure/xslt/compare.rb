@@ -16,7 +16,7 @@ end
 cases = Marshal.load(cases_json)
 cache = "/tmp/xslt-native-#{filter.to_s.gsub(/\W/, "_")}.bin"
 cache = "#{ENV["CASES"]}.native" if ENV["CASES"]
-native = if File.exist?(cache) && File.mtime(cache) > File.mtime(ENV["CASES"] || File.join(dir, "corpus.rb")) && !ENV["REFRESH"]
+native = if File.exist?(cache) && File.mtime(cache) > (ENV["CASES"] ? File.mtime(ENV["CASES"]) : [File.mtime(File.join(dir, "corpus.rb")), File.mtime(File.join(dir, "inline_cases.rb"))].max) && !ENV["REFRESH"]
   Marshal.load(File.binread(cache))
 else
   out, = Open3.capture2("ruby", File.join(dir, "runner.rb"), "native", stdin_data: cases_json, binmode: true)

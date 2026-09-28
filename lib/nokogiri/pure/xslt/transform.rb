@@ -649,7 +649,13 @@ module Nokogiri
           tmpvar = ctxt.vars
           old_cur_inst = ctxt.inst
           ctxt.inst = cur
-          parse_stylesheet_variable(ctxt, cur)
+          # xsltParseStylesheetVariable (inlined; info is cur.psvi)
+          if info.name.nil?
+            transform_error(ctxt, nil, cur,
+              "Internal error in xsltParseStylesheetVariable(): The attribute 'name' was not compiled.\n")
+          else
+            register_variable(ctxt, info, cur.children, false)
+          end
           ctxt.inst = old_cur_inst
           ctxt.vars.level = level unless tmpvar.equal?(ctxt.vars)
         elsif cur.name == "message"
@@ -740,7 +746,6 @@ module Nokogiri
         begin
           level = 0
           cur = list
-          list_parent = list.parent
           while cur
             if ctxt.op_limit != 0
               if ctxt.op_count >= ctxt.op_limit
@@ -755,7 +760,7 @@ module Nokogiri
 
             copy = nil
             skip_children = true
-            if (curns = cur.ns) && curns.href == NAMESPACE && cur.type == ELEMENT_NODE
+            if cur.ns && cur.ns.href == NAMESPACE && cur.type == ELEMENT_NODE
               info = cur.psvi
               if info&.func
                 ctxt.insert = insert
@@ -767,6 +772,10 @@ module Nokogiri
                 when FUNC_IF then xslt_if(ctxt, context_node, cur, info)
                 when FUNC_CHOOSE then choose(ctxt, context_node, cur, info)
                 when FUNC_FOREACH then for_each(ctxt, context_node, cur, info)
+                when FUNC_COPY then copy(ctxt, context_node, cur, info)
+                when FUNC_ELEMENT then element(ctxt, context_node, cur, info)
+                when FUNC_COPYOF then copy_of(ctxt, context_node, cur, info)
+                when FUNC_TEXT then text(ctxt, context_node, cur, info)
                 else call_instruction(info, ctxt, context_node, cur)
                 end
                 release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
@@ -779,7 +788,7 @@ module Nokogiri
               break if copy_text(ctxt, insert, cur, ctxt.internalized).nil?
 
               skip_children = false
-            elsif cur.type == ELEMENT_NODE && curns && !cur.psvi.nil?
+            elsif cur.type == ELEMENT_NODE && cur.ns && !cur.psvi.nil?
               asc_extension_element(ctxt, context_node, cur, insert, old_insert, old_local_fragment_top)
             elsif cur.type == ELEMENT_NODE
               copy = asc_literal_result_element(ctxt, cur, insert, old_insert, templ)
@@ -804,7 +813,7 @@ module Nokogiri
               cur = cur.next
               next
             end
-            loop do
+            while true # rubocop:disable Style/InfiniteLoop
               cur = cur.parent
               level -= 1
               if ctxt.vars_tab.length > old_vars_nr && ctxt.vars.level > level
@@ -812,7 +821,7 @@ module Nokogiri
               end
               insert = insert&.parent
               break if cur.nil?
-              if cur.equal?(list_parent)
+              if cur.equal?(list.parent)
                 cur = nil
                 break
               end
@@ -871,12 +880,33 @@ module Nokogiri
         ctxt.node = context_node
         templ_push(ctxt, templ)
 
+        list = apply_xslt_template_params(ctxt, list, with_params)
+
+        apply_sequence_constructor(ctxt, context_node, list, templ)
+
+        template_params_cleanup(ctxt) if ctxt.vars_tab.length > ctxt.vars_base
+        ctxt.vars_base = old_vars_base
+
+        release_rvt_list(ctxt, ctxt.tmp_rvt) if ctxt.tmp_rvt
+        ctxt.tmp_rvt = old_user_fragment_top
+        templ_pop(ctxt)
+      end
+
+      def release_rvt_list(ctxt, curdoc)
+        while curdoc
+          tmp = curdoc
+          curdoc = curdoc.next
+          release_rvt(ctxt, tmp)
+        end
+      end
+
+      # xsltApplyXSLTTemplate's xsl:param processing: pushes the params (or the matching
+      # caller's xsl:with-param) and returns the rest of the sequence constructor.
+      def apply_xslt_template_params(ctxt, list, with_params)
         cur = list
-        loop do
+        while cur
           if cur.type == TEXT_NODE
             cur = cur.next
-            break if cur.nil?
-
             next
           end
           break if cur.type != ELEMENT_NODE || cur.name != "param" || cur.psvi.nil? || !xslt_elem?(cur)
@@ -896,24 +926,8 @@ module Nokogiri
           end
           parse_stylesheet_param(ctxt, cur) if tmp_param.nil?
           cur = cur.next
-          break if cur.nil?
         end
-
-        apply_sequence_constructor(ctxt, context_node, list, templ)
-
-        template_params_cleanup(ctxt) if ctxt.vars_tab.length > ctxt.vars_base
-        ctxt.vars_base = old_vars_base
-
-        if ctxt.tmp_rvt
-          curdoc = ctxt.tmp_rvt
-          while curdoc
-            tmp = curdoc
-            curdoc = curdoc.next
-            release_rvt(ctxt, tmp)
-          end
-        end
-        ctxt.tmp_rvt = old_user_fragment_top
-        templ_pop(ctxt)
+        list
       end
 
       # xsltApplyOneTemplate
@@ -1543,17 +1557,56 @@ module Nokogiri
         end
         return if ctxt.nil? || node.nil? || inst.nil?
 
+        # This frame stays on the stack for the whole recursion below it: keep its locals few
+        # (the saved state lives in one array, the setup work is done by a helper).
         xp = ctxt.xpath_ctxt
-        old_context_node = ctxt.node
-        old_mode = ctxt.mode
-        old_mode_uri = ctxt.mode_uri
-        old_doc_info = ctxt.document
-        old_list = ctxt.node_list
-        old_size = xp.context_size
-        old_pos = xp.proximity_position
-        old_doc = xp.doc
+        saved = [ctxt.node, ctxt.mode, ctxt.mode_uri, ctxt.document, ctxt.node_list,
+                 xp.context_size, xp.proximity_position, xp.doc]
         ctxt.mode = comp.mode
         ctxt.mode_uri = comp.mode_uri
+        list = apply_templates_setup(ctxt, node, inst, comp)
+        with_params = ctxt.apply_with_params
+        ctxt.apply_with_params = nil
+        if list
+          xp.context_size = list.length
+          # (plain loops, not blocks, on the recursive paths: blocks yielded from C methods
+          # cost native stack frames, which ruby.wasm has very few of)
+          i = 0
+          while i < list.length
+            n = list[i]
+            ctxt.node = n
+            xp.doc = n.doc if !n.is_a?(XmlNs) && n.doc
+            i += 1
+            xp.proximity_position = i
+            # xsltProcessOneNode, inlined (one VM frame less per recursion level)
+            templ = get_template(ctxt, n, nil)
+            if templ.nil?
+              ctxt.node = n
+              default_process_one_node(ctxt, n, with_params)
+              ctxt.node = n
+            else
+              list_rule = ctxt.current_template_rule
+              ctxt.current_template_rule = templ
+              apply_xslt_template(ctxt, n, templ.content, templ, with_params)
+              ctxt.current_template_rule = list_rule
+            end
+          end
+        end
+        free_stack_elem_list(with_params) if with_params
+        ctxt.node = saved[0]
+        ctxt.mode = saved[1]
+        ctxt.mode_uri = saved[2]
+        ctxt.document = saved[3]
+        ctxt.node_list = saved[4]
+        xp.context_size = saved[5]
+        xp.proximity_position = saved[6]
+        xp.doc = saved[7]
+      end
+
+      # xsltApplyTemplates up to the processing loop: selects (and sorts) the node list and
+      # builds the xsl:with-param list (left in ctxt.apply_with_params). Returns the list, or
+      # nil when there is nothing to process.
+      def apply_templates_setup(ctxt, node, inst, comp)
         with_params = nil
         list = nil
         begin
@@ -1584,7 +1637,10 @@ module Nokogiri
               cur = cur.next
             end
           end
-          break if list.empty?
+          if list.empty?
+            list = nil
+            break
+          end
 
           ctxt.node_list = list
           if inst.children
@@ -1645,23 +1701,9 @@ module Nokogiri
               cur = cur.next
             end
           end
-          xp.context_size = list.length
-          list.each_with_index do |n, i|
-            ctxt.node = n
-            xp.doc = n.doc if !n.is_a?(XmlNs) && n.doc
-            xp.proximity_position = i + 1
-            process_one_node(ctxt, n, with_params)
-          end
         end while false # rubocop:disable Lint/Loop
-        free_stack_elem_list(with_params) if with_params
-        xp.doc = old_doc
-        xp.context_size = old_size
-        xp.proximity_position = old_pos
-        ctxt.document = old_doc_info
-        ctxt.node_list = old_list
-        ctxt.node = old_context_node
-        ctxt.mode = old_mode
-        ctxt.mode_uri = old_mode_uri
+        ctxt.apply_with_params = with_params
+        list
       end
 
       # xsltChoose
@@ -1735,64 +1777,68 @@ module Nokogiri
           return
         end
         xp = ctxt.xpath_ctxt
-        old_doc_info = ctxt.document
-        old_list = ctxt.node_list
-        old_context_node = ctxt.node
-        old_rule = ctxt.current_template_rule
+        saved = [ctxt.document, ctxt.node_list, ctxt.node, ctxt.current_template_rule,
+                 xp.doc, xp.context_size, xp.proximity_position]
         ctxt.current_template_rule = nil
-        old_doc = xp.doc
-        old_pos = xp.proximity_position
-        old_size = xp.context_size
-        begin
-          res = pre_comp_eval(ctxt, context_node, comp)
-          if !res.nil?
-            unless node_set_value?(res)
-              transform_error(ctxt, nil, inst, "The 'select' expression does not evaluate to a node set.\n")
-              break
-            end
-            list = res
-          else
-            transform_error(ctxt, nil, inst, "Failed to evaluate the 'select' expression.\n")
-            ctxt.state = STATE_STOPPED
-            break
-          end
-          break if list.empty?
-
-          ctxt.node_list = list
-          cur_inst = inst.children
-          if xslt_elem?(cur_inst) && cur_inst.name == "sort"
-            sorts = [cur_inst]
-            cur_inst = cur_inst.next
-            too_many = false
-            while xslt_elem?(cur_inst) && cur_inst.name == "sort"
-              if sorts.length >= MAX_SORT
-                transform_error(ctxt, nil, cur_inst,
-                  "The number of xsl:sort instructions exceeds the maximum (#{MAX_SORT}) allowed by this processor.\n")
-                too_many = true
-                break
-              end
-              sorts << cur_inst
-              cur_inst = cur_inst.next
-            end
-            break if too_many
-
-            do_sort_function(ctxt, sorts, sorts.length)
-          end
+        list = for_each_setup(ctxt, context_node, inst, comp)
+        if list
+          cur_inst = ctxt.for_each_body
           xp.context_size = list.length
-          list.each_with_index do |cur, i|
+          i = 0
+          while i < list.length
+            cur = list[i]
             ctxt.node = cur
             xp.doc = cur.doc if !cur.is_a?(XmlNs) && cur.doc
-            xp.proximity_position = i + 1
+            i += 1
+            xp.proximity_position = i
             apply_sequence_constructor(ctxt, cur, cur_inst, nil)
           end
-        end while false # rubocop:disable Lint/Loop
-        ctxt.document = old_doc_info
-        ctxt.node_list = old_list
-        ctxt.node = old_context_node
-        ctxt.current_template_rule = old_rule
-        xp.doc = old_doc
-        xp.context_size = old_size
-        xp.proximity_position = old_pos
+        end
+        ctxt.document = saved[0]
+        ctxt.node_list = saved[1]
+        ctxt.node = saved[2]
+        ctxt.current_template_rule = saved[3]
+        xp.doc = saved[4]
+        xp.context_size = saved[5]
+        xp.proximity_position = saved[6]
+      end
+
+      # xsltForEach up to the processing loop: evaluates and sorts the node list. Returns it
+      # (the sequence constructor after the xsl:sort elements is left in ctxt.for_each_body),
+      # or nil when there is nothing to process.
+      def for_each_setup(ctxt, context_node, inst, comp)
+        res = pre_comp_eval(ctxt, context_node, comp)
+        if !res.nil?
+          unless node_set_value?(res)
+            transform_error(ctxt, nil, inst, "The 'select' expression does not evaluate to a node set.\n")
+            return nil
+          end
+          list = res
+        else
+          transform_error(ctxt, nil, inst, "Failed to evaluate the 'select' expression.\n")
+          ctxt.state = STATE_STOPPED
+          return nil
+        end
+        return nil if list.empty?
+
+        ctxt.node_list = list
+        cur_inst = inst.children
+        if xslt_elem?(cur_inst) && cur_inst.name == "sort"
+          sorts = [cur_inst]
+          cur_inst = cur_inst.next
+          while xslt_elem?(cur_inst) && cur_inst.name == "sort"
+            if sorts.length >= MAX_SORT
+              transform_error(ctxt, nil, cur_inst,
+                "The number of xsl:sort instructions exceeds the maximum (#{MAX_SORT}) allowed by this processor.\n")
+              return nil
+            end
+            sorts << cur_inst
+            cur_inst = cur_inst.next
+          end
+          do_sort_function(ctxt, sorts, sorts.length)
+        end
+        ctxt.for_each_body = cur_inst
+        list
       end
 
       # xsltApplyStripSpaces

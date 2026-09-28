@@ -33,6 +33,24 @@ module Nokogiri
 
       module_function
 
+      # Callables registered as extension functions/elements are invoked on the recursive
+      # paths of the transform engine. A Method object's #call re-enters the VM from C (a
+      # native stack frame per call, scarce under ruby.wasm), so wrap Methods into lambdas
+      # dispatching with __send__, which the VM handles without native recursion.
+      def plain_callable(fn)
+        return fn unless fn.is_a?(Method)
+
+        recv = fn.receiver
+        name = fn.name
+        case fn.arity
+        when 1 then ->(a) { recv.__send__(name, a) }
+        when 2 then ->(a, b) { recv.__send__(name, a, b) }
+        when 3 then ->(a, b, c) { recv.__send__(name, a, b, c) }
+        when 4 then ->(a, b, c, d) { recv.__send__(name, a, b, c, d) }
+        else ->(*args) { recv.__send__(name, *args) }
+        end
+      end
+
       # ---- extensions.c ---------------------------------------------------------------------------
 
       # xsltRegisterExtPrefix
@@ -56,6 +74,7 @@ module Nokogiri
       def register_ext_function(ctxt, name, uri, function)
         return -1 if ctxt.nil? || name.nil? || uri.nil? || function.nil?
 
+        function = plain_callable(function)
         ctxt.xpath_ctxt&.register_func_ns(name, uri, function)
         ctxt.ext_functions ||= {}
         return -1 if ctxt.ext_functions.key?([name, uri])
@@ -68,6 +87,7 @@ module Nokogiri
       def register_ext_element(ctxt, name, uri, function)
         return -1 if ctxt.nil? || name.nil? || uri.nil? || function.nil?
 
+        function = plain_callable(function)
         ctxt.ext_elements ||= {}
         return -1 if ctxt.ext_elements.key?([name, uri])
 
@@ -246,6 +266,7 @@ module Nokogiri
       def register_ext_module_function(name, uri, function)
         return -1 if name.nil? || uri.nil? || function.nil?
 
+        function = plain_callable(function)
         EXT_MUTEX.synchronize { FUNCTIONS_HASH[[name, uri]] = function }
         0
       end
@@ -274,7 +295,7 @@ module Nokogiri
       # xsltInitElemPreComp
       def init_elem_pre_comp(comp, style, inst, function, free_func)
         comp.type = FUNC_EXTENSION
-        comp.func = function
+        comp.func = function && plain_callable(function)
         comp.inst = inst
         comp.free = free_func
         comp.next = style.pre_comps
@@ -297,6 +318,8 @@ module Nokogiri
       def register_ext_module_element(name, uri, precomp, transform)
         return -1 if name.nil? || uri.nil? || transform.nil?
 
+        transform = plain_callable(transform)
+        precomp = plain_callable(precomp) if precomp
         EXT_MUTEX.synchronize { ELEMENTS_HASH[[name, uri]] = ExtElement.new(precomp, transform) }
         0
       end

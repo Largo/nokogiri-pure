@@ -236,62 +236,69 @@ module Nokogiri
       def eval_variable(ctxt, variable, comp)
         return nil if ctxt.nil? || variable.nil?
 
-        result = nil
         old_inst = ctxt.inst
-        if variable.select
-          xp = ctxt.xpath_ctxt
-          old_var = ctxt.context_variable
-          xp_expr = comp&.comp || XPath.ctxt_compile(xp, variable.select)
-          return nil if xp_expr.nil?
-
-          old_doc = xp.doc
-          old_node = xp.node
-          old_pos = xp.proximity_position
-          old_size = xp.context_size
-          old_ns = xp.namespaces
-          xp.node = ctxt.node
-          xp.doc = ctxt.node.doc if !ctxt.node.is_a?(XmlNs) && ctxt.node.doc
-          xp.namespaces = comp&.ns_list
-          ctxt.context_variable = variable
-          variable.flags |= VAR_IN_SELECT
-          result = XPath.compiled_eval(xp_expr, xp)
-          variable.flags ^= VAR_IN_SELECT
-          ctxt.context_variable = old_var
-          xp.doc = old_doc
-          xp.node = old_node
-          xp.context_size = old_size
-          xp.proximity_position = old_pos
-          xp.namespaces = old_ns
-          if result.nil?
-            transform_error(ctxt, nil, comp&.inst,
-              "Failed to evaluate the expression of variable '#{variable.name}'.\n")
-            ctxt.state = STATE_STOPPED
-          end
+        result = if variable.select
+          eval_variable_select(ctxt, variable, comp)
         elsif variable.tree.nil?
-          result = +""
+          +""
         else
-          old_var = ctxt.context_variable
-          container = create_rvt(ctxt)
-          if container
-            variable.fragment = container
-            container.compression = RVT_LOCAL
-            old_output = ctxt.output
-            old_insert = ctxt.insert
-            old_last_text = ctxt.lasttext
-            ctxt.output = container
-            ctxt.insert = container
-            ctxt.context_variable = variable
-            apply_one_template(ctxt, ctxt.node, variable.tree, nil, nil)
-            ctxt.context_variable = old_var
-            ctxt.insert = old_insert
-            ctxt.output = old_output
-            ctxt.lasttext = old_last_text
-            result = XPath.new_value_tree(container)
-            result = +"" if result.nil?
-          end
+          eval_variable_tree(ctxt, variable)
         end
         ctxt.inst = old_inst
         result
+      end
+
+      # xsltEvalVariable, select="..." case
+      def eval_variable_select(ctxt, variable, comp)
+        xp = ctxt.xpath_ctxt
+        old_var = ctxt.context_variable
+        xp_expr = comp&.comp || XPath.ctxt_compile(xp, variable.select)
+        return nil if xp_expr.nil?
+
+        old_doc = xp.doc
+        old_node = xp.node
+        old_pos = xp.proximity_position
+        old_size = xp.context_size
+        old_ns = xp.namespaces
+        xp.node = ctxt.node
+        xp.doc = ctxt.node.doc if !ctxt.node.is_a?(XmlNs) && ctxt.node.doc
+        xp.namespaces = comp&.ns_list
+        ctxt.context_variable = variable
+        variable.flags |= VAR_IN_SELECT
+        result = XPath.compiled_eval(xp_expr, xp)
+        variable.flags ^= VAR_IN_SELECT
+        ctxt.context_variable = old_var
+        xp.doc = old_doc
+        xp.node = old_node
+        xp.context_size = old_size
+        xp.proximity_position = old_pos
+        xp.namespaces = old_ns
+        if result.nil?
+          transform_error(ctxt, nil, comp&.inst,
+            "Failed to evaluate the expression of variable '#{variable.name}'.\n")
+          ctxt.state = STATE_STOPPED
+        end
+        result
+      end
+
+      # xsltEvalVariable, sequence constructor case (a result tree fragment)
+      def eval_variable_tree(ctxt, variable)
+        container = create_rvt(ctxt)
+        return nil if container.nil?
+
+        saved = [ctxt.context_variable, ctxt.output, ctxt.insert, ctxt.lasttext]
+        variable.fragment = container
+        container.compression = RVT_LOCAL
+        ctxt.output = container
+        ctxt.insert = container
+        ctxt.context_variable = variable
+        apply_sequence_constructor(ctxt, ctxt.node, variable.tree, nil) # (xsltApplyOneTemplate without params)
+        ctxt.context_variable = saved[0]
+        ctxt.insert = saved[2]
+        ctxt.output = saved[1]
+        ctxt.lasttext = saved[3]
+        result = XPath.new_value_tree(container)
+        result.nil? ? +"" : result
       end
 
       # xsltEvalGlobalVariable
@@ -554,7 +561,16 @@ module Nokogiri
         elem.select = comp.select
         elem.name_uri = comp.ns
         elem.tree = tree
-        elem.value = eval_variable(ctxt, elem, comp)
+        # (xsltEvalVariable inlined: fewer VM frames on recursive paths)
+        old_inst = ctxt.inst
+        elem.value = if elem.select
+          eval_variable_select(ctxt, elem, comp)
+        elsif tree.nil?
+          +""
+        else
+          eval_variable_tree(ctxt, elem)
+        end
+        ctxt.inst = old_inst
         elem.computed = true
         elem
       end
