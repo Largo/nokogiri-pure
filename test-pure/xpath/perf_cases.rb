@@ -138,3 +138,9 @@ EXPRS << ["/", "//*[contains(@p:k,'1')]"]
   count(//*[position()=last()]) //*[position()=1.5] //*[position()>=1.0] //*[-(-position())=2]
 ].each { |e| EXPRS << ["/", e.gsub("\\ ", " ")] }
 EXPRS << ["/", "position() = 1"] << ["/", "last() - position()"] << ["/", "count(preceding-sibling::*) = 0"]
+# steps without predicates / with an axis range from node-sets (whole-set child & attribute loops)
+%w[
+  //*/*[2] //node()/node()[3] //*/@*[1] //*/@*[2] //*/text()[2] //tr/td[2] /node()/node()[1] //node()/comment()[1]
+  //@*/node() //@*/text()[1] //node()/processing-instruction()[1] //*/*[0] //*/*[-1] //*/node()[1] (/|/*)/node()
+  //*/p:* //*/@p:* //*/@p:*[1] //*/p:*[1] //node()/node() //node()/* //*/@n //*/@* /node()/node()/node()[2]
+].each { |e| EXPRS << ["/", e, { ns: { "p" => "urn:p" } }] }

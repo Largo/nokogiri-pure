@@ -78,7 +78,7 @@ module Nokogiri
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
           :dos_op, :impure, :std_fn, :fused, :sorted_axis,
-          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step, :num_cmp
+          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred, :attr_step, :num_cmp, :multi, :multi_range
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -140,6 +140,11 @@ module Nokogiri
           op.sorted_axis = ParserContext::SORTED_AXES.include?(op.value)
           # an unprefixed @name step
           op.attr_step = true if op.plan && op.plan[0] == :attribute_attr_name && op.value4.nil?
+          # the whole-node-set loops of FastCollect.multi_run / multi_range_run
+          if op.plan && (op.value == AXIS_CHILD || op.value == AXIS_ATTRIBUTE)
+            op.multi = :"multi_#{op.plan[0]}"
+            op.multi_range = :"multi_range_#{op.plan[0]}"
+          end
           # "axis::test" applied to the context node, without predicates
           c1 = op.c1
           op.fused = !op.plan.nil? && !c1.nil? && c1.op == OP_NODE && c1.c1.nil? && c1.c2.nil? && op.c2.nil?

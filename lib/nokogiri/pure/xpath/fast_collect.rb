@@ -173,6 +173,131 @@ module Nokogiri
               end
             end
 
+            # The child / child-element / attribute traversals from each node of +ctxs+ in turn,
+            # appending to +out+ (the result of a step without predicates from a node-set, where
+            # these axes need no duplicate checks) ...
+            def self.multi_child_#{m}(ctxs, doc, name, uri, out)
+              i = 0
+              while i < ctxs.length
+                ctxnode = ctxs[i]
+                i += 1
+                next unless CHILD_CTX[ctxnode.type]
+
+                cur = ctxnode.children
+                while cur
+                  t = cur.type
+                  out << cur if #{cond}
+                  break if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE
+
+                  cur = cur.next
+                end
+              end
+            end
+
+            def self.multi_child_elem_#{m}(ctxs, doc, name, uri, out)
+              i = 0
+              while i < ctxs.length
+                ctxnode = ctxs[i]
+                i += 1
+                next unless CHILD_ELEM_CTX[ctxnode.type]
+
+                cur = ctxnode.children
+                while cur
+                  t = cur.type
+                  out << cur if t == ELEMENT_NODE && (#{cond})
+                  cur = cur.next
+                end
+              end
+            end
+
+            def self.multi_attribute_#{m}(ctxs, doc, name, uri, out)
+              i = 0
+              while i < ctxs.length
+                ctxnode = ctxs[i]
+                i += 1
+                next if ctxnode.type != ELEMENT_NODE || ctxnode == doc
+
+                cur = ctxnode.properties
+                while cur
+                  t = cur.type
+                  out << cur if #{cond}
+                  cur = cur.next
+                end
+              end
+            end
+
+            # ... and with an axis range ([n]): the n-th hit from each node
+            def self.multi_range_child_#{m}(ctxs, doc, name, uri, out, pos)
+              i = 0
+              while i < ctxs.length
+                ctxnode = ctxs[i]
+                i += 1
+                next unless CHILD_CTX[ctxnode.type]
+
+                k = 0
+                cur = ctxnode.children
+                while cur
+                  t = cur.type
+                  if #{cond}
+                    k += 1
+                    if k == pos
+                      out << cur
+                      break
+                    end
+                  end
+                  break if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE
+
+                  cur = cur.next
+                end
+              end
+            end
+
+            def self.multi_range_child_elem_#{m}(ctxs, doc, name, uri, out, pos)
+              i = 0
+              while i < ctxs.length
+                ctxnode = ctxs[i]
+                i += 1
+                next unless CHILD_ELEM_CTX[ctxnode.type]
+
+                k = 0
+                cur = ctxnode.children
+                while cur
+                  t = cur.type
+                  if t == ELEMENT_NODE && (#{cond})
+                    k += 1
+                    if k == pos
+                      out << cur
+                      break
+                    end
+                  end
+                  cur = cur.next
+                end
+              end
+            end
+
+            def self.multi_range_attribute_#{m}(ctxs, doc, name, uri, out, pos)
+              i = 0
+              while i < ctxs.length
+                ctxnode = ctxs[i]
+                i += 1
+                next if ctxnode.type != ELEMENT_NODE || ctxnode == doc
+
+                k = 0
+                cur = ctxnode.properties
+                while cur
+                  t = cur.type
+                  if #{cond}
+                    k += 1
+                    if k == pos
+                      out << cur
+                      break
+                    end
+                  end
+                  cur = cur.next
+                end
+              end
+            end
+
             # xmlXPathNextAttribute
             def self.attribute_#{m}(ctxnode, doc, name, uri, seq, _unused)
               return if ctxnode.type != ELEMENT_NODE || ctxnode == doc
@@ -424,10 +549,26 @@ module Nokogiri
         # costs more in the interpreter.
         traversals = singleton_methods.grep(/\A(?:descendant|child|child_elem|attribute|following_sibling|preceding_sibling|self|parent|ancestor)_/).sort
         counters = singleton_methods.grep(/\Acount_/).sort
+        multis = singleton_methods.grep(/\Amulti_(?!range_|run)/).sort
+        multi_ranges = singleton_methods.grep(/\Amulti_range_(?!run)/).sort
         class_eval <<~RUBY, __FILE__, __LINE__ + 1
           def self.run(sym, ctxnode, doc, name, uri, seq, arg)
             case sym
             #{traversals.map { |t| "when :#{t} then #{t}(ctxnode, doc, name, uri, seq, arg)" }.join("\n")}
+            else raise ArgumentError, "unknown traversal \#{sym}"
+            end
+          end
+
+          def self.multi_run(sym, ctxs, doc, name, uri, out)
+            case sym
+            #{multis.map { |t| "when :#{t} then #{t}(ctxs, doc, name, uri, out)" }.join("\n")}
+            else raise ArgumentError, "unknown traversal \#{sym}"
+            end
+          end
+
+          def self.multi_range_run(sym, ctxs, doc, name, uri, out, pos)
+            case sym
+            #{multi_ranges.map { |t| "when :#{t} then #{t}(ctxs, doc, name, uri, out, pos)" }.join("\n")}
             else raise ArgumentError, "unknown traversal \#{sym}"
             end
           end

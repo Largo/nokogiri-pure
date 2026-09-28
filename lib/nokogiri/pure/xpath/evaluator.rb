@@ -1469,6 +1469,20 @@ module Nokogiri
           max_pos, to_bool, dedup)
           doc = @context.doc
           name = op.value5
+          if pred_op.nil? && !to_bool && (msym = op.multi)
+            # child / attribute steps without predicates: one loop over the context nodes (these
+            # axes need no duplicate checks: the result is the concatenation)
+            out = []
+            if has_axis_range
+              FastCollect.multi_range_run(op.multi_range, context_seq, doc, name, uri, out, max_pos)
+            else
+              FastCollect.multi_run(msym, context_seq, doc, name, uri, out)
+            end
+            @value_tab.push(out)
+            @sorted = out if context_seq.length == 1 && SORTED_AXES.include?(op.value)
+            @ns_free = out
+            return nil
+          end
           sym, arg = plan
           out_seq = nil
           seq = []
