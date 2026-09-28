@@ -5,6 +5,9 @@
 module Nokogiri
   module XML
     class NodeSet
+      NO_LENGTH = Object.new.freeze
+      private_constant :NO_LENGTH
+
       def length
         __nodes.length
       end
@@ -63,17 +66,16 @@ module Nokogiri
         Nokogiri::Pure.wrap_node_set(result, @document)
       end
 
-      def [](*args)
+      # (+len+ defaults to a marker rather than nil: an explicit nil length is a TypeError)
+      def [](arg, len = NO_LENGTH)
         nodes = __nodes
-        if args.length == 2
-          beg = Nokogiri::Pure.int(args[0])
-          len = Nokogiri::Pure.int(args[1])
+        unless NO_LENGTH.equal?(len)
+          beg = Nokogiri::Pure.int(arg)
+          len = Nokogiri::Pure.int(len)
           beg += nodes.length if beg < 0
           return __subseq(beg, len)
         end
-        raise ArgumentError, "wrong number of arguments (given #{args.length}, expected 1..2)" if args.length != 1
 
-        arg = args[0]
         return __index_at(arg) if arg.is_a?(Integer)
 
         if arg.is_a?(Range)
@@ -87,7 +89,15 @@ module Nokogiri
       alias_method :slice, :[]
 
       def to_a
-        __nodes.map { |n| Nokogiri::Pure.wrap_node_set_result(n) }
+        nodes = __nodes
+        out = Array.new(nodes.length)
+        i = 0
+        while i < nodes.length
+          n = nodes[i]
+          out[i] = Nokogiri::Pure.cached_node_set_result(n) || Nokogiri::Pure.wrap_node_set_result(n)
+          i += 1
+        end
+        out
       end
 
       def unlink
@@ -129,7 +139,8 @@ module Nokogiri
         return nil if offset >= nodes.length || offset < -nodes.length
 
         offset += nodes.length if offset < 0
-        Nokogiri::Pure.wrap_node_set_result(nodes[offset])
+        n = nodes[offset]
+        Nokogiri::Pure.cached_node_set_result(n) || Nokogiri::Pure.wrap_node_set_result(n)
       end
 
       def __subseq(beg, len)

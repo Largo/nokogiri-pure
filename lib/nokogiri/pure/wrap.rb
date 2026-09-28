@@ -95,6 +95,17 @@ module Nokogiri
       end
     end
 
+    # the wrapper wrap_node_set_result(c_node) returns when it doesn't have to create one, or nil
+    def cached_node_set_result(c_node)
+      return nil unless c_node && (w = c_node._private)
+      return w if c_node.is_a?(XmlNs)
+
+      t = c_node.type
+      return nil if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE
+
+      (d = c_node.doc) && d._ruby_doc ? w : nil
+    end
+
     # noko_xml_node_set_wrap
     def wrap_node_set(c_nodes, rb_document)
       set = Nokogiri::XML::NodeSet.allocate
