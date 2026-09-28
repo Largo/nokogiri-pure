@@ -19,7 +19,7 @@ module DumpNative
     when Nokogiri::XML::Node::TEXT_NODE
       out << "#{ind}T #{node.content.inspect} L#{node.line}"
     when Nokogiri::XML::Node::CDATA_SECTION_NODE
-      out << "#{ind}C #{node.content.inspect} L#{node.line}"
+      out << "#{ind}C #{node.content.inspect}"
     when Nokogiri::XML::Node::COMMENT_NODE
       out << "#{ind}M #{node.content.inspect} L#{node.line}"
     when Nokogiri::XML::Node::DTD_NODE
@@ -30,10 +30,20 @@ module DumpNative
   end
 
   def run(c)
-    opts = { max_errors: -1, parse_noscript_content_as_text: c[:script] }
+    opts = c[:opts] || { max_errors: -1, parse_noscript_content_as_text: c[:script] }
     out = []
     begin
-      if c[:context]
+      if c[:node]
+        if c[:context].length > 1
+          doc = Nokogiri::HTML5::Document.parse("<!DOCTYPE html><math></math><svg></svg>")
+          foreign_el = doc.root.children[1].children.find { |n| n.name == c[:context].first }
+          context_node = foreign_el.add_child("<#{c[:context].last}></#{c[:context].last}>").first
+        else
+          doc = Nokogiri::HTML5::Document.new
+          context_node = doc.create_element(c[:context].first)
+        end
+        target = Nokogiri::HTML5::DocumentFragment.new(doc, c[:data], context_node, **opts)
+      elsif c[:context]
         doc = Nokogiri::HTML5::Document.new
         frag = Nokogiri::HTML5::DocumentFragment.new(doc, c[:data], c[:context], **opts)
         target = frag

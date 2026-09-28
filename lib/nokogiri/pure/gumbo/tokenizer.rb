@@ -6,6 +6,8 @@
 # accumulated by the tokenizer (tag names, attribute names/values, comments, doctype fields) are
 # binary Strings holding UTF-8 bytes.
 
+require "strscan"
+
 module Nokogiri
   module Pure
     module Gumbo
@@ -87,7 +89,7 @@ module Nokogiri
         SCRIPT_TAG = "script".b.freeze
         EMPTY = "".b.freeze
 
-        attr_reader :state, :input
+        attr_reader :state, :input, :line
 
         def initialize(parser, input, tab_stop)
           @parser = parser
@@ -762,6 +764,9 @@ module Nokogiri
             emit_eof(output)
           else
             append_char_to_tag_buffer(Util.ascii_tolower(c), true)
+            if (run = consume_run(RUN_TAG_NAME))
+              @tag_buffer << run.tr(UPPER, LOWER)
+            end
             false
           end
         end
@@ -1124,6 +1129,9 @@ module Nokogiri
             false
           else
             append_char_to_tag_buffer(Util.ascii_tolower(c), true)
+            if (run = consume_run(RUN_ATTR_NAME))
+              @tag_buffer << run.tr(UPPER, LOWER)
+            end
             false
           end
         end
@@ -1192,6 +1200,9 @@ module Nokogiri
             emit_eof(output)
           else
             append_char_to_tag_buffer(c, false)
+            if (run = consume_run(RUN_ATTR_VALUE_DQ))
+              @tag_buffer << run
+            end
             false
           end
         end
@@ -1216,6 +1227,9 @@ module Nokogiri
             emit_eof(output)
           else
             append_char_to_tag_buffer(c, false)
+            if (run = consume_run(RUN_ATTR_VALUE_SQ))
+              @tag_buffer << run
+            end
             false
           end
         end
@@ -1249,6 +1263,9 @@ module Nokogiri
             false
           else
             append_char_to_tag_buffer(c, true)
+            if (run = consume_run(RUN_ATTR_VALUE_UQ))
+              @tag_buffer << run
+            end
             false
           end
         end
@@ -1307,6 +1324,9 @@ module Nokogiri
             false
           else
             append_char_to_temporary_buffer(c)
+            if (run = consume_run(RUN_BOGUS_COMMENT))
+              @temporary_buffer << run
+            end
             false
           end
         end
@@ -1402,6 +1422,9 @@ module Nokogiri
             emit_comment(output)
           else
             append_char_to_temporary_buffer(c)
+            if (run = consume_run(RUN_COMMENT))
+              @temporary_buffer << run
+            end
             false
           end
         end
@@ -2172,6 +2195,111 @@ module Nokogiri
           :handle_decimal_character_reference_state,
           :handle_numeric_character_reference_end_state,
         ].freeze
+
+        # ---- fast path (not in gumbo) -------------------------------------------------------
+        #
+        # A run of "plain" characters in one of the text states would be emitted one character
+        # token at a time, each one advancing the input by one code point and producing no
+        # errors. scan_text_run consumes such a run in one go, leaving the tokenizer in exactly
+        # the state it would have been in after emitting the last character of the run, and
+        # returns the run's bytes (or nil). The parser only calls it when it knows that each of
+        # these character tokens would simply be appended to the pending text node.
+
+        # UTF-8 sequences of 2 or 3 bytes that decode without any error: no C1 controls, no
+        # surrogates, no noncharacters.
+        SAFE_MB = "(?:\\xC2[\\xA0-\\xBF]|[\\xC3-\\xDF][\\x80-\\xBF]|\\xE0[\\xA0-\\xBF][\\x80-\\xBF]|" \
+          "[\\xE1-\\xEC\\xEE][\\x80-\\xBF][\\x80-\\xBF]|\\xED[\\x80-\\x9F][\\x80-\\xBF]|" \
+          "\\xEF(?:[\\x80-\\xB6][\\x80-\\xBF]|\\xB7[\\x80-\\x8F\\xB0-\\xBF]|[\\xB8-\\xBE][\\x80-\\xBF]|\\xBF[\\x80-\\xBD]))"
+        RUN_DATA = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x25\\x27-\\x3B\\x3D-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_RAWTEXT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x3B\\x3D-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_PLAINTEXT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_RES = [RUN_DATA, RUN_DATA, RUN_RAWTEXT, RUN_RAWTEXT, RUN_PLAINTEXT].freeze # by LEX_ state
+        NON_WS_RE = /[^\t\n\x0C ]/n
+        CONT_BYTES = "\x80-\xBF".b.freeze
+
+        # Moves the iterator over `run` (the bytes starting at the current character), updating the
+        # position as utf8iterator_next would have one code point at a time, and reads the
+        # character that follows. The run must consist of error-free characters, none of them \r.
+        def advance_over(run)
+          len = run.bytesize
+          nl = run.rindex("\n")
+          if nl
+            @line += run.count("\n")
+            column = 1
+            seg = run.byteslice(nl + 1, len - nl - 1)
+          else
+            column = @column
+            seg = run
+          end
+          if seg.include?("\t")
+            tab_stop = @tab_stop
+            seg.each_byte do |b|
+              if b == 0x09
+                column = ((column / tab_stop) + 1) * tab_stop
+              elsif (b & 0xC0) != 0x80
+                column += 1
+              end
+            end
+          elsif seg.ascii_only?
+            column += seg.bytesize
+          else
+            column += seg.bytesize - seg.count(CONT_BYTES)
+          end
+          @column = column
+          @offset += len
+          @start += len
+          read_char
+        end
+
+        # Used by the states whose "anything else" branch just appends the character to a buffer:
+        # after the current character has been handled, consumes the following run of characters
+        # matching `re` (which must only match characters that go to that same branch without
+        # errors) and returns it; the iterator is left on the character after the run, flagged
+        # for reconsumption so that the state machine continues from there. Returns nil if the
+        # run is empty.
+        def consume_run(re)
+          nxt = @start + @width
+          return nil if nxt >= @end
+
+          ss = (@scanner ||= StringScanner.new(@input))
+          ss.pos = nxt
+          len = ss.skip(re)
+          return nil if len.nil? || len == 0
+
+          iter_next
+          run = @input.byteslice(nxt, len)
+          advance_over(run)
+          @reconsume = true
+          run
+        end
+
+        RUN_TAG_NAME = Regexp.new("(?:[\\x21-\\x2E\\x30-\\x3D\\x3F-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_NAME = Regexp.new("(?:[\\x21\\x23-\\x26\\x28-\\x2E\\x30-\\x3B\\x3F-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_VALUE_DQ = Regexp.new("(?:[\\t\\n\\x0C\\x20\\x21\\x23-\\x25\\x27-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_VALUE_SQ = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x25\\x28-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_VALUE_UQ = Regexp.new("(?:[\\x21\\x23-\\x25\\x28-\\x3B\\x3F-\\x5F\\x61-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_COMMENT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x2C\\x2E-\\x3B\\x3D-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_BOGUS_COMMENT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x3D\\x3F-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        UPPER = "A-Z".b.freeze
+        LOWER = "a-z".b.freeze
+
+        def scan_text_run
+          return nil unless @state <= LEX_PLAINTEXT && @buffered_emit_char == NO_CHAR && @resume_pos.nil? &&
+            !@is_in_cdata
+
+          start = @start
+          return nil if start >= @end
+
+          ss = (@scanner ||= StringScanner.new(@input))
+          ss.pos = start
+          len = ss.skip(RUN_RES[@state])
+          return nil if len.nil? || len == 0
+
+          run = @input.byteslice(start, len)
+          advance_over(run)
+          reset_token_start_point
+          run
+        end
 
         # gumbo_lex
         def lex(output)

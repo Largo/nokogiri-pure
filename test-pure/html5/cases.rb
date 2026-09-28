@@ -29,6 +29,9 @@ module Html5Cases
           end
           script.each do |s|
             cases << { id: "#{base}:#{idx}:#{s ? "on" : "off"}", data: data, context: context&.split(" ", 2)&.join(":"), script: s }
+            if context
+              cases << { id: "#{base}:#{idx}:#{s ? "on" : "off"}:node", data: data, context: context.split(" ", 2), script: s, node: true }
+            end
           end
           idx += 1
         end

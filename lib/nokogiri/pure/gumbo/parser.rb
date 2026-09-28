@@ -3073,6 +3073,39 @@ module Nokogiri
           end
         end
 
+        # Fast path (not in gumbo): consume a run of plain character tokens at once when each of
+        # them would just be appended to the pending text node. `acn` is the adjusted current
+        # node. Equivalent to handling the tokens one by one: the first one would reconstruct the
+        # active formatting elements (making the reconstruction a no-op for the others), and
+        # none of them can produce an error or change the insertion mode.
+        def bulk_text(acn)
+          html_path = acn.nil? || acn.tag_namespace == NAMESPACE_HTML ||
+            is_mathml_integration_point(acn) || is_html_integration_point(acn)
+          if html_path
+            case @insertion_mode
+            when INSERTION_MODE_IN_BODY, INSERTION_MODE_IN_CELL, INSERTION_MODE_IN_CAPTION,
+              INSERTION_MODE_IN_TEMPLATE
+              body_like = true
+            when INSERTION_MODE_TEXT, INSERTION_MODE_IN_SELECT, INSERTION_MODE_IN_SELECT_IN_TABLE
+              body_like = false
+            else
+              return
+            end
+          end
+          start_line = @tokenizer.line
+          run = @tokenizer.scan_text_run
+          return unless run
+
+          reconstruct_active_formatting_elements if body_like
+          buffer = @text_buffer
+          @text_start_line = start_line if buffer.empty?
+          buffer << run
+          if run.match?(Tokenizer::NON_WS_RE)
+            @text_type = NODE_TEXT
+            @frameset_ok = false if body_like || !html_path
+          end
+        end
+
         # the main loop of gumbo_parse_with_options
         def run
           options = @options
@@ -3094,6 +3127,7 @@ module Nokogiri
                 @output.status = STATUS_TREE_TOO_DEEP
                 token.type = TOKEN_EOF
               else
+                bulk_text(acn) unless @ignore_next_linefeed
                 tokenizer.lex(token)
               end
             end

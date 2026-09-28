@@ -46,7 +46,7 @@ module DumpPure
     when P::TEXT_NODE
       out << "#{ind}T #{node.content.inspect} L#{node.line}"
     when P::CDATA_SECTION_NODE
-      out << "#{ind}C #{node.content.inspect} L#{node.line}"
+      out << "#{ind}C #{node.content.inspect}"
     when P::COMMENT_NODE
       out << "#{ind}M #{node.content.inspect} L#{node.line}"
     when P::DTD_NODE
@@ -57,10 +57,20 @@ module DumpPure
   end
 
   def run(c)
-    opts = { max_errors: -1, parse_noscript_content_as_text: c[:script] }
+    opts = c[:opts] || { max_errors: -1, parse_noscript_content_as_text: c[:script] }
     out = []
     begin
-      if c[:context]
+      if c[:node]
+        if c[:context].length > 1
+          doc = Nokogiri::HTML5::Document.parse("<!DOCTYPE html><math></math><svg></svg>")
+          foreign_el = doc.root.children[1].children.find { |n| n.name == c[:context].first }
+          context_node = foreign_el.add_child("<#{c[:context].last}></#{c[:context].last}>").first
+        else
+          doc = Nokogiri::HTML5::Document.new
+          context_node = doc.create_element(c[:context].first)
+        end
+        target = Nokogiri::HTML5::DocumentFragment.new(doc, c[:data], context_node, **opts)
+      elsif c[:context]
         doc = Nokogiri::HTML5::Document.new
         frag = Nokogiri::HTML5::DocumentFragment.new(doc, c[:data], c[:context], **opts)
         target = frag
@@ -88,7 +98,7 @@ end
 oracle = Marshal.load(File.binread(ARGV[0]))
 filter = ARGV[1] && Regexp.new(ARGV[1])
 use_api = ARGV.include?("--api")
-cases = Html5Cases.all
+cases = ENV["CASES"] ? Marshal.load(File.binread(ENV["CASES"])) : Html5Cases.all
 cases = cases.select { |c| c[:id] =~ filter } if filter
 fails = []
 t0 = Time.now
