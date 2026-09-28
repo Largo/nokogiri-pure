@@ -87,6 +87,7 @@ module Nokogiri
           UNSUPPORTED_ENCODING => "Unsupported encoding",
           IO_UNKNOWN => "Unknown IO error",
           INVALID_CHAR => "Char out of allowed range",
+          85 => "chunk is not well balanced",
         }.freeze
 
         def self.string(code)
