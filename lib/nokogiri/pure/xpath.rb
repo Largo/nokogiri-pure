@@ -1211,6 +1211,8 @@ module Nokogiri
 
         size = set.length
         return if size <= 1
+        # (both sorts leave a sorted set alone, having compared each adjacent pair once)
+        return set if presorted?(set)
 
         if size < 64
           binary_insertion_sort_start(set, 0, 1, size)
@@ -1218,6 +1220,31 @@ module Nokogiri
           tim_sort(set, size)
         end
         set
+      end
+
+      # Is every adjacent pair of +set+ in order for wrap_cmp (<= 0)? Element pairs take
+      # cmp_nodes_ext's element branch inline.
+      def presorted?(set)
+        i = 1
+        n = set.length
+        while i < n
+          a = set[i - 1]
+          b = set[i]
+          i += 1
+          if a && b && a.type == ELEMENT_NODE && b.type == ELEMENT_NODE
+            next if a == b
+
+            c1 = a.content
+            if c1.is_a?(Integer) && c1 < 0 && (c2 = b.content).is_a?(Integer) && c2 < 0 && a.doc.equal?(b.doc)
+              next if c1 > c2
+              return false if c1 < c2
+            end
+            return false if cmp_turtle(a, b) == -1
+          elsif wrap_cmp(a, b) > 0
+            return false
+          end
+        end
+        true
       end
 
       # BINARY_INSERTION_FIND on dst[base, size]
