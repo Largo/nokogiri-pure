@@ -523,6 +523,13 @@ module Nokogiri
         m[1].casecmp?("en") ? :en : nil
       end
 
+      # expansions of the ISO 14651 table (compared as their expansion, ranked right after it)
+      COLLATION_EXPANSIONS = {
+        "æ" => "ae", "Æ" => "AE", "ß" => "ss", "ẞ" => "SS", "œ" => "oe", "Œ" => "OE", "ĳ" => "ij", "Ĳ" => "IJ",
+        "ø" => "o\u0338", "Ø" => "O\u0338", "đ" => "d\u0335", "Đ" => "D\u0335", "ł" => "l\u0337", "Ł" => "L\u0337",
+      }.freeze
+      CURRENCY_RE = /\p{Sc}/
+
       # xsltStrxfrm: a collation key emulating glibc's ISO 14651 based en_US collation
       def strxfrm(locale, string)
         return string.b if locale != :en
@@ -531,25 +538,35 @@ module Nokogiri
         l2 = []
         l3 = []
         l4 = []
-        string.each_char do |ch|
-          base = ch.unicode_normalize(:nfd)
-          first = base[0]
-          marks = base[1..].to_s
-          if first.match?(/[[:alnum:]]/)
-            down = first.downcase
-            w = if down.match?(/[0-9]/)
-              0x100 + down.ord
-            elsif down.match?(/[a-z]/)
-              0x200 + down.ord
+        string.each_grapheme_cluster do |ch0|
+          exp = COLLATION_EXPANSIONS[ch0]
+          (exp || ch0).each_grapheme_cluster.with_index do |ch, idx|
+            cp = ch.ord
+            next if cp >= 0xAC00 && cp <= 0xD7A3 # Hangul syllables: not collated
+
+            base = ch.unicode_normalize(:nfd)
+            first = base[0]
+            marks = base[1..].to_s
+            if first.match?(/[[:alnum:]]/) || first.match?(CURRENCY_RE)
+              down = first.downcase
+              w = if down.match?(CURRENCY_RE)
+                0x80 + (down.ord & 0x7F)
+              elsif down.match?(/[0-9]/)
+                0x100 + down.ord
+              elsif down.match?(/[a-z]/)
+                0x200 + down.ord
+              else
+                0x1000 + down.ord
+              end
+              l1 << w
+              mark = marks.empty? ? 1 : 2 + marks.ord
+              mark += 1 if exp && idx.zero? && mark == 1 && exp.length > 1 && !exp.match?(/[\u0300-\u036f\u0335-\u0338]/)
+              l2 << mark
+              l3 << (first == down ? 1 : 2)
+              l4 << 0xFFFFF
             else
-              0x1000 + down.ord
+              l4 << (1 + ch.ord)
             end
-            l1 << w
-            l2 << (marks.empty? ? 1 : 2 + marks.ord)
-            l3 << (first == down ? 1 : 2)
-            l4 << 0xFFFFF
-          else
-            l4 << (1 + ch.ord)
           end
         end
         key = +"".b
