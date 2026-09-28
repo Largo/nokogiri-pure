@@ -396,10 +396,14 @@ module Nokogiri
           cast_top_to_string
           check_type_string
           source = @value_tab.last
-          b = source.b
-          return if b.empty? || NORMALIZED_RE.match?(b)
+          return if source.empty?
 
-          @value_tab[-1] = b.scan(NON_BLANK_RE).join(" ").force_encoding(::Encoding::UTF_8)
+          # (IS_BLANK_CH runs collapse to one space; leading/trailing blanks go)
+          t = source.b.tr("\t\n\r", "   ")
+          t.squeeze!(" ")
+          t.delete_prefix!(" ")
+          t.delete_suffix!(" ")
+          @value_tab[-1] = t.force_encoding(::Encoding::UTF_8)
         end
 
         # xmlXPathTranslateFunction

@@ -1984,28 +1984,76 @@ module Nokogiri
       def compiled_eval_internal(comp, context, to_bool)
         return [-1, nil] if comp.nil?
 
+        if to_bool
+          r = compiled_eval_to_boolean(comp, context)
+          return [r, nil]
+        end
+        [0, compiled_eval(comp, context)]
+      end
+
+      def restore_saved(context, node, doc, cs, pp, fn, fn_uri, depth)
+        context.node = node
+        context.doc = doc
+        context.context_size = cs
+        context.proximity_position = pp
+        context.function = fn
+        context.function_uri = fn_uri
+        context.depth = depth
+        context.tmp_ns_list = nil
+      end
+
+      # xmlXPathCompiledEval: the value, or nil after an error
+      def compiled_eval(comp, context)
+        return nil if comp.nil?
+
         context.last_error = nil
         pctxt = ParserContext.new(context, comp, nil, 0)
+        node = context.node
+        doc = context.doc
+        cs = context.context_size
+        pp = context.proximity_position
+        fn = context.function
+        fn_uri = context.function_uri
+        depth = context.depth
         res_obj = nil
-        res = -1
-        saved = [context.node, context.doc, context.context_size, context.proximity_position,
-                 context.function, context.function_uri, context.depth]
-        aborted = true
+        ok = false
         catch(:xpath_abort) do
-          res = pctxt.run_eval(to_bool)
-          if pctxt.value_nr != (to_bool ? 0 : 1)
+          pctxt.run_eval(false)
+          if pctxt.value_nr != 1
             pctxt.xpath_err(STACK_ERROR)
-          elsif !to_bool
+          else
             res_obj = pctxt.value_pop
           end
-          aborted = false
+          ok = true
         end
-        if aborted
-          restore_context(context, saved)
-          res = -1
+        restore_saved(context, node, doc, cs, pp, fn, fn_uri, depth) unless ok
+        pctxt.error == EXPRESSION_OK ? res_obj : nil
+      end
+
+      # xmlXPathCompiledEvalToBoolean: 1, 0 or -1
+      def compiled_eval_to_boolean(comp, context)
+        return -1 if comp.nil?
+
+        context.last_error = nil
+        pctxt = ParserContext.new(context, comp, nil, 0)
+        node = context.node
+        doc = context.doc
+        cs = context.context_size
+        pp = context.proximity_position
+        fn = context.function
+        fn_uri = context.function_uri
+        depth = context.depth
+        res = nil
+        ok = false
+        catch(:xpath_abort) do
+          res = pctxt.run_eval(true)
+          pctxt.xpath_err(STACK_ERROR) if pctxt.value_nr != 0
+          ok = true
         end
-        res = -1 if pctxt.error != EXPRESSION_OK && to_bool
-        [res, pctxt.error == EXPRESSION_OK ? res_obj : nil]
+        restore_saved(context, node, doc, cs, pp, fn, fn_uri, depth) unless ok
+        return -1 if !ok || pctxt.error != EXPRESSION_OK
+
+        res ? 1 : 0
       end
 
       def restore_context(context, saved)
@@ -2014,18 +2062,6 @@ module Nokogiri
         context.tmp_ns_list = nil
       end
 
-      # xmlXPathCompiledEval
-      def compiled_eval(comp, context)
-        compiled_eval_internal(comp, context, false)[1]
-      end
-
-      # xmlXPathCompiledEvalToBoolean: 1, 0 or -1
-      def compiled_eval_to_boolean(comp, context)
-        res, = compiled_eval_internal(comp, context, true)
-        return -1 if res == -1
-
-        res ? 1 : 0
-      end
 
       # xmlXPathEval / xmlXPathEvalExpression: returns the value, or nil after reporting an error
       def eval(str, context)
