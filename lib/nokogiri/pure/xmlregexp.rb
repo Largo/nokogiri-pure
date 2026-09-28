@@ -293,7 +293,7 @@ module Nokogiri
       # compact/string_map/transdata are set.
       class Regexp
         attr_accessor :string, :states, :atoms, :counters, :determinist, :flags, :nbstates,
-          :compact, :transdata, :nbstrings, :string_map
+          :compact, :transdata, :nbstrings, :string_map, :push_index
 
         def initialize
           @string = nil
@@ -2210,6 +2210,44 @@ module Nokogiri
         (eb.getbyte(e) || 0) != 0 ? 0 : 1
       end
 
+      # [Hash string -> index for the strings without '*', indexes of the strings with '*']
+      def compact_push_index(comp)
+        exact = {}
+        wild = []
+        comp.string_map.each_with_index do |str, i|
+          if str.include?("*")
+            wild << i
+          else
+            exact[str] ||= i
+          end
+        end
+        [exact, wild]
+      end
+
+      # one iteration of the xmlRegCompactPushString loop: nil when string +i+ does not apply,
+      # else the function's return value (the SINK case jumps to the error exit as in C)
+      def compact_try(exec, comp, state, i, value, data)
+        stride = comp.nbstrings + 1
+        target = comp.compact[state * stride + i + 1]
+        return nil unless target > 0 && target <= comp.nbstates
+
+        target -= 1 # to avoid 0
+        return nil unless reg_str_equal_wildcard(comp.string_map[i], value) == 1
+
+        exec.index = target
+        if exec.callback && comp.transdata
+          exec.callback.call(exec.data, value, comp.transdata[state * comp.nbstrings + i], data)
+        end
+        ttype = comp.compact[target * stride]
+        if ttype == XML_REGEXP_SINK_STATE # goto error
+          exec.err_state_no = state
+          exec.status = XML_REGEXP_NOT_FOUND
+          reg_exec_set_err_string(exec, value)
+          return exec.status
+        end
+        ttype == XML_REGEXP_FINAL_STATE ? 1 : 0
+      end
+
       # xmlRegCompactPushString
       def reg_compact_push_string(exec, comp, value, data)
         state = exec.index
@@ -2223,28 +2261,31 @@ module Nokogiri
           return compact[state * stride] == XML_REGEXP_FINAL_STATE ? 1 : 0
         end
 
-        # Examine all outside transitions from current state
-        base = state * stride + 1
-        string_map = comp.string_map
-        nbstates = comp.nbstates
-        i = 0
-        while i < nbstrings
-          target = compact[base + i]
-          if target > 0 && target <= nbstates
-            target -= 1 # to avoid 0
-            if reg_str_equal_wildcard(string_map[i], value) == 1
-              exec.index = target
-              if exec.callback && comp.transdata
-                exec.callback.call(exec.data, value, comp.transdata[state * nbstrings + i], data)
-              end
-              ttype = compact[target * stride]
-              break if ttype == XML_REGEXP_SINK_STATE # goto error
-              return 1 if ttype == XML_REGEXP_FINAL_STATE
+        # Examine all outside transitions from current state. The C loop tries every string of
+        # the map in order; for a token without '*' only the equal string and the wildcard
+        # strings can match, so just those indexes are tried (still in increasing order).
+        if value.include?("*")
+          i = 0
+          while i < nbstrings
+            r = compact_try(exec, comp, state, i, value, data)
+            return r unless r.nil?
 
-              return 0
+            i += 1
+          end
+        else
+          exact, wild = comp.push_index ||= compact_push_index(comp)
+          j = exact[value]
+          if wild.empty?
+            if j
+              r = compact_try(exec, comp, state, j, value, data)
+              return r unless r.nil?
+            end
+          else
+            (j ? (wild + [j]).sort! : wild).each do |i|
+              r = compact_try(exec, comp, state, i, value, data)
+              return r unless r.nil?
             end
           end
-          i += 1
         end
         # Failed to find an exit transition out from current state for the current token
         exec.err_state_no = state
