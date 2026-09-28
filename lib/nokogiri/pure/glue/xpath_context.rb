@@ -109,7 +109,7 @@ module Nokogiri
         (argc - 1).downto(0) do |j|
           obj = ctxt.value_pop
           argv[j] = xpath2ruby(obj, ctxt.context)
-          argv[j] = XPath.cast_to_string(obj).dup.force_encoding(::Encoding::UTF_8) if argv[j] == :undef
+          argv[j] = XPath.cast_to_string(obj).dup.force_encoding(::Encoding::UTF_8) if argv[j].equal?(:undef)
         end
 
         rb_retval = handler.__send__(method_name, *argv)
@@ -260,7 +260,7 @@ module Nokogiri
         end
 
         rb_xpath_object = Pure::XPath.xpath2ruby(c_xpath_object, c_context)
-        rb_xpath_object = Pure.wrap_node_set(nil, c_context.doc._ruby_doc) if rb_xpath_object == :undef
+        rb_xpath_object = Pure.wrap_node_set(nil, c_context.doc._ruby_doc) if rb_xpath_object.equal?(:undef)
         rb_xpath_object
       end
 

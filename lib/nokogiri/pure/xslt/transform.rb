@@ -632,146 +632,160 @@ module Nokogiri
         old_inst = old_cur_inst = ctxt.inst
         old_context_node = ctxt.node
         old_vars_nr = ctxt.vars_tab.length
-        level = 0
-        cur = list
-        list_parent = list.parent
-        while cur
-          if ctxt.op_limit != 0
-            if ctxt.op_count >= ctxt.op_limit
-              transform_error(ctxt, nil, cur, "xsltApplySequenceConstructor: Operation limit exceeded\n")
-              ctxt.state = STATE_STOPPED
-              break
-            end
-            ctxt.op_count += 1
-          end
-          ctxt.inst = cur
-          break if insert.nil?
-
-          copy = nil
-          skip_children = false
-          if xslt_elem?(cur)
-            info = cur.psvi
-            if info.nil?
-              if cur.name == "message"
-                message(ctxt, context_node, cur)
-              else
-                ctxt.insert = insert
-                if apply_fallbacks(ctxt, context_node, cur) == 0
-                  generic_error("xsltApplySequenceConstructor: #{cur.name} was not compiled\n")
-                end
-                ctxt.insert = old_insert
+        begin
+          level = 0
+          cur = list
+          list_parent = list.parent
+          while cur
+            if ctxt.op_limit != 0
+              if ctxt.op_count >= ctxt.op_limit
+                transform_error(ctxt, nil, cur, "xsltApplySequenceConstructor: Operation limit exceeded\n")
+                ctxt.state = STATE_STOPPED
+                break
               end
-              skip_children = true
-            elsif info.func
-              old_cur_inst = ctxt.inst
-              ctxt.inst = cur
-              ctxt.insert = insert
-              info.func.call(ctxt, context_node, cur, info)
-              release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
-              ctxt.insert = old_insert
-              ctxt.inst = old_cur_inst
-              skip_children = true
-            else
-              if cur.name == "variable"
-                tmpvar = ctxt.vars
+              ctxt.op_count += 1
+            end
+            ctxt.inst = cur
+            break if insert.nil?
+
+            copy = nil
+            skip_children = false
+            if xslt_elem?(cur)
+              info = cur.psvi
+              if info.nil?
+                if cur.name == "message"
+                  message(ctxt, context_node, cur)
+                else
+                  ctxt.insert = insert
+                  if apply_fallbacks(ctxt, context_node, cur) == 0
+                    generic_error("xsltApplySequenceConstructor: #{cur.name} was not compiled\n")
+                  end
+                  ctxt.insert = old_insert
+                end
+                skip_children = true
+              elsif info.func
                 old_cur_inst = ctxt.inst
                 ctxt.inst = cur
-                parse_stylesheet_variable(ctxt, cur)
+                ctxt.insert = insert
+                info.func.call(ctxt, context_node, cur, info)
+                release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
+                ctxt.insert = old_insert
                 ctxt.inst = old_cur_inst
-                ctxt.vars.level = level unless tmpvar.equal?(ctxt.vars)
-              elsif cur.name == "message"
-                message(ctxt, context_node, cur)
+                skip_children = true
               else
-                transform_error(ctxt, nil, cur, "Unexpected XSLT element '#{cur.name}'.\n")
-              end
-              skip_children = true
-            end
-          elsif cur.type == TEXT_NODE || cur.type == CDATA_SECTION_NODE
-            break if copy_text(ctxt, insert, cur, ctxt.internalized).nil?
-          elsif cur.type == ELEMENT_NODE && cur.ns && !cur.psvi.nil?
-            old_cur_inst = ctxt.inst
-            ctxt.inst = cur
-            function = if cur.psvi.equal?(EXT_MARKER)
-              ext_element_lookup(ctxt, cur.name, cur.ns.href)
-            else
-              cur.psvi.func
-            end
-            if function.nil?
-              found = false
-              ctxt.insert = insert
-              child = cur.children
-              while child
-                if xslt_elem?(child) && child.name == "fallback"
-                  found = true
-                  apply_sequence_constructor(ctxt, context_node, child.children, nil)
+                if cur.name == "variable"
+                  tmpvar = ctxt.vars
+                  old_cur_inst = ctxt.inst
+                  ctxt.inst = cur
+                  parse_stylesheet_variable(ctxt, cur)
+                  ctxt.inst = old_cur_inst
+                  ctxt.vars.level = level unless tmpvar.equal?(ctxt.vars)
+                elsif cur.name == "message"
+                  message(ctxt, context_node, cur)
+                else
+                  transform_error(ctxt, nil, cur, "Unexpected XSLT element '#{cur.name}'.\n")
                 end
-                child = child.next
+                skip_children = true
               end
-              ctxt.insert = old_insert
-              unless found
-                transform_error(ctxt, nil, cur, "xsltApplySequenceConstructor: failed to find extension #{cur.name}\n")
+            elsif cur.type == TEXT_NODE || cur.type == CDATA_SECTION_NODE
+              break if copy_text(ctxt, insert, cur, ctxt.internalized).nil?
+            elsif cur.type == ELEMENT_NODE && cur.ns && !cur.psvi.nil?
+              old_cur_inst = ctxt.inst
+              ctxt.inst = cur
+              function = if cur.psvi.equal?(EXT_MARKER)
+                ext_element_lookup(ctxt, cur.name, cur.ns.href)
+              else
+                cur.psvi.func
               end
-            else
-              ctxt.lasttext = nil if cur.psvi.equal?(EXT_MARKER)
-              ctxt.insert = insert
-              function.call(ctxt, context_node, cur, cur.psvi)
-              release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
-              ctxt.insert = old_insert
-            end
-            ctxt.inst = old_cur_inst
-            skip_children = true
-          elsif cur.type == ELEMENT_NODE
-            old_cur_inst = ctxt.inst
-            ctxt.inst = cur
-            copy = shallow_copy_elem(ctxt, cur, insert, true)
-            break if copy.nil?
-
-            if templ && old_insert.equal?(insert) && ctxt.templ && ctxt.templ.inherited_ns
-              ctxt.templ.inherited_ns.each do |ns|
-                uri = ns_alias_lookup(ctxt.style, ns.href)
-                next if uri.equal?(UNDEFINED_DEFAULT_NS)
-
-                uri = ns.href if uri.nil?
-                ret = Tree.search_ns(copy.doc, copy, ns.prefix)
-                Tree.new_ns(copy, uri, ns.prefix) if ret.nil? || ret.href != uri
+              if function.nil?
+                found = false
+                ctxt.insert = insert
+                child = cur.children
+                while child
+                  if xslt_elem?(child) && child.name == "fallback"
+                    found = true
+                    apply_sequence_constructor(ctxt, context_node, child.children, nil)
+                  end
+                  child = child.next
+                end
+                ctxt.insert = old_insert
+                unless found
+                  transform_error(ctxt, nil, cur, "xsltApplySequenceConstructor: failed to find extension #{cur.name}\n")
+                end
+              else
+                ctxt.lasttext = nil if cur.psvi.equal?(EXT_MARKER)
+                ctxt.insert = insert
+                function.call(ctxt, context_node, cur, cur.psvi)
+                release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
+                ctxt.insert = old_insert
               end
-              copy.ns = get_namespace(ctxt, cur, copy.ns, copy) if copy.ns
-            end
-            attr_list_template_process(ctxt, copy, cur.properties) if cur.properties
-            ctxt.inst = old_cur_inst
-          end
+              ctxt.inst = old_cur_inst
+              skip_children = true
+            elsif cur.type == ELEMENT_NODE
+              old_cur_inst = ctxt.inst
+              ctxt.inst = cur
+              copy = shallow_copy_elem(ctxt, cur, insert, true)
+              break if copy.nil?
 
-          if !skip_children && cur.children && cur.children.type != ENTITY_DECL
-            cur = cur.children
-            level += 1
-            insert = copy if copy
-            next
-          end
+              if templ && old_insert.equal?(insert) && ctxt.templ && ctxt.templ.inherited_ns
+                ctxt.templ.inherited_ns.each do |ns|
+                  uri = ns_alias_lookup(ctxt.style, ns.href)
+                  next if uri.equal?(UNDEFINED_DEFAULT_NS)
 
-          # skip_children:
-          break if ctxt.state == STATE_STOPPED
+                  uri = ns.href if uri.nil?
+                  ret = Tree.search_ns(copy.doc, copy, ns.prefix)
+                  Tree.new_ns(copy, uri, ns.prefix) if ret.nil? || ret.href != uri
+                end
+                copy.ns = get_namespace(ctxt, cur, copy.ns, copy) if copy.ns
+              end
+              attr_list_template_process(ctxt, copy, cur.properties) if cur.properties
+              ctxt.inst = old_cur_inst
+            end
 
-          if cur.next
-            cur = cur.next
-            next
-          end
-          loop do
-            cur = cur.parent
-            level -= 1
-            if ctxt.vars_tab.length > old_vars_nr && ctxt.vars.level > level
-              local_variable_pop(ctxt, old_vars_nr, level)
+            if !skip_children && cur.children && cur.children.type != ENTITY_DECL
+              cur = cur.children
+              level += 1
+              insert = copy if copy
+              next
             end
-            insert = insert&.parent
-            break if cur.nil?
-            if cur.equal?(list_parent)
-              cur = nil
-              break
-            end
+
+            # skip_children:
+            break if ctxt.state == STATE_STOPPED
+
             if cur.next
               cur = cur.next
-              break
+              next
+            end
+            loop do
+              cur = cur.parent
+              level -= 1
+              if ctxt.vars_tab.length > old_vars_nr && ctxt.vars.level > level
+                local_variable_pop(ctxt, old_vars_nr, level)
+              end
+              insert = insert&.parent
+              break if cur.nil?
+              if cur.equal?(list_parent)
+                cur = nil
+                break
+              end
+              if cur.next
+                cur = cur.next
+                break
+              end
             end
           end
+        rescue SystemStackError
+          # The Ruby stack is exhausted before libxslt's xsltMaxDepth would trigger: report it
+          # the way libxslt reports hitting the maximum template depth.
+          unless ctxt.stack_overflow_reported
+            transform_error(ctxt, nil, list,
+              "xsltApplySequenceConstructor: A potential infinite template recursion was detected.\n" \
+              "You can adjust xsltMaxDepth (--maxdepth) in order to raise the maximum number of nested " \
+              "template calls and variables/params (currently set to #{ctxt.max_template_depth}).\n")
+            debug(ctxt, context_node, list, nil)
+            ctxt.stack_overflow_reported = true
+          end
+          ctxt.state = STATE_STOPPED
         end
         # error:
         local_variable_pop(ctxt, old_vars_nr, -1) if ctxt.vars_tab.length > old_vars_nr
@@ -998,11 +1012,19 @@ module Nokogiri
           doctype_public = get_import_ptr(style, :doctype_public)
           doctype_system = get_import_ptr(style, :doctype_system)
           encoding = get_import_ptr(style, :encoding)
+          version = get_import_ptr(style, :version)
 
           if method && method != "xml"
             if method == "html"
               ctxt.type = OUTPUT_HTML
-              res = html_new_doc(doctype_system, doctype_public, !(doctype_public || doctype_system))
+              if doctype_public || doctype_system
+                res = html_new_doc(doctype_system, doctype_public, false)
+              else
+                if version
+                  doctype_public, doctype_system = get_html_ids(version, doctype_public, doctype_system)
+                end
+                res = html_new_doc(doctype_system, doctype_public, true)
+              end
             elsif method == "xhtml"
               transform_error(ctxt, nil, inst, "xsltDocumentElem: unsupported method xhtml\n")
               ctxt.type = OUTPUT_HTML
@@ -1116,6 +1138,29 @@ module Nokogiri
           Tree.create_int_subset(cur, "html", external_id, uri) if uri || external_id
         end
         cur
+      end
+
+      HTML_VERSIONS = [
+        ["5", nil, "about:legacy-compat"],
+        ["4.01frame", "-//W3C//DTD HTML 4.01 Frameset//EN", "http://www.w3.org/TR/1999/REC-html401-19991224/frameset.dtd"],
+        ["4.01strict", "-//W3C//DTD HTML 4.01//EN", "http://www.w3.org/TR/1999/REC-html401-19991224/strict.dtd"],
+        ["4.01trans", "-//W3C//DTD HTML 4.01 Transitional//EN", "http://www.w3.org/TR/1999/REC-html401-19991224/loose.dtd"],
+        ["4.01", "-//W3C//DTD HTML 4.01 Transitional//EN", "http://www.w3.org/TR/1999/REC-html401-19991224/loose.dtd"],
+        ["4.0strict", "-//W3C//DTD HTML 4.01//EN", "http://www.w3.org/TR/html4/strict.dtd"],
+        ["4.0trans", "-//W3C//DTD HTML 4.01 Transitional//EN", "http://www.w3.org/TR/html4/loose.dtd"],
+        ["4.0frame", "-//W3C//DTD HTML 4.01 Frameset//EN", "http://www.w3.org/TR/html4/frameset.dtd"],
+        ["4.0", "-//W3C//DTD HTML 4.01 Transitional//EN", "http://www.w3.org/TR/html4/loose.dtd"],
+        ["3.2", "-//W3C//DTD HTML 3.2//EN", nil],
+      ].freeze
+
+      # xsltGetHTMLIDs: returns [public_id, system_id] (unchanged when the version is unknown)
+      def get_html_ids(version, public_id, system_id)
+        return [public_id, system_id] if version.nil?
+
+        HTML_VERSIONS.each do |v, pub, sys|
+          return [pub, sys] if version.casecmp?(v)
+        end
+        [public_id, system_id]
       end
 
       # xsltSort
@@ -1797,6 +1842,7 @@ module Nokogiri
               elsif version.nil?
                 html_new_doc(nil, nil, true)
               else
+                doctype_public, doctype_system = get_html_ids(version, doctype_public, doctype_system)
                 html_new_doc(doctype_system, doctype_public, false)
               end
             elsif method == "xhtml"
@@ -1854,6 +1900,11 @@ module Nokogiri
                 res.type = HTML_DOCUMENT_NODE
                 if doctype_public || doctype_system
                   res.int_subset = Tree.create_int_subset(res, doctype, doctype_public, doctype_system)
+                elsif version
+                  doctype_public, doctype_system = get_html_ids(version, doctype_public, doctype_system)
+                  if doctype_public || doctype_system
+                    res.int_subset = Tree.create_int_subset(res, doctype, doctype_public, doctype_system)
+                  end
                 end
               end
             end

@@ -21,7 +21,7 @@ here = __dir__
 lib = File.expand_path("../../lib", here)
 Dir.mktmpdir do |dir|
   cf = File.join(dir, "cases")
-  File.binwrite(cf, Marshal.dump(cases.map { |c| c[0, 4] }))
+  File.binwrite(cf, Marshal.dump(cases.map { |c| c[0, 4] + [c[5]] }))
   oracle = File.join(dir, "oracle")
   pure = File.join(dir, "pure")
   t1 = Thread.new { system("ruby", "-e", 'gem "nokogiri", "1.19.4"; require "nokogiri"; load ARGV.shift', File.join(here, "run_cases.rb"), cf, oracle, chdir: here) }
@@ -44,8 +44,8 @@ Dir.mktmpdir do |dir|
     fails += 1
     next unless verbose || fails <= 20
 
-    puts "=== FAIL #{kind} ##{i} opts=#{c[1]} enc=#{c[2].inspect} input=#{c[0].inspect[0, 300]}"
-    %i[exception message crash bt xml errors tree url].each do |k|
+    puts "=== FAIL #{kind} ##{i} opts=#{c[1]} enc=#{c[2].inspect} mode=#{c[5].inspect} input=#{c[0].inspect[0, 300]}"
+    %i[exception message crash bt xml errors tree url log pos raised nodes doc].each do |k|
       next if a[i][k] == b[i][k]
 
       puts "  #{k}:"

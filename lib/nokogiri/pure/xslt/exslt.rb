@@ -210,6 +210,19 @@ module Nokogiri
           i ? s.byteslice(0, i) : s
         end
 
+        # libxml2 keeps the XPath recursion depth in ctxt->context->depth; the pure evaluator
+        # tracks it in the parser context while evaluating. Nested evaluations started by an
+        # extension function (dyn:evaluate, dyn:map, saxon:eval) must continue from the live
+        # depth, so copy it into the context. Returns the previous context depth.
+        def sync_xpath_depth(ctxt)
+          saved = ctxt.context.depth
+          if ctxt.instance_variable_defined?(:@depth)
+            live = ctxt.instance_variable_get(:@depth)
+            ctxt.context.depth = live if live.is_a?(Integer)
+          end
+          saved
+        end
+
         # xmlXPathStackIsNodeSet
         def stack_is_node_set?(ctxt)
           ctxt.value.is_a?(Array)

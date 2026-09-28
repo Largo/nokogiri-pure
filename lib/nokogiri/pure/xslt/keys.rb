@@ -323,12 +323,22 @@ module Nokogiri
 
       # ---- documents.c --------------------------------------------------------------------------
 
-      # xsltDocDefaultLoader: parse the document at +uri+ (nil on failure)
+      # xsltDocDefaultLoader(Func): parse the document at +uri+ (nil on failure)
       def doc_default_loader(uri, options, _ctxt, _type)
         loader = @doc_loader
         return loader.call(uri, options) if loader
+        return nil unless Pure.const_defined?(:Parser) && Pure::Parser.const_defined?(:Ctxt)
 
-        Pure.respond_to?(:xslt_load_document) ? Pure.xslt_load_document(uri, options) : nil
+        # xmlFileOpen retries with the %-unescaped file name
+        if uri.include?("%") && uri !~ %r{\A[A-Za-z][A-Za-z0-9+.-]*://(?!/)} && !File.exist?(uri.sub(%r{\Afile://}, ""))
+          uri = uri.gsub(/%([0-9A-Fa-f]{2})/) { Regexp.last_match(1).hex.chr }
+        end
+        pctxt = Pure::Parser::Ctxt.new
+        pctxt.use_options(options)
+        input = Pure::Parser::Loader.load_external_entity(uri, nil, pctxt)
+        return nil if input.nil?
+
+        pctxt.parse_document_with(input)
       end
 
       # xsltSetLoaderFunc

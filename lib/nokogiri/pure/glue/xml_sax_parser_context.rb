@@ -42,7 +42,10 @@ module Nokogiri
           end
 
           def native_memory(input, encoding)
-            raise TypeError, "wrong argument type #{input.class} (expected String)" unless input.is_a?(String)
+            unless input.is_a?(String)
+              tn = input.nil? || input == true || input == false ? input.inspect : input.class
+              raise TypeError, "wrong argument type #{tn} (expected String)"
+            end
             raise RuntimeError, "input string cannot be empty" if input.empty?
             if !encoding.nil? && !encoding.is_a?(Encoding)
               raise TypeError, "argument must be an Encoding object"

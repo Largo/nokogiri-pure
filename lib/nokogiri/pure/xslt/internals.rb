@@ -251,7 +251,7 @@ module Nokogiri
           :max_template_vars, :op_limit, :op_count, :source_doc_dirty, :current_id,
           :new_locale, :free_locale, :gen_sort_key,
           # pure-Ruby replacements for data libxslt squeezes into the source nodes
-          :source_flags, :source_ids, :pattern_cache, :rvt_docs
+          :source_flags, :source_ids, :pattern_cache, :rvt_docs, :stack_overflow_reported
 
         def templ_nr = @templ_tab.length
         def vars_nr = @vars_tab.length

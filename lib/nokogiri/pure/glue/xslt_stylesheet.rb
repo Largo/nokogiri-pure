@@ -9,7 +9,7 @@ module Nokogiri
 
       DOMAIN_NAMES = {
         Domain::PARSER => "parser ", Domain::TREE => "tree ", Domain::NAMESPACE => "namespace ",
-        Domain::DTD => "validity ", Domain::HTML => "HTML parser ", Domain::MEMORY => "memory ",
+        Domain::DTD => "validity ", Domain::VALID => "validity ", Domain::HTML => "HTML parser ", Domain::MEMORY => "memory ",
         Domain::OUTPUT => "output ", Domain::IO => "I/O ", Domain::XINCLUDE => "XInclude ",
         Domain::XPATH => "XPath ", Domain::XPOINTER => "parser ", Domain::REGEXP => "regexp ",
         Domain::MODULE => "module ", Domain::SCHEMASV => "Schemas validity ",
@@ -31,17 +31,21 @@ module Nokogiri
         out << (DOMAIN_NAMES[err.domain] || "")
         out << case err.level
         when Level::WARNING then "warning : "
-        when Level::ERROR, Level::FATAL
-          err.domain == Domain::DTD || err.domain == Domain::VALID ? "validity error : " : "error : "
-        else ""
+        when Level::ERROR, Level::FATAL then "error : "
+        else ": "
         end
-        out << err.message.to_s
+        msg = err.message.to_s
+        out << msg
+        out << "\n" unless msg.end_with?("\n")
         out
       end
 
+      PARSER_DOMAINS = [Domain::PARSER, Domain::HTML, Domain::DTD, Domain::NAMESPACE, Domain::IO,
+                        Domain::VALID, Domain::I18N].freeze
+
       # how an XmlError reaches xmlGenericError when no structured handler is installed
       def generic_text(err)
-        return report_error_text(err) if err.ctxt
+        return report_error_text(err) if err.ctxt || PARSER_DOMAINS.include?(err.domain)
 
         err.message.to_s
       end

@@ -212,6 +212,9 @@ module Nokogiri
     class XmlElementDecl < XmlNode
       attr_accessor :etype, :econtent, :attributes, :prefix, :cont_model
 
+      # xmlElement.attributes overlays xmlNode.properties in libxml2's struct layout
+      def properties = @attributes
+
       def initialize(name = nil)
         super(ELEMENT_DECL, name, nil)
         @etype = ELEMENT_TYPE_UNDEFINED

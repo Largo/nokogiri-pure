@@ -125,11 +125,11 @@ module Nokogiri
         end
 
         def warning(ctxt, msg)
-          doc(ctxt).warning(str(msg))
+          doc(ctxt).warning(msg.b)
         end
 
         def error(ctxt, msg)
-          doc(ctxt).error(str(msg))
+          doc(ctxt).error(msg.b)
         end
 
         def cdata_block(ctxt, s)

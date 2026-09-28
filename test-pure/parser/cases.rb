@@ -79,6 +79,11 @@ module ParserCases
     "<root><a href=\"x\">link</a><b><c/>tail</b>&amp;<d>&#233;</d></root>",
   ].freeze
 
+  FRAGMENTS = ["<b/>", "text", "<b>x</b><c/>", "<b>", "</x>", "<p:b/>", "<b xmlns='urn:q'/>", "&amp;&e;", "<b a='1' a='2'/>",
+    "<!-- c --><?pi?>", "<![CDATA[x]]>", "", " ", "<b><c></b>", "x<y", "<b p:a='1'/>"].freeze
+  CONTEXTS = ["<root/>", "<root xmlns:p='urn:p'><c ctx='1'/></root>", "<!DOCTYPE r [<!ENTITY e 'E'>]><r/>",
+    "<?xml version='1.0' encoding='ISO-8859-1'?><r/>"].freeze
+
   FIXTURES = %w[staff.xml address_book.xml po.xml atom.xml snuggles.xml valid_bar.xml bogus.xml exslt.xml
     iso-8859-1.xml namespace_pressure_test.xml xinclude.xml to_be_xincluded.xml shift_jis.xml].freeze
 
@@ -86,7 +91,7 @@ module ParserCases
 
   def all(kinds = nil)
     out = []
-    add = ->(kind, input, opts, enc = nil, url = nil) { out << [input, opts, enc, url, kind] if kinds.nil? || kinds.include?(kind) }
+    add = ->(kind, input, opts, enc = nil, url = nil, mode = nil) { out << [input, opts, enc, url, kind, mode] if kinds.nil? || kinds.include?(kind) }
     BASIC.each do |s|
       add.("basic", s, DEFAULT)
       add.("strict", s, STRICT)
@@ -109,6 +114,44 @@ module ParserCases
       data = File.binread(path)
       add.("fixture", data, DEFAULT, nil, path)
       add.("fixture", data, DEFAULT | NOENT | DTDLOAD, nil, path)
+    end
+    BASIC.each do |s|
+      next if s.empty?
+
+      add.("sax", s, 0, nil, nil, :sax)
+      add.("sax_recover", s, RECOVER, nil, nil, :sax)
+      add.("io", s, DEFAULT, nil, nil, :io)
+    end
+    BASIC.first(120).each do |s|
+      add.("push1", s, DEFAULT, nil, nil, [:push, 1])
+      add.("push7", s, 0, nil, nil, [:push, 7])
+    end
+    BASES.each { |b| [1, 2, 3, 5, 16, 64].each { |n| add.("pushbase", b, DEFAULT, nil, nil, [:push, n]) } }
+    FRAGMENTS.each do |f|
+      CONTEXTS.each do |c|
+        add.("fragment", f, DEFAULT, nil, nil, [:fragment, c])
+        add.("fragment_strict", f, 0, nil, nil, [:fragment, c])
+      end
+    end
+    rng = Random.new(42)
+    alphabet = ["<", ">", "/", "&", ";", "'", "\"", "=", "!", "?", "[", "]", "-", " ", "\n", "\r", "\t", "a", ":", "#", "x",
+      "%", "\u00e9", "\xFF".b, "\x00", "<!--", "]]>", "<![CDATA[", "&#", "</", "/>", "xmlns:", "<?", "?>"]
+    pool = BASES + BASIC.select { |b| b.bytesize > 8 }
+    1500.times do |n|
+      src = pool[rng.rand(pool.size)].b.dup
+      (1 + rng.rand(3)).times do
+        pos = rng.rand(src.bytesize + 1)
+        case rng.rand(3)
+        when 0 then src = src.byteslice(0, pos) + alphabet[rng.rand(alphabet.size)].b + src.byteslice(pos..).to_s
+        when 1 then src = src.byteslice(0, pos) + src.byteslice(pos + 1 + rng.rand(4)..).to_s
+        else
+          l = rng.rand(10)
+          src = src.byteslice(0, pos) + src.byteslice(pos, l).to_s + src.byteslice(pos..).to_s
+        end
+      end
+      add.("fuzz", src, n.even? ? DEFAULT : STRICT)
+      add.("fuzzsax", src, RECOVER, nil, nil, :sax) if n % 5 == 0
+      add.("fuzzpush", src, DEFAULT, nil, nil, [:push, 1 + rng.rand(9)]) if n % 5 == 1
     end
     add.("enc", "<a>\xe9</a>".b, DEFAULT, "ISO-8859-1")
     add.("enc", "<a>x</a>", DEFAULT, "bogus")

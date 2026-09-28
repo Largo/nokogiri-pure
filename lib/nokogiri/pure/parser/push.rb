@@ -28,10 +28,18 @@ module Nokogiri
           0
         end
 
+        # byteindex of an ASCII +str+ from byte offset +start+ (which may be inside a char)
+        def bindex(str, start)
+          return nil if start > @end
+
+          start += 1 while start < @end && (@buf.getbyte(start) & 0xC0) == 0x80
+          @buf.byteindex(str, start)
+        end
+
         # xmlParseLookupChar
         def lookup_char(c)
           start = @check_index == 0 ? @cur + 1 : @cur + @check_index
-          idx = @buf.byteindex(c.chr, start) if start <= @end
+          idx = bindex(c.chr, start)
           if idx.nil?
             @check_index = @end - @cur
             false
@@ -44,7 +52,7 @@ module Nokogiri
         # xmlParseLookupString: returns the position of +str+ or nil
         def lookup_string(start_delta, str)
           start = @check_index == 0 ? @cur + start_delta : @cur + @check_index
-          term = start <= @end ? @buf.byteindex(str, start) : nil
+          term = bindex(str, start)
           if term.nil?
             e = @end
             e = if e - start < str.bytesize
@@ -213,6 +221,9 @@ module Nokogiri
             when XML_PARSER_EOF
               break
             when XML_PARSER_START
+              if @input.raw && @input.decoder.nil?
+                avail = @input.raw.bytesize - @input.raw_offset(@cur)
+              end
               break if !terminate && avail < 4
               break if cmp?("\x4C\x6F\xA7\x94".b) && !terminate && avail < 200
 
@@ -360,7 +371,7 @@ module Nokogiri
               @instate = name_nr == 0 ? XML_PARSER_EPILOG : XML_PARSER_CONTENT
             when XML_PARSER_CDATA_SECTION
               term = if terminate
-                @buf.byteindex("]]>", @cur)
+                bindex("]]>", @cur)
               else
                 lookup_string(0, "]]>")
               end

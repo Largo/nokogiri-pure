@@ -734,7 +734,7 @@ module Nokogiri
           c = cur_byte
           return nil unless c >= 0x30 && c <= 0x39
 
-          buf = +c.chr
+          buf = (+"") << c.chr
           next_char
           c = cur_byte
           return nil if c != 0x2E
@@ -783,7 +783,7 @@ module Nokogiri
           max_length = option?(PARSE_HUGE) ? XML_MAX_TEXT_LENGTH : XML_MAX_NAME_LENGTH
           c = cur_byte
           if (c >= 0x61 && c <= 0x7A) || (c >= 0x41 && c <= 0x5A)
-            buf = +c.chr
+            buf = (+"") << c.chr
             next_char
             c = cur_byte
             while (c >= 0x61 && c <= 0x7A) || (c >= 0x41 && c <= 0x5A) || (c >= 0x30 && c <= 0x39) ||

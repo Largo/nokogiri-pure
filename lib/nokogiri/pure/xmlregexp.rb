@@ -448,6 +448,32 @@ module Nokogiri
         0
       end
 
+      # BMP membership bitmaps, built lazily per table (hot path of \p{..}, \i, \c, \d, \w)
+      BITMAPS = {}.compare_by_identity
+
+      def build_bitmap(tbl)
+        bytes = Array.new(8192, 0)
+        i = 0
+        while i < tbl.size
+          lo = tbl[i]
+          break if lo > 0xffff
+
+          hi = tbl[i + 1]
+          hi = 0xffff if hi > 0xffff
+          (lo..hi).each { |c| bytes[c >> 3] |= (1 << (c & 7)) }
+          i += 2
+        end
+        BITMAPS[tbl] = bytes.pack("C*").freeze
+      end
+
+      # 1 / 0: membership of +c+ in a flat range table
+      def member(tbl, c)
+        return in_table(tbl, c) if c > 0xffff
+
+        bm = BITMAPS[tbl] || build_bitmap(tbl)
+        (bm.getbyte(c >> 3) >> (c & 7)) & 1
+      end
+
       BLOCK_TABLE = Unicode::BLOCKS.to_h { |name, ranges| [name, ranges] }.freeze
 
       # xmlUCSIsBlock: 1 / 0, -1 for an unknown block name
@@ -455,7 +481,7 @@ module Nokogiri
         tbl = BLOCK_TABLE[block]
         return -1 if tbl.nil?
 
-        in_table(tbl, code)
+        member(tbl, code)
       end
 
       # IS_CHAR (xmlIsCharQ)
@@ -469,12 +495,12 @@ module Nokogiri
 
       # IS_LETTER = IS_BASECHAR || IS_IDEOGRAPHIC
       def is_letter(c)
-        in_table(Unicode::BASE_CHAR, c) == 1 || (c >= 0x100 && in_table(Unicode::IDEOGRAPHIC, c) == 1)
+        member(Unicode::BASE_CHAR, c) == 1 || (c >= 0x100 && member(Unicode::IDEOGRAPHIC, c) == 1)
       end
 
-      def is_digit(c) = in_table(Unicode::DIGIT, c) == 1
-      def is_combining(c) = c >= 0x100 && in_table(Unicode::COMBINING, c) == 1
-      def is_extender(c) = in_table(Unicode::EXTENDER, c) == 1
+      def is_digit(c) = member(Unicode::DIGIT, c) == 1
+      def is_combining(c) = c >= 0x100 && member(Unicode::COMBINING, c) == 1
+      def is_extender(c) = member(Unicode::EXTENDER, c) == 1
 
       # ------------------------------------------------------------------
       # Regexp memory / error handlers
@@ -1539,47 +1565,47 @@ module Nokogiri
                  is_combining(codepoint) || is_extender(codepoint)) ? 1 : 0
         when XML_REGEXP_NOTDECIMAL, XML_REGEXP_DECIMAL
           neg = c_not(neg) if type == XML_REGEXP_NOTDECIMAL
-          ret = in_table(Unicode::CAT_ND, codepoint)
+          ret = member(Unicode::CAT_ND, codepoint)
         when XML_REGEXP_REALCHAR, XML_REGEXP_NOTREALCHAR
           neg = c_not(neg) if type == XML_REGEXP_REALCHAR
-          ret = in_table(Unicode::CAT_P, codepoint)
-          ret = in_table(Unicode::CAT_Z, codepoint) if ret == 0
-          ret = in_table(Unicode::CAT_C, codepoint) if ret == 0
-        when XML_REGEXP_LETTER then ret = in_table(Unicode::CAT_L, codepoint)
-        when XML_REGEXP_LETTER_UPPERCASE then ret = in_table(Unicode::CAT_LU, codepoint)
-        when XML_REGEXP_LETTER_LOWERCASE then ret = in_table(Unicode::CAT_LL, codepoint)
-        when XML_REGEXP_LETTER_TITLECASE then ret = in_table(Unicode::CAT_LT, codepoint)
-        when XML_REGEXP_LETTER_MODIFIER then ret = in_table(Unicode::CAT_LM, codepoint)
-        when XML_REGEXP_LETTER_OTHERS then ret = in_table(Unicode::CAT_LO, codepoint)
-        when XML_REGEXP_MARK then ret = in_table(Unicode::CAT_M, codepoint)
-        when XML_REGEXP_MARK_NONSPACING then ret = in_table(Unicode::CAT_MN, codepoint)
-        when XML_REGEXP_MARK_SPACECOMBINING then ret = in_table(Unicode::CAT_MC, codepoint)
-        when XML_REGEXP_MARK_ENCLOSING then ret = in_table(Unicode::CAT_ME, codepoint)
-        when XML_REGEXP_NUMBER then ret = in_table(Unicode::CAT_N, codepoint)
-        when XML_REGEXP_NUMBER_DECIMAL then ret = in_table(Unicode::CAT_ND, codepoint)
-        when XML_REGEXP_NUMBER_LETTER then ret = in_table(Unicode::CAT_NL, codepoint)
-        when XML_REGEXP_NUMBER_OTHERS then ret = in_table(Unicode::CAT_NO, codepoint)
-        when XML_REGEXP_PUNCT then ret = in_table(Unicode::CAT_P, codepoint)
-        when XML_REGEXP_PUNCT_CONNECTOR then ret = in_table(Unicode::CAT_PC, codepoint)
-        when XML_REGEXP_PUNCT_DASH then ret = in_table(Unicode::CAT_PD, codepoint)
-        when XML_REGEXP_PUNCT_OPEN then ret = in_table(Unicode::CAT_PS, codepoint)
-        when XML_REGEXP_PUNCT_CLOSE then ret = in_table(Unicode::CAT_PE, codepoint)
-        when XML_REGEXP_PUNCT_INITQUOTE then ret = in_table(Unicode::CAT_PI, codepoint)
-        when XML_REGEXP_PUNCT_FINQUOTE then ret = in_table(Unicode::CAT_PF, codepoint)
-        when XML_REGEXP_PUNCT_OTHERS then ret = in_table(Unicode::CAT_PO, codepoint)
-        when XML_REGEXP_SEPAR then ret = in_table(Unicode::CAT_Z, codepoint)
-        when XML_REGEXP_SEPAR_SPACE then ret = in_table(Unicode::CAT_ZS, codepoint)
-        when XML_REGEXP_SEPAR_LINE then ret = in_table(Unicode::CAT_ZL, codepoint)
-        when XML_REGEXP_SEPAR_PARA then ret = in_table(Unicode::CAT_ZP, codepoint)
-        when XML_REGEXP_SYMBOL then ret = in_table(Unicode::CAT_S, codepoint)
-        when XML_REGEXP_SYMBOL_MATH then ret = in_table(Unicode::CAT_SM, codepoint)
-        when XML_REGEXP_SYMBOL_CURRENCY then ret = in_table(Unicode::CAT_SC, codepoint)
-        when XML_REGEXP_SYMBOL_MODIFIER then ret = in_table(Unicode::CAT_SK, codepoint)
-        when XML_REGEXP_SYMBOL_OTHERS then ret = in_table(Unicode::CAT_SO, codepoint)
-        when XML_REGEXP_OTHER then ret = in_table(Unicode::CAT_C, codepoint)
-        when XML_REGEXP_OTHER_CONTROL then ret = in_table(Unicode::CAT_CC, codepoint)
-        when XML_REGEXP_OTHER_FORMAT then ret = in_table(Unicode::CAT_CF, codepoint)
-        when XML_REGEXP_OTHER_PRIVATE then ret = in_table(Unicode::CAT_CO, codepoint)
+          ret = member(Unicode::CAT_P, codepoint)
+          ret = member(Unicode::CAT_Z, codepoint) if ret == 0
+          ret = member(Unicode::CAT_C, codepoint) if ret == 0
+        when XML_REGEXP_LETTER then ret = member(Unicode::CAT_L, codepoint)
+        when XML_REGEXP_LETTER_UPPERCASE then ret = member(Unicode::CAT_LU, codepoint)
+        when XML_REGEXP_LETTER_LOWERCASE then ret = member(Unicode::CAT_LL, codepoint)
+        when XML_REGEXP_LETTER_TITLECASE then ret = member(Unicode::CAT_LT, codepoint)
+        when XML_REGEXP_LETTER_MODIFIER then ret = member(Unicode::CAT_LM, codepoint)
+        when XML_REGEXP_LETTER_OTHERS then ret = member(Unicode::CAT_LO, codepoint)
+        when XML_REGEXP_MARK then ret = member(Unicode::CAT_M, codepoint)
+        when XML_REGEXP_MARK_NONSPACING then ret = member(Unicode::CAT_MN, codepoint)
+        when XML_REGEXP_MARK_SPACECOMBINING then ret = member(Unicode::CAT_MC, codepoint)
+        when XML_REGEXP_MARK_ENCLOSING then ret = member(Unicode::CAT_ME, codepoint)
+        when XML_REGEXP_NUMBER then ret = member(Unicode::CAT_N, codepoint)
+        when XML_REGEXP_NUMBER_DECIMAL then ret = member(Unicode::CAT_ND, codepoint)
+        when XML_REGEXP_NUMBER_LETTER then ret = member(Unicode::CAT_NL, codepoint)
+        when XML_REGEXP_NUMBER_OTHERS then ret = member(Unicode::CAT_NO, codepoint)
+        when XML_REGEXP_PUNCT then ret = member(Unicode::CAT_P, codepoint)
+        when XML_REGEXP_PUNCT_CONNECTOR then ret = member(Unicode::CAT_PC, codepoint)
+        when XML_REGEXP_PUNCT_DASH then ret = member(Unicode::CAT_PD, codepoint)
+        when XML_REGEXP_PUNCT_OPEN then ret = member(Unicode::CAT_PS, codepoint)
+        when XML_REGEXP_PUNCT_CLOSE then ret = member(Unicode::CAT_PE, codepoint)
+        when XML_REGEXP_PUNCT_INITQUOTE then ret = member(Unicode::CAT_PI, codepoint)
+        when XML_REGEXP_PUNCT_FINQUOTE then ret = member(Unicode::CAT_PF, codepoint)
+        when XML_REGEXP_PUNCT_OTHERS then ret = member(Unicode::CAT_PO, codepoint)
+        when XML_REGEXP_SEPAR then ret = member(Unicode::CAT_Z, codepoint)
+        when XML_REGEXP_SEPAR_SPACE then ret = member(Unicode::CAT_ZS, codepoint)
+        when XML_REGEXP_SEPAR_LINE then ret = member(Unicode::CAT_ZL, codepoint)
+        when XML_REGEXP_SEPAR_PARA then ret = member(Unicode::CAT_ZP, codepoint)
+        when XML_REGEXP_SYMBOL then ret = member(Unicode::CAT_S, codepoint)
+        when XML_REGEXP_SYMBOL_MATH then ret = member(Unicode::CAT_SM, codepoint)
+        when XML_REGEXP_SYMBOL_CURRENCY then ret = member(Unicode::CAT_SC, codepoint)
+        when XML_REGEXP_SYMBOL_MODIFIER then ret = member(Unicode::CAT_SK, codepoint)
+        when XML_REGEXP_SYMBOL_OTHERS then ret = member(Unicode::CAT_SO, codepoint)
+        when XML_REGEXP_OTHER then ret = member(Unicode::CAT_C, codepoint)
+        when XML_REGEXP_OTHER_CONTROL then ret = member(Unicode::CAT_CC, codepoint)
+        when XML_REGEXP_OTHER_FORMAT then ret = member(Unicode::CAT_CF, codepoint)
+        when XML_REGEXP_OTHER_PRIVATE then ret = member(Unicode::CAT_CO, codepoint)
         when XML_REGEXP_OTHER_NA
           # ret = xmlUCSIsCatCn(codepoint); seems it doesn't exist anymore
           ret = 0

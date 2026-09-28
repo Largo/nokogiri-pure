@@ -18,6 +18,94 @@ module Nokogiri
           XPath.node_set_add_unique(ret, node)
         end
 
+        # the tokens (binary strings) of str:tokenize(s, d); s and d are binary C strings
+        def str_tokenize_tokens(s, d)
+          # fast path: for well-formed UTF-8 the C loop splits on whole characters
+          if s.dup.force_encoding(::Encoding::UTF_8).valid_encoding? &&
+              d.dup.force_encoding(::Encoding::UTF_8).valid_encoding?
+            su = s.dup.force_encoding(::Encoding::UTF_8)
+            return su.each_char.map(&:b) if d.empty?
+
+            chars = d.dup.force_encoding(::Encoding::UTF_8).each_char.map { |c| Regexp.escape(c) }
+            re = Regexp.new("(?:#{chars.join("|")})")
+            return su.split(re).reject(&:empty?).map(&:b)
+          end
+          str_tokenize_tokens_bytewise(s, d)
+        end
+
+        # the byte-level loop of exsltStrTokenizeFunction
+        def str_tokenize_tokens_bytewise(s, d)
+          toks = []
+          len = s.bytesize
+          cur = 0
+          token = 0
+          while cur < len
+            clen = utf8_strsize(s, cur, 1)
+            if d.empty? # empty string case
+              toks << s.byteslice(cur, clen)
+              token = cur + clen
+            else
+              dl = 0
+              while dl < d.bytesize
+                if utf8_charcmp(s, cur, d, dl) == 0
+                  if cur == token
+                    # discard empty tokens
+                    token = cur + clen
+                    break
+                  end
+                  toks << s.byteslice(token, cur - token)
+                  token = cur + clen
+                  break
+                end
+                dl += utf8_strsize(d, dl, 1)
+              end
+            end
+            cur += clen
+          end
+          toks << s.byteslice(token, len - token) if token != cur
+          toks
+        end
+
+        # the tokens (binary strings) of str:split(s, d); s and d are binary C strings
+        def str_split_tokens(s, d)
+          return s.each_byte.map(&:chr) if d.empty? # (single bytes, like the C code)
+
+          # fast path: xmlStrncasecmp folds ASCII only, like a case-insensitive binary regexp
+          re = Regexp.new(Regexp.escape(d), Regexp::IGNORECASE | Regexp::NOENCODING)
+          s.split(re).reject(&:empty?)
+        end
+
+        # the byte-level loop of exsltStrSplitFunction
+        def str_split_tokens_bytewise(s, d)
+          toks = []
+          delimiter_length = d.bytesize
+          len = s.bytesize
+          cur = 0
+          token = 0
+          while cur < len
+            if delimiter_length == 0
+              if cur != token
+                toks << s.byteslice(token, cur - token)
+                token += 1
+              end
+            elsif strncasecmp(s, cur, d, 0, delimiter_length) == 0
+              if cur == token
+                # discard empty tokens
+                cur = cur + delimiter_length - 1
+                token = cur + 1
+                cur += 1
+                next
+              end
+              toks << s.byteslice(token, cur - token)
+              cur = cur + delimiter_length - 1
+              token = cur + 1
+            end
+            cur += 1
+          end
+          toks << s.byteslice(token, cur - token) if token != cur
+          toks
+        end
+
         # exsltStrTokenizeFunction
         def str_tokenize_function(ctxt, nargs)
           if nargs < 1 || nargs > 2
@@ -46,35 +134,9 @@ module Nokogiri
             if container
               XSLT.register_local_rvt(tctxt, container)
               ret = []
-              s = cstr(str.b)
-              d = cstr(delimiters.b)
-              len = s.bytesize
-              cur = 0
-              token = 0
-              while cur < len
-                clen = utf8_strsize(s, cur, 1)
-                if d.empty? # empty string case
-                  str_add_token(container, ret, s.byteslice(cur, clen))
-                  token = cur + clen
-                else
-                  dl = 0
-                  while dl < d.bytesize
-                    if utf8_charcmp(s, cur, d, dl) == 0
-                      if cur == token
-                        # discard empty tokens
-                        token = cur + clen
-                        break
-                      end
-                      str_add_token(container, ret, s.byteslice(token, cur - token))
-                      token = cur + clen
-                      break
-                    end
-                    dl += utf8_strsize(d, dl, 1)
-                  end
-                end
-                cur += clen
+              str_tokenize_tokens(cstr(str.b), cstr(delimiters.b)).each do |tok|
+                str_add_token(container, ret, tok)
               end
-              str_add_token(container, ret, s.byteslice(token, len - token)) if token != cur
             end
           end
 
@@ -112,31 +174,7 @@ module Nokogiri
             if container
               XSLT.register_local_rvt(tctxt, container)
               ret = []
-              s = cstr(str.b)
-              len = s.bytesize
-              cur = 0
-              token = 0
-              while cur < len
-                if delimiter_length == 0
-                  if cur != token
-                    str_add_token(container, ret, s.byteslice(token, cur - token))
-                    token += 1
-                  end
-                elsif strncasecmp(s, cur, d, 0, delimiter_length) == 0
-                  if cur == token
-                    # discard empty tokens
-                    cur = cur + delimiter_length - 1
-                    token = cur + 1
-                    cur += 1
-                    next
-                  end
-                  str_add_token(container, ret, s.byteslice(token, cur - token))
-                  cur = cur + delimiter_length - 1
-                  token = cur + 1
-                end
-                cur += 1
-              end
-              str_add_token(container, ret, s.byteslice(token, cur - token)) if token != cur
+              str_split_tokens(cstr(str.b), d).each { |tok| str_add_token(container, ret, tok) }
             end
           end
 

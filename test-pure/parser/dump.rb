@@ -6,6 +6,15 @@
 module ParserDump
   module_function
 
+  def plain(x)
+    case x
+    when Array then x.map { |y| plain(y) }
+    when Struct then plain(x.to_a)
+    when String, Integer, Symbol, nil, true, false then x
+    else x.inspect
+    end
+  end
+
   def err(e)
     [e.message, e.line, e.column, e.level, e.code, e.domain, e.str1, e.str2, e.str3, e.int1, e.file]
   end
@@ -44,6 +53,90 @@ module ParserDump
     end
   rescue => e
     [:dump_error, e.class.name, e.message]
+  end
+
+  class Recorder < Nokogiri::XML::SAX::Document
+    attr_reader :log
+
+    def initialize
+      super
+      @log = []
+    end
+
+    %i[xmldecl start_document end_document start_element end_element start_element_namespace
+      end_element_namespace characters comment warning error cdata_block processing_instruction reference].each do |m|
+      define_method(m) do |*args|
+        @log << [m, *ParserDump.plain(args)]
+      end
+    end
+  end
+
+  def run_sax(input, opts, encoding)
+    rec = Recorder.new
+    parser = Nokogiri::XML::SAX::Parser.new(rec, encoding)
+    res = {}
+    begin
+      parser.parse(input) do |ctx|
+        ctx.recovery = true if opts & 1 != 0
+        ctx.replace_entities = true if opts & 2 != 0
+        res[:ctx] = ctx
+      end
+      res[:pos] = [res[:ctx].line, res[:ctx].column]
+    rescue => e
+      res[:exception] = e.class.name
+      res[:message] = e.message
+    end
+    res.delete(:ctx)
+    res[:log] = rec.log
+    res
+  end
+
+  def run_push(input, opts, chunk)
+    rec = Recorder.new
+    parser = Nokogiri::XML::SAX::PushParser.new(rec)
+    parser.options = opts
+    res = { raised: [] }
+    input.b.bytes.each_slice(chunk).with_index do |sl, i|
+      parser.write(sl.pack("C*"), false)
+    rescue => e
+      res[:raised] << [i, e.class.name, e.message]
+    end
+    begin
+      parser.finish
+    rescue => e
+      res[:raised] << [:finish, e.class.name, e.message]
+    end
+    res[:log] = rec.log
+    res
+  end
+
+  def run_fragment(input, opts, context)
+    doc = Nokogiri::XML(context)
+    ctx = doc.at("//*[@ctx]") || doc.root || doc
+    set = ctx.parse(input, opts)
+    { nodes: set.map { |n| node(n) }, errors: doc.errors.map { |e| err(e) }, doc: doc.to_xml }
+  rescue => e
+    { exception: e.class.name, message: e.message }
+  end
+
+  def run_io(input, opts, encoding)
+    d = Nokogiri::XML::Document.read_io(StringIO.new(input), nil, encoding, opts)
+    { xml: d.to_xml, tree: node(d), errors: d.errors.map { |e| err(e) } }
+  rescue => e
+    { exception: e.class.name, message: e.message }
+  end
+
+  def dispatch(input, opts, encoding, url, mode)
+    case mode
+    when nil, :doc then run(input, opts, encoding, url)
+    when :sax then run_sax(input, opts, encoding)
+    when :io then run_io(input, opts, encoding)
+    when Array
+      case mode[0]
+      when :push then run_push(input, opts, mode[1])
+      when :fragment then run_fragment(input, opts, mode[1])
+      end
+    end
   end
 
   def run(input, opts, encoding = nil, url = nil)

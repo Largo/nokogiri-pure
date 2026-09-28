@@ -69,12 +69,12 @@ module Nokogiri
         # xmlParsePITarget
         def parse_pi_target
           name = parse_name
-          if name && name.length >= 3 && name[0, 3].casecmp?("xml")
+          if name && name.bytesize >= 3 && name.b[0, 3].casecmp?("xml")
             if name == "xml"
               fatal_err_msg(ErrCode::ERR_RESERVED_XML_NAME,
                 "XML declaration allowed only at the start of the document\n")
               return name
-            elsif name.length == 3
+            elsif name.bytesize == 3
               fatal_err(ErrCode::ERR_RESERVED_XML_NAME)
               return name
             end
@@ -82,7 +82,7 @@ module Nokogiri
 
             warning_msg(ErrCode::ERR_RESERVED_XML_NAME, "xmlParsePITarget: invalid name prefix 'xml'\n")
           end
-          if name&.include?(":")
+          if name&.b&.include?(":")
             ns_err(ErrCode::NS_ERR_COLON, "colons are forbidden from PI names '#{name}'\n", name)
           end
           name
@@ -156,7 +156,7 @@ module Nokogiri
             fatal_err(ErrCode::ERR_NOTATION_NOT_STARTED)
             return
           end
-          if name.include?(":")
+          if name.b.include?(":")
             ns_err(ErrCode::NS_ERR_COLON, "colons are forbidden from notation names '#{name}'\n", name)
           end
           if skip_blank_chars_pe == 0
@@ -205,7 +205,7 @@ module Nokogiri
             fatal_err_msg(ErrCode::ERR_NAME_REQUIRED, "xmlParseEntityDecl: no name\n")
             return
           end
-          if name.include?(":")
+          if name.b.include?(":")
             ns_err(ErrCode::NS_ERR_COLON, "colons are forbidden from entities names '#{name}'\n", name)
           end
           if skip_blank_chars_pe == 0

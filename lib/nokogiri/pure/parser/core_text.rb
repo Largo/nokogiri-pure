@@ -425,6 +425,28 @@ module Nokogiri
             fatal_err(ErrCode::ERR_NAME_TOO_LONG, "Name")
             return nil
           end
+          name_slice(start, len)
+        end
+
+        # the name at [start, start+len) of the buffer; replaced invalid bytes are put back raw like
+        # libxml2 (which accepts U+FFFD, the value xmlCurrentChar returns for them, as a name char)
+        def name_slice(start, len)
+          bad = @input.bad
+          if bad && bad.any? { |b| b[0] >= start && b[0] < start + len }
+            out = +"".b
+            i = start
+            e = start + len
+            while i < e
+              if (b = bad.find { |x| x[0] == i })
+                out << b[1].chr
+                i += 3
+              else
+                out << @buf.getbyte(i).chr
+                i += 1
+              end
+            end
+            return -out.force_encoding(Encoding::UTF_8)
+          end
           -@buf.byteslice(start, len)
         end
 
@@ -505,7 +527,7 @@ module Nokogiri
             fatal_err(ErrCode::ERR_NAME_TOO_LONG, "NCName")
             return nil
           end
-          -@buf.byteslice(start, len)
+          name_slice(start, len)
         end
 
         # xmlParseNameAndCompare: returns true on match, else the parsed name (or nil)

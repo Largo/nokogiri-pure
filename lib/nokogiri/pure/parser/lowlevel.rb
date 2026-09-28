@@ -122,7 +122,7 @@ module Nokogiri
           end
           v, l = decode_at(@cur)
           if v == REPLACEMENT_CHAR && (b = bad_byte_at(@cur))
-            if b[2] && !progressive?
+            if b[2]
               # incomplete sequence at the end of the input
               @cl = 0
               return 0

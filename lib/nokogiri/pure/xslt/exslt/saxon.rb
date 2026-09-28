@@ -63,7 +63,9 @@ module Nokogiri
 
           expr = ctxt.pop_external
 
+          saved_depth = sync_xpath_depth(ctxt)
           ret = XPath.compiled_eval(expr, ctxt.context)
+          ctxt.context.depth = saved_depth
           if ret.nil?
             ctxt.xpath_err(XPath::EXPR_ERROR)
             return

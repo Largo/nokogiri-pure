@@ -26,9 +26,10 @@ module Nokogiri
           end
 
           # Recursive evaluation can grow the call stack quickly.
+          saved_depth = sync_xpath_depth(ctxt)
           ctxt.context.depth += 5
           ret = XPath.eval(str, ctxt.context)
-          ctxt.context.depth -= 5
+          ctxt.context.depth = saved_depth
           if ret.nil?
             XSLT.generic_error("dyn:evaluate() : unable to evaluate expression '#{str}'\n")
             ctxt.value_push([])
@@ -101,6 +102,7 @@ module Nokogiri
             end
             XSLT.register_local_rvt(tctxt, container)
 
+            saved_depth = sync_xpath_depth(ctxt)
             if nodeset && !nodeset.empty?
               XPath.node_set_sort(nodeset)
               xctxt.context_size = nodeset.length
@@ -144,6 +146,7 @@ module Nokogiri
             xctxt.node = old_node
             xctxt.context_size = old_context_size
             xctxt.proximity_position = old_proximity_position
+            xctxt.depth = saved_depth
           end
 
           # cleanup: (a NULL ret makes valuePush report a memory error, as in C)
