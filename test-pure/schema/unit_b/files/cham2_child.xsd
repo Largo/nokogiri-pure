@@ -1,0 +1,3 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ct"><xs:sequence><xs:element name="x" type="ct"/><xs:any namespace="##targetNamespace ##local"/></xs:sequence></xs:complexType>
+</xs:schema>

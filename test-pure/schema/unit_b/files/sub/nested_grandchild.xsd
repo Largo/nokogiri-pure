@@ -1,0 +1,5 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a">
+  <xs:include schemaLocation="../inc_child.xsd"/>
+  <xs:include schemaLocation="nested_grandchild.xsd"/>
+  <xs:simpleType name="st"><xs:restriction base="xs:string"><xs:length/></xs:restriction></xs:simpleType>
+</xs:schema>

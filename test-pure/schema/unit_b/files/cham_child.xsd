@@ -1,0 +1,6 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ct">
+    <xs:sequence><xs:element name="x" type="ct2" bad="1"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ct2"/>
+</xs:schema>

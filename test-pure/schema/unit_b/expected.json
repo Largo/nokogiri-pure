@@ -1,0 +1,1856 @@
+{
+  "illegal_attrs_element": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'minOccurs' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute '{http://www.w3.org/2001/XMLSchema}bar' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_missing_name": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_bad_name": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'name': '1a' is not a valid value of the atomic type 'xs:NCName'.",
+        "code": 1824,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_ref_and_name": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'minOccurs': The value must not be greater than the value of 'maxOccurs'.",
+        "code": 3043,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attributes 'ref' and 'name' are mutually exclusive.",
+        "code": 3039,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'type': Only the attributes 'minOccurs', 'maxOccurs' and 'id' are allowed in addition to 'ref'.",
+        "code": 3040,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_default_fixed": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attributes 'default' and 'fixed' are mutually exclusive.",
+        "code": 3038,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_bad_block_final": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'abstract': 'maybe' is not a valid value of the atomic type 'xs:boolean'.",
+        "code": 1714,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'final': The value 'list' is not valid. Expected is '(#all | List of (extension | restriction))'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'block': The value 'foo' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'nillable': 'nope' is not a valid value of the atomic type 'xs:boolean'.",
+        "code": 1714,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_type_and_complex": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'type' and the <complexType> child are mutually exclusive.",
+        "code": 3041,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'type' and the <simpleType> child are mutually exclusive.",
+        "code": 3041,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_bad_children": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "element_form_invalid": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'form': The value 'bogus' is not valid. Expected is '(qualified | unqualified)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "occurs_invalid": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'minOccurs': The value '-1' is not valid. Expected is 'xs:nonNegativeInteger'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'maxOccurs': The value 'abc' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'minOccurs': The value 'unbounded' is not valid. Expected is 'xs:nonNegativeInteger'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'minOccurs': The value ' ' is not valid. Expected is 'xs:nonNegativeInteger'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'maxOccurs': The value ' 3x' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "occurs_particle_correct": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'maxOccurs': The value must be greater than or equal to 1.",
+        "code": 3044,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'minOccurs': The value must not be greater than the value of 'maxOccurs'.",
+        "code": 3043,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}any', attribute 'minOccurs': The value must not be greater than the value of 'maxOccurs'.",
+        "code": 3043,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "occurs_huge": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'maxOccurs': The value '99999999999999' is not valid. Expected is '(xs:nonNegativeInteger | unbounded)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "all_limited": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}all', attribute 'minOccurs': The value '2' is not valid. Expected is '(0 | 1)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}all', attribute 'maxOccurs': The value 'unbounded' is not valid. Expected is '1'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': Invalid value for maxOccurs (must be 0 or 1).",
+        "code": 3091,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': Invalid value for minOccurs (must be 0 or 1).",
+        "code": 3091,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': Invalid value for maxOccurs (must be 0 or 1).",
+        "code": 3091,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_local_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'use': The value 'bogus' is not valid. Expected is '(optional | prohibited | required)'.",
+        "code": 1774,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The value of the attribute 'use' must be 'optional' if the attribute 'default' is present.",
+        "code": 3052,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attributes 'default' and 'fixed' are mutually exclusive.",
+        "code": 3051,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'form': The value 'x' is not valid. Expected is '(qualified | unqualified)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_local_missing_name": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_xmlns": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'name': The value of the attribute must not match 'xmlns'.",
+        "code": 3056,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'name': The value of the attribute must not match 'xmlns'.",
+        "code": 3056,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_xsi": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The target namespace must not match 'http://www.w3.org/2001/XMLSchema-instance'.",
+        "code": 3057,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The target namespace must not match 'http://www.w3.org/2001/XMLSchema-instance'.",
+        "code": 3057,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_type_and_simple": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'type' and the <simpleType> child are mutually exclusive.",
+        "code": 3055,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'type' and the <simpleType> child are mutually exclusive.",
+        "code": 3055,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The content is not valid. Expected is (annotation?, simpleType?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_ref_children": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'type' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The content is not valid. Expected is (annotation?).",
+        "code": 3054,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_global_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'use' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'form' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: attribute decl. 'a': The attributes 'default' and 'fixed' are mutually exclusive.",
+        "code": 3051,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_prohibited_dupl": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: WARNING: Element '{http://www.w3.org/2001/XMLSchema}attribute': Skipping duplicate attribute use prohibition 'a'.",
+        "code": 3086,
+        "level": 1,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: WARNING: Element '{http://www.w3.org/2001/XMLSchema}attribute': Skipping attribute use prohibition, since it is pointless inside an <attributeGroup>.",
+        "code": 3086,
+        "level": 1,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_group_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The content is not valid. Expected is (annotation?, ((attribute | attributeGroup)*, anyAttribute?)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The attribute 'ref' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The attribute 'bar' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "any_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}any': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}any': The character content is not valid. Expected is '(strict | skip | lax)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}any', attribute 'namespace': The value '##other' is not valid. Expected is '((##any | ##other) | List of (xs:anyURI | (##targetNamespace | ##local)))'.",
+        "code": 1792,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}any', attribute 'namespace': The value '##any' is not valid. Expected is '((##any | ##other) | List of (xs:anyURI | (##targetNamespace | ##local)))'.",
+        "code": 1792,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}any': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}anyAttribute': The character content is not valid. Expected is '(strict | skip | lax)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "any_attribute_bad_ns": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}anyAttribute', attribute 'id': The value '1x' of simple type 'xs:ID' is not a valid 'xs:NCName'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}anyAttribute', attribute 'namespace': The value '##any' is not valid. Expected is '((##any | ##other) | List of (xs:anyURI | (##targetNamespace | ##local)))'.",
+        "code": 1792,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "annotation_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}annotation': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}appinfo': The attribute 'bar' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}documentation': The attribute 'baz' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}annotation': The content is not valid. Expected is (appinfo | documentation)*.",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}documentation': The attribute '{http://www.w3.org/2001/XMLSchema}lang' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}documentation': The attribute '{urn:o}lang' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "duplicate_ids": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'id': Duplicate value 'x1' of simple type 'xs:ID'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'id': The value '1bad' of simple type 'xs:ID' is not a valid 'xs:NCName'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType', attribute 'id': Duplicate value 'x1' of simple type 'xs:ID'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "simple_type_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The content is not valid. Expected is (annotation?, (restriction | list | union)).",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The content is not valid. Expected is (annotation?, (restriction | list | union)).",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The content is not valid. Expected is (annotation?, (restriction | list | union)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType', attribute 'final': The value 'bogus' is not valid. Expected is '(#all | List of (list | union | restriction)'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "simple_type_local_attrs": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The attribute 'name' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': The attribute 'final' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "list_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': Either the attribute 'itemType' or the <simpleType> child must be present.",
+        "code": 3000,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': Either the attribute 'itemType' or the <simpleType> child must be present.",
+        "code": 3000,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': The attribute 'itemType' and the <simpleType> child are mutually exclusive.",
+        "code": 3000,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': Either the attribute 'itemType' or the <simpleType> child must be present.",
+        "code": 3000,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': The content is not valid. Expected is (annotation?, simpleType?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}list': Either the attribute 'itemType' or the <simpleType> child must be present.",
+        "code": 3000,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "union_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}union': Either the attribute 'memberTypes' or at least one <simpleType> child must be present.",
+        "code": 3007,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}union', attribute 'memberTypes': '1bad' is not a valid value of the atomic type 'xs:QName'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}union', attribute 'memberTypes': The value 'p:x' of simple type 'xs:QName' has no corresponding namespace declaration in scope.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}union': The content is not valid. Expected is (annotation?, simpleType*).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "restriction_simple_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': Either the attribute 'base' or a <simpleType> child must be present.",
+        "code": 3005,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': The attribute 'base' and the <simpleType> child are mutually exclusive.",
+        "code": 3005,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': The content is not valid. Expected is (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern)*)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "facet_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Facet length has no value",
+        "code": 1708,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Facet pattern has unexpected child content",
+        "code": 1740,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "complex_type_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType', attribute 'mixed': 'maybe' is not a valid value of the atomic type 'xs:boolean'.",
+        "code": 1714,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType', attribute 'abstract': 'x' is not a valid value of the atomic type 'xs:boolean'.",
+        "code": 1714,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType', attribute 'final': The value 'bogus' is not valid. Expected is '(#all | List of (extension | restriction))'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType', attribute 'block': The value 'bogus' is not valid. Expected is '(#all | List of (extension | restriction)) '.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': The content is not valid. Expected is (annotation?, (simpleContent | complexContent | ((group | all | choice | sequence)?, ((attribute | attributeGroup)*, anyAttribute?)))).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': The attribute 'name' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': The attribute 'abstract' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "complex_content_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexContent': The content is not valid. Expected is (annotation?, (restriction | extension)).",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexContent': The content is not valid. Expected is (annotation?, (restriction | extension)).",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexContent': The attribute 'bar' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexContent', attribute 'mixed': 'foo' is not a valid value of the atomic type 'xs:boolean'.",
+        "code": 1714,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': The attribute 'base' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}extension': The content is not valid. Expected is (annotation?, ((group | all | choice | sequence)?, ((attribute | attributeGroup)*, anyAttribute?))).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "simple_content_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleContent': The content is not valid. Expected is (annotation?, (restriction | extension)).",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleContent': The content is not valid. Expected is (annotation?, (restriction | extension)).",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleContent': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}extension': The attribute 'base' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': The content is not valid. Expected is (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern)*)?, ((attribute | attributeGroup)*, anyAttribute?)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "restriction_complex_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': The content is not valid. Expected is annotation?, (group | all | choice | sequence)?, ((attribute | attributeGroup)*, anyAttribute?)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "group_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The content is not valid. Expected is (annotation?, (all | choice | sequence)?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}all': The content is not valid. Expected is (annotation?, (annotation?, element*).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The attribute 'ref' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group', attribute 'minOccurs': The value 'x' is not valid. Expected is 'xs:nonNegativeInteger'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "sequence_bad_child": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}sequence': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}sequence': The content is not valid. Expected is (annotation?, (element | group | choice | sequence | any)*).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}choice': The attribute 'minOccurs' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "idc_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}key': A child element is missing.",
+        "code": 3034,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}unique': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}keyref': The attribute 'refer' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}key': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}key': The content is not valid. Expected is (annotation?, (selector, field+)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}selector': The attribute 'name' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "idc_xpath_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}selector', attribute 'xpath': The XPath expression '///' could not be compiled.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}field': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}field', attribute 'xpath': The XPath expression '@@a' could not be compiled.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}field', attribute 'xpath': The XPath expression 'p:a' could not be compiled.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "qname_undeclared_prefix": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'type': The value 'p:t' of simple type 'xs:QName' has no corresponding namespace declaration in scope.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'substitutionGroup': The value 'q:x' of simple type 'xs:QName' has no corresponding namespace declaration in scope.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'type': The value 'r:t' of simple type 'xs:QName' has no corresponding namespace declaration in scope.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "src_resolve": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'type': References from this schema to components in no namespace are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'type': References from this schema to components in the namespace 'urn:other' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element', attribute 'ref': References from this schema to components in the namespace 'urn:other' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group', attribute 'ref': References from this schema to components in the namespace 'urn:other' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'ref': References from this schema to components in the namespace 'urn:other' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup', attribute 'ref': References from this schema to components in the namespace 'urn:other' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "schema_attr_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema', attribute 'id': The value '1bad' of simple type 'xs:ID' is not a valid 'xs:NCName'.",
+        "code": 3037,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      },
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema', attribute 'elementFormDefault': The value 'x' is not valid. Expected is '(qualified | unqualified)'.",
+        "code": 1705,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      },
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema', attribute 'attributeFormDefault': The value 'y' is not valid. Expected is '(qualified | unqualified)'.",
+        "code": 1701,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      },
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema', attribute 'finalDefault': The value 'bogus' is not valid. Expected is '(#all | List of (extension | restriction | list | union))'.",
+        "code": 3037,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      },
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema', attribute 'blockDefault': The value 'list' is not valid. Expected is '(#all | List of (extension | restriction | substitution))'.",
+        "code": 3037,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      }
+    ]
+  },
+  "schema_tns_invalid": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema', attribute 'targetNamespace': 'a b%' is not a valid value of the atomic type 'xs:anyURI'.",
+        "code": 1824,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      }
+    ]
+  },
+  "top_level_bad_children": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema': The content is not valid. Expected is ((include | import | redefine | annotation)*, (((simpleType | complexType | group | attributeGroup) | element | attribute | notation), annotation*)*).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema': The content is not valid. Expected is ((include | import | redefine | annotation)*, (((simpleType | complexType | group | attributeGroup) | element | attribute | notation), annotation*)*).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema': The content is not valid. Expected is ((include | import | redefine | annotation)*, (((simpleType | complexType | group | attributeGroup) | element | attribute | notation), annotation*)*).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "notation_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Notation has no name",
+        "code": 1723,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}notation': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "import_errors_1_1": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}import': The value of the attribute 'namespace' must not match the target namespace 'urn:tns' of the importing schema.",
+        "code": 3064,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "import_errors_1_2": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}import': The attribute 'namespace' must be existent if the importing schema has no target namespace.",
+        "code": 3065,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "import_bad_attrs": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}import': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}import': The content is not valid. Expected is (annotation?).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "include_missing": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "WARNING: failed to load \"does-not-exist-unit-b.xsd\": No such file or directory",
+        "code": 1524,
+        "level": 1,
+        "line": 0,
+        "domain": 8
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}include': Failed to load the document 'does-not-exist-unit-b.xsd' for inclusion.",
+        "code": 3050,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "include_no_location": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}include': The attribute 'schemaLocation' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "redefine_missing": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "WARNING: failed to load \"does-not-exist-unit-b.xsd\": No such file or directory",
+        "code": 1524,
+        "level": 1,
+        "line": 0,
+        "domain": 8
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}redefine': Failed to load the document 'does-not-exist-unit-b.xsd' for redefinition.",
+        "code": 3081,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "import_missing_warning": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "WARNING: failed to load \"does-not-exist-unit-b.xsd\": No such file or directory",
+        "code": 1524,
+        "level": 1,
+        "line": 0,
+        "domain": 8
+      },
+      {
+        "message": "2:0: WARNING: Element '{http://www.w3.org/2001/XMLSchema}import': Failed to locate a schema at location 'does-not-exist-unit-b.xsd'. Skipping the import.",
+        "code": 3084,
+        "level": 1,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "not_schema_root": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "ERROR: The XML document 'in_memory_buffer' is not a schema document.",
+        "code": 1772,
+        "level": 2,
+        "line": 0,
+        "domain": 16
+      }
+    ]
+  },
+  "cdata_toplevel": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "1:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}schema': The content is not valid. Expected is ((include | import | redefine | annotation)*, (((simpleType | complexType | group | attributeGroup) | element | attribute | notation), annotation*)*).",
+        "code": 3033,
+        "level": 2,
+        "line": 1,
+        "domain": 16
+      }
+    ]
+  },
+  "comments_pi": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "text_in_element": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The content is not valid. Expected is (annotation?, ((simpleType | complexType)?, (unique | key | keyref)*)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "attr_ref_xsi": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'ref': References from this schema to components in the namespace 'http://www.w3.org/2001/XMLSchema-instance' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "prohibited_in_extension": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: WARNING: Element '{http://www.w3.org/2001/XMLSchema}attribute': Skipping attribute use prohibition, since it is pointless when extending a type.",
+        "code": 3086,
+        "level": 1,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'ref': References from this schema to components in the namespace 'http://www.w3.org/XML/1998/namespace' are not allowed, since not indicated by an import statement.",
+        "code": 3004,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "keyref_no_refer": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}keyref', attribute 'refer': The value 'p:x' of simple type 'xs:QName' has no corresponding namespace declaration in scope.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}keyref': The attribute 'refer' is required but missing.",
+        "code": 3036,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "mixed_simple_content": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}extension': The content is not valid. Expected is (annotation?, ((attribute | attributeGroup)*, anyAttribute?)).",
+        "code": 3033,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "local_named_complex": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': The attribute 'block' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "id_whitespace_dup": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'id': Duplicate value 'i' of simple type 'xs:ID'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      },
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}sequence', attribute 'id': Duplicate value 'i2' of simple type 'xs:ID'.",
+        "code": 3037,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "file_include_ok_then_error": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "3:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 3,
+        "domain": 16
+      }
+    ]
+  },
+  "file_include_tns_mismatch": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}include': The target namespace 'urn:b' of the included/redefined schema '/root/workspace/nokogiri-pure/test-pure/schema/unit_b/files/inc_tns_child.xsd' differs from 'urn:a' of the including/redefining schema.",
+        "code": 3050,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "file_include_chameleon": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "3:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bad' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 3,
+        "domain": 16
+      }
+    ]
+  },
+  "file_import_ok": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attribute', attribute 'use': The value 'nope' is not valid. Expected is '(optional | prohibited | required)'.",
+        "code": 1774,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "file_include_self": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}include': The schema must not import/include/redefine itself.",
+        "code": 3050,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "file_include_not_schema": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "2:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}include': The XML document '/root/workspace/nokogiri-pure/test-pure/schema/unit_b/files/not_schema.xml' is not a schema document.",
+        "code": 1772,
+        "level": 2,
+        "line": 2,
+        "domain": 16
+      }
+    ]
+  },
+  "file_redefine": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "8:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'oops' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 8,
+        "domain": 16
+      }
+    ]
+  },
+  "file_redefine_errors": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "3:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}simpleType': This is a redefinition, thus the <simpleType> must have a <restriction> child.",
+        "code": 3081,
+        "level": 2,
+        "line": 3,
+        "domain": 16
+      },
+      {
+        "message": "4:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}complexType': This is a redefinition, thus the <complexType> must have a <restriction> or <extension> grand-child.",
+        "code": 3081,
+        "level": 2,
+        "line": 4,
+        "domain": 16
+      },
+      {
+        "message": "5:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}restriction': This is a redefinition, but the QName value '{urn:a}other' of the 'base' attribute does not match the type's designation '{urn:a}ct2'.",
+        "code": 3081,
+        "level": 2,
+        "line": 5,
+        "domain": 16
+      },
+      {
+        "message": "6:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The redefining model group definition '{urn:a}g' must not contain a reference to the redefined definition with a maxOccurs/minOccurs other than 1.",
+        "code": 3081,
+        "level": 2,
+        "line": 6,
+        "domain": 16
+      },
+      {
+        "message": "6:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}group': The redefining model group definition '{urn:a}g' must not contain more than one reference to the redefined definition.",
+        "code": 3081,
+        "level": 2,
+        "line": 6,
+        "domain": 16
+      },
+      {
+        "message": "7:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}attributeGroup': The redefining attribute group definition '{urn:a}ag' must not contain more than one reference to the redefined definition.",
+        "code": 3081,
+        "level": 2,
+        "line": 7,
+        "domain": 16
+      },
+      {
+        "message": "8:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}redefine': The content is not valid. Expected is (annotation | (simpleType | complexType | group | attributeGroup))*.",
+        "code": 3033,
+        "level": 2,
+        "line": 8,
+        "domain": 16
+      }
+    ]
+  },
+  "file_import_twice": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "3:0: WARNING: Element '{http://www.w3.org/2001/XMLSchema}import': Skipping import of schema located at '/root/workspace/nokogiri-pure/test-pure/schema/unit_b/files/imp_child.xsd' for the namespace 'urn:b', since this namespace was already imported with the schema located at '/root/workspace/nokogiri-pure/test-pure/schema/unit_b/files/imp_child2.xsd'.",
+        "code": 3083,
+        "level": 1,
+        "line": 3,
+        "domain": 16
+      },
+      {
+        "message": "5:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}include': The target namespace 'urn:b' of the included/redefined schema '/root/workspace/nokogiri-pure/test-pure/schema/unit_b/files/imp_child2.xsd' differs from 'urn:a' of the including/redefining schema.",
+        "code": 3050,
+        "level": 2,
+        "line": 5,
+        "domain": 16
+      }
+    ]
+  },
+  "file_nested_includes": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "3:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'foo' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 3,
+        "domain": 16
+      }
+    ]
+  },
+  "file_chameleon_twice": {
+    "status": "failed",
+    "errors": [
+      {
+        "message": "6:0: ERROR: Element '{http://www.w3.org/2001/XMLSchema}element': The attribute 'bogus' is not allowed.",
+        "code": 3035,
+        "level": 2,
+        "line": 6,
+        "domain": 16
+      }
+    ]
+  }
+}

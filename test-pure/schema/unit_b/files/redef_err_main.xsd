@@ -1,0 +1,10 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a" xmlns:a="urn:a">
+  <xs:redefine schemaLocation="redef_child.xsd">
+    <xs:simpleType name="st"><xs:list itemType="xs:string"/></xs:simpleType>
+    <xs:complexType name="ct"><xs:sequence/></xs:complexType>
+    <xs:complexType name="ct2"><xs:complexContent><xs:restriction base="a:other"/></xs:complexContent></xs:complexType>
+    <xs:group name="g"><xs:sequence><xs:group ref="a:g" minOccurs="0"/><xs:group ref="a:g"/></xs:sequence></xs:group>
+    <xs:attributeGroup name="ag"><xs:attributeGroup ref="a:ag"/><xs:attributeGroup ref="a:ag"/></xs:attributeGroup>
+    <xs:element name="bad"/>
+  </xs:redefine>
+</xs:schema>

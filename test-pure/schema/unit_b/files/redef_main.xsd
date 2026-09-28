@@ -1,0 +1,9 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a" xmlns:a="urn:a">
+  <xs:redefine schemaLocation="redef_child.xsd">
+    <xs:simpleType name="st"><xs:restriction base="a:st"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>
+    <xs:complexType name="ct"><xs:complexContent><xs:extension base="a:ct"><xs:sequence><xs:element name="y"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+    <xs:group name="g"><xs:sequence><xs:group ref="a:g"/><xs:element name="z"/></xs:sequence></xs:group>
+    <xs:attributeGroup name="ag"><xs:attributeGroup ref="a:ag"/><xs:attribute name="w"/></xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="main" type="a:ct" oops="1"/>
+</xs:schema>

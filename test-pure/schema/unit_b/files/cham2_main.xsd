@@ -1,0 +1,7 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a" xmlns:a="urn:a" xmlns:b="urn:b">
+  <xs:import namespace="urn:b" schemaLocation="cham2_b.xsd"/>
+  <xs:include schemaLocation="cham2_child.xsd"/>
+  <xs:element name="e" type="a:ct"/>
+  <xs:element name="f" type="b:ct"/>
+  <xs:element name="g" bogus="1"/>
+</xs:schema>

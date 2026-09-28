@@ -1,0 +1,4 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a" xmlns:a="urn:a">
+  <xs:include schemaLocation="inc_child.xsd"/>
+  <xs:element name="main" type="a:ct" bogus="1"/>
+</xs:schema>

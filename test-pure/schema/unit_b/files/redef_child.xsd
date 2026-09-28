@@ -1,0 +1,6 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a" xmlns:a="urn:a">
+  <xs:simpleType name="st"><xs:restriction base="xs:string"/></xs:simpleType>
+  <xs:complexType name="ct"><xs:sequence><xs:element name="x"/></xs:sequence></xs:complexType>
+  <xs:group name="g"><xs:sequence><xs:element name="v"/></xs:sequence></xs:group>
+  <xs:attributeGroup name="ag"><xs:attribute name="u"/></xs:attributeGroup>
+</xs:schema>
