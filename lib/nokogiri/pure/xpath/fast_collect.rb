@@ -102,17 +102,57 @@ module Nokogiri
           class_eval with_literal_types(<<~RUBY), __FILE__, __LINE__ + 1
             def self.descendant_#{m}(ctxnode, doc, name, uri, seq, include_self)
               ctype = ctxnode.type
-              if include_self
-                cur = ctxnode
-                t = ctype
-                seq << cur if #{cond}
-              end
+              return descendant_or_self_#{m}(ctxnode, doc, name, uri, seq) if include_self
               return if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
 
+              # (xmlXPathNextDescendant starts with the first child, whatever its type)
               cur = ctxnode == doc ? doc.children : ctxnode.children
               return if cur.nil?
 
               t = cur.type
+              descendant_walk_#{m}(ctxnode, cur, t, name, uri, seq)
+            end
+
+            # xmlXPathNextDescendantOrSelf: the node, then xmlXPathNextDescendant from the node
+            # itself, which doesn't enter a children list headed by an entity declaration and
+            # steps over a DTD heading it
+            def self.descendant_or_self_#{m}(ctxnode, doc, name, uri, seq)
+              cur = ctxnode
+              t = ctxnode.type
+              seq << cur if #{cond}
+              return if t == ATTRIBUTE_NODE || t == NAMESPACE_DECL
+
+              cur = ctxnode.children
+              return if cur.nil? || (t = cur.type) == ENTITY_DECL
+
+              if t == DTD_NODE
+                found = false
+                while (nx = cur.next)
+                  cur = nx
+                  t = cur.type
+                  if t != ENTITY_DECL && t != DTD_NODE
+                    found = true
+                    break
+                  end
+                end
+                unless found
+                  while true
+                    cur = cur.parent
+                    return if cur.nil? || cur == ctxnode
+
+                    if (nx = cur.next)
+                      cur = nx
+                      t = cur.type
+                      break
+                    end
+                  end
+                end
+              end
+              descendant_walk_#{m}(ctxnode, cur, t, name, uri, seq)
+            end
+
+            # the rest of the descendant traversal of +ctxnode+ from +cur+ (of type +t+)
+            def self.descendant_walk_#{m}(ctxnode, cur, t, name, uri, seq)
               while true
                 seq << cur if #{cond}
                 # advance (xmlXPathNextDescendant); +t+ is kept as the type of +cur+
@@ -547,7 +587,7 @@ module Nokogiri
         # +sym+, through a case on the name: __send__ with names varying at one call site makes
         # YJIT give up on the call (and run the traversal in the interpreter), and Method#call
         # costs more in the interpreter.
-        traversals = singleton_methods.grep(/\A(?:descendant|child|child_elem|attribute|following_sibling|preceding_sibling|self|parent|ancestor)_/).sort
+        traversals = singleton_methods.grep(/\A(?:descendant|child|child_elem|attribute|following_sibling|preceding_sibling|self|parent|ancestor)_(?!or_self_|walk_)/).sort
         counters = singleton_methods.grep(/\Acount_/).sort
         multis = singleton_methods.grep(/\Amulti_(?!range_|run)/).sort
         multi_ranges = singleton_methods.grep(/\Amulti_range_(?!run)/).sort
