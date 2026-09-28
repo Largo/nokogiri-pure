@@ -463,6 +463,8 @@ module Nokogiri
         # true if two of the (unprefixed) attributes have the same name
         def self.dup_att_names?(atts)
           n = atts.length
+          return !atts.map(&:name).uniq!.nil? if n > 4
+
           i = 1
           while i < n
             name = atts[i].name
