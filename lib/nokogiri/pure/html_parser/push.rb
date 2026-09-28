@@ -201,7 +201,7 @@ module Nokogiri
               when PARSER_EOF
                 throw :done
               when PARSER_START
-                if (@input_flags & INPUT_HAS_ENCODING) == 0 && @buf.byteslice(@cur, 4) == "<?xm"
+                if (@input_flags & INPUT_HAS_ENCODING) == 0 && bytes_at(@cur, 4) == "<?xm"
                   switch_encoding(:utf8)
                 end
                 cur = cur_byte

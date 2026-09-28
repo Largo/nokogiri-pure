@@ -103,8 +103,12 @@ module Nokogiri
         def find_encoding
           return nil if (@input_flags & INPUT_HAS_ENCODING) != 0
 
-          s = @buf.byteslice(@cur..)
+          s = bytes_at(@cur, @buf.bytesize - @cur)
           return nil if s.nil?
+
+          # C string search: stops at the first NUL byte
+          nul = s.index("\0".b)
+          s = s.byteslice(0, nul) if nul
 
           i = s.index(/HTTP-EQUIV/in)
           return nil unless i
@@ -227,6 +231,33 @@ module Nokogiri
             out << (v & 0xFF)
           else
             HTMLParser.utf8_append(out, v)
+          end
+        end
+
+        # a copy of @buf[pos, len] that never shares @buf's memory (a shared substring or a
+        # MatchData would make every later append to @buf copy the whole buffer)
+        def bytes_at(pos, len)
+          return +"".b if len <= 0 || pos >= @buf.bytesize
+
+          @buf.unpack1("a#{len}", offset: pos)
+        end
+
+        # StringScanner-based anchored match at +pos+ (no MatchData on @buf); returns String or nil
+        def scan_at(pos, re)
+          ss = @scanner
+          if ss.nil? || !ss.string.equal?(@buf)
+            ss = @scanner = StringScanner.new(@buf)
+          end
+          ss.pos = pos
+          ss.scan(re)
+        end
+
+        NAME_CACHE = {} # rubocop:disable Style/MutableConstant
+
+        def cached_name(run)
+          NAME_CACHE[run] || begin
+            NAME_CACHE.clear if NAME_CACHE.size > 5000
+            NAME_CACHE[run.freeze] = intern(run.downcase)
           end
         end
 
@@ -372,6 +403,13 @@ module Nokogiri
           c = @buf.getbyte(@cur) || 0
           return nil if !ascii_letter?(c) && c != 0x5F && c != 0x3A && c != 0x2E
 
+          if !growable? || @buf.bytesize - @cur > INPUT_CHUNK + HTML_PARSER_BUFFER_SIZE
+            # fast path: no NEXT in the loop can trigger a buffer grow
+            run = scan_at(@cur, /[A-Za-z0-9:_.\-]{1,100}/n)
+            @cur += run.bytesize
+            @col += run.bytesize
+            return cached_name(run)
+          end
           loc = +"".b
           i = 0
           while i < HTML_PARSER_BUFFER_SIZE && html_name_char?(c)
@@ -387,6 +425,9 @@ module Nokogiri
         def parse_html_name_non_invasive
           c = nxt(1)
           return nil if !ascii_letter?(c) && c != 0x5F && c != 0x3A
+
+          run = scan_at(@cur + 1, /[A-Za-z0-9:_\-]{1,100}/n)
+          return cached_name(run) if run
 
           loc = +"".b
           i = 0
@@ -420,7 +461,7 @@ module Nokogiri
             c = @buf.getbyte(i) || 0
             if c > 0 && c < 0x80
               count = i - @cur
-              ret = intern(@buf.byteslice(@cur, count))
+              ret = intern(bytes_at(@cur, count))
               @cur = i
               @col += count
               return ret
@@ -457,7 +498,7 @@ module Nokogiri
             html_err(Err::INTERNAL_ERROR, "unexpected change of input buffer")
             return nil
           end
-          intern(@buf.byteslice(@cur - len, len))
+          intern(bytes_at(@cur - len, len))
         end
 
         # ---- attribute values, literals -------------------------------------------
@@ -490,15 +531,14 @@ module Nokogiri
             else
               # fast path for plain ASCII runs
               if (@buf.bytesize - @cur) > INPUT_CHUNK || !growable?
-                m = if stop == 0
-                  @buf.match(/\G[^\x00&>\t\n\r \x80-\xFF]+/n, @cur)
+                run = if stop == 0
+                  scan_at(@cur, /[^\x00&>\t\n\r \x80-\xFF]+/n)
                 elsif stop == 0x22
-                  @buf.match(/\G[^\x00&"\n\x80-\xFF]+/n, @cur)
+                  scan_at(@cur, /[^\x00&"\n\x80-\xFF]+/n)
                 else
-                  @buf.match(/\G[^\x00&'\n\x80-\xFF]+/n, @cur)
+                  scan_at(@cur, /[^\x00&'\n\x80-\xFF]+/n)
                 end
-                if m
-                  run = m[0]
+                if run
                   lim = growable? ? @buf.bytesize - INPUT_CHUNK - @cur : run.bytesize
                   if lim > 0
                     run = run.byteslice(0, lim) if run.bytesize > lim
@@ -605,7 +645,7 @@ module Nokogiri
           if (@buf.getbyte(@cur) || 0) != quote
             html_err(Err::LITERAL_NOT_FINISHED, "Unfinished SystemLiteral\n")
           else
-            ret = HTMLParser.to_utf8(@buf.byteslice(start, len)) unless err
+            ret = HTMLParser.to_utf8(bytes_at(start, len)) unless err
             next_char
           end
           ret
@@ -647,7 +687,7 @@ module Nokogiri
           if (@buf.getbyte(@cur) || 0) != quote
             html_err(Err::LITERAL_NOT_FINISHED, "Unfinished PubidLiteral\n")
           else
-            ret = HTMLParser.to_utf8(@buf.byteslice(start, len)) unless err
+            ret = HTMLParser.to_utf8(bytes_at(start, len)) unless err
             next_char
           end
           ret
@@ -680,10 +720,10 @@ module Nokogiri
                 break
               end
             end
-            if cur < 0x80 && cur != 0x3C && l == 1 && (cur >= 0x20 || cur == 0x9 || cur == 0xA || cur == 0xD)
+            if cur < 0x80 && cur != 0x3C && l == 1 && cur == @buf.getbyte(@cur) &&
+                (cur >= 0x20 || cur == 0x9 || cur == 0xA || cur == 0xD) &&
+                (run = scan_at(@cur, /[^<\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n))
               # fast path: copy a run of plain ASCII
-              m = @buf.match(/\G[^<\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n, @cur)
-              run = m[0]
               lim = HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize
               lim = [lim, @buf.bytesize - INPUT_CHUNK - @cur].min if growable?
               lim = 1 if lim < 1
@@ -744,9 +784,9 @@ module Nokogiri
           cur = current_char
           l = @clen
           while cur != 0x3C && cur != 0x26 && cur != 0 && !stopped?
-            if cur < 0x80 && l == 1 && (cur >= 0x20 || cur == 0x9 || cur == 0xA || cur == 0xD)
-              m = @buf.match(/\G[^<&\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n, @cur)
-              run = m[0]
+            if cur < 0x80 && l == 1 && cur == @buf.getbyte(@cur) &&
+                (cur >= 0x20 || cur == 0x9 || cur == 0xA || cur == 0xD) &&
+                (run = scan_at(@cur, /[^<&\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n))
               lim = HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize
               lim = [lim, @buf.bytesize - INPUT_CHUNK - @cur].min if growable?
               lim = 1 if lim < 1
@@ -1345,7 +1385,7 @@ module Nokogiri
 
           detect_encoding
 
-          if (@input_flags & INPUT_HAS_ENCODING) == 0 && @buf.byteslice(@cur, 4) == "<?xm"
+          if (@input_flags & INPUT_HAS_ENCODING) == 0 && bytes_at(@cur, 4) == "<?xm"
             switch_encoding(:utf8)
           end
 

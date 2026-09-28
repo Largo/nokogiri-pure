@@ -155,7 +155,10 @@ module Nokogiri
           else handler.ruby_encoding
           end
           @sjis = GLIBC_SJIS.include?(handler.name.to_s.upcase)
+          @c1_ok = @renc == Encoding::EUC_JP
         end
+
+        C1_BYTES = ((0x80..0x8D).to_a + (0x90..0x9F).to_a).freeze
 
         def convert(raw)
           return ["".b, 0, :error] if @failed
@@ -192,6 +195,17 @@ module Nokogiri
           src = raw.dup.force_encoding(@renc)
           dst = +""
           res = @ec.primitive_convert(src, dst, nil, nil, partial_input: true)
+          while res == :invalid_byte_sequence && @c1_ok
+            # glibc's EUC-JP decodes the C1 bytes 0x80-0x8D/0x90-0x9F as U+0080..U+009F
+            info = @ec.primitive_errinfo
+            eb = info[3].to_s.b
+            break unless eb.bytesize == 1 && C1_BYTES.include?(eb.getbyte(0))
+
+            dst << "\xC2".b.force_encoding(dst.encoding) << eb.force_encoding(dst.encoding)
+            src = (info[4].to_s.b + src.b).force_encoding(@renc)
+            @ec = Encoding::Converter.new(@renc, Encoding::UTF_8)
+            res = @ec.primitive_convert(src, dst, nil, nil, partial_input: true)
+          end
           dst = dst.b
           # glibc's SHIFT_JIS maps the JIS X 0201 Roman bytes 0x5C/0x7E to U+00A5/U+203E
           dst = dst.gsub("\\".b, "\u00A5".b).gsub("~".b, "\u203E".b) if @sjis
@@ -510,7 +524,7 @@ module Nokogiri
             # move unprocessed content to the raw buffer and convert it
             processed = @cur
             @consumed += processed
-            rest = @buf.byteslice(@cur..) || +"".b
+            rest = bytes_at(@cur, @buf.bytesize - @cur)
             @raw = rest + @raw
             @buf = +"".b
             @cur = 0
