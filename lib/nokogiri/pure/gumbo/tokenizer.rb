@@ -2221,6 +2221,20 @@ module Nokogiri
         # character that follows. The run must consist of error-free characters, none of them \r.
         def advance_over(run)
           len = run.bytesize
+          if run.ascii_only? && !run.include?("\t")
+            # (the common case: one column per byte)
+            nl = run.rindex("\n")
+            if nl
+              @line += run.count("\n")
+              @column = len - nl
+            else
+              @column += len
+            end
+            @offset += len
+            @start += len
+            read_char
+            return
+          end
           nl = run.rindex("\n")
           if nl
             @line += run.count("\n")
@@ -2356,9 +2370,24 @@ module Nokogiri
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
           iter_mark
-          advance_over(@input.byteslice(start, reset_rel))
-          reset_tag_buffer_start_point
-          advance_over(@input.byteslice(start + reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
+          text = @input.byteslice(start, len)
+          if text.ascii_only? && !text.include?("\n") && !text.include?("\t")
+            # one column per byte: move straight to the reset point, then onto the '>'
+            @column += reset_rel
+            @offset += reset_rel
+            @start = start + reset_rel
+            reset_tag_buffer_start_point
+            rest = len - 1 - reset_rel
+            @column += rest
+            @offset += rest
+            @start += rest
+            @current = 0x3e
+            @width = 1
+          else
+            advance_over(text.byteslice(0, reset_rel))
+            reset_tag_buffer_start_point
+            advance_over(text.byteslice(reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
+          end
           @tag = Util.tagn_enum(name)
           @tag_name = name if @tag == TAG_UNKNOWN
           @drop_next_attr_value = false

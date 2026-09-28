@@ -6,7 +6,8 @@
 #   ruby --yjit test-pure/bench/html_bench.rb pure
 #
 # Env: BENCH_FILES="a.html:b.html" adds files; BENCH_TIME=seconds per measurement (default 2).
-# Prints the best time per iteration (ms) and throughput for every workload x operation.
+# Prints the best CPU time per iteration (ms; process CPU time, which is steadier than wall time
+# on a busy machine) and throughput for every workload x operation.
 mode = ARGV[0] || "pure"
 filter = ARGV[1] && Regexp.new(ARGV[1])
 if mode == "native"
@@ -52,9 +53,9 @@ def measure
   n = 0
   while total < BENCH_TIME || n < 3
     GC.start
-    t = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    t = Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
     yield
-    dt = Process.clock_gettime(Process::CLOCK_MONOTONIC) - t
+    dt = Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID) - t
     best = dt if dt < best
     total += dt
     n += 1
