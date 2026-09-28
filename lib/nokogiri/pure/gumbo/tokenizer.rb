@@ -487,8 +487,7 @@ module Nokogiri
         end
 
         def initialize_tag_buffer
-          @tag_buffer = +""
-          @tag_buffer.force_encoding(Encoding::BINARY)
+          @tag_buffer.clear
           reset_tag_buffer_start_point
         end
 
@@ -765,7 +764,7 @@ module Nokogiri
           else
             append_char_to_tag_buffer(Util.ascii_tolower(c), true)
             if (run = consume_run(RUN_TAG_NAME))
-              @tag_buffer << run.tr(UPPER, LOWER)
+              @tag_buffer << run.downcase
             end
             false
           end
@@ -1130,7 +1129,7 @@ module Nokogiri
           else
             append_char_to_tag_buffer(Util.ascii_tolower(c), true)
             if (run = consume_run(RUN_ATTR_NAME))
-              @tag_buffer << run.tr(UPPER, LOWER)
+              @tag_buffer << run.downcase
             end
             false
           end
@@ -2210,9 +2209,9 @@ module Nokogiri
         SAFE_MB = "(?:\\xC2[\\xA0-\\xBF]|[\\xC3-\\xDF][\\x80-\\xBF]|\\xE0[\\xA0-\\xBF][\\x80-\\xBF]|" \
           "[\\xE1-\\xEC\\xEE][\\x80-\\xBF][\\x80-\\xBF]|\\xED[\\x80-\\x9F][\\x80-\\xBF]|" \
           "\\xEF(?:[\\x80-\\xB6][\\x80-\\xBF]|\\xB7[\\x80-\\x8F\\xB0-\\xBF]|[\\xB8-\\xBE][\\x80-\\xBF]|\\xBF[\\x80-\\xBD]))"
-        RUN_DATA = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x25\\x27-\\x3B\\x3D-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_RAWTEXT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x3B\\x3D-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_PLAINTEXT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_DATA = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x25\\x27-\\x3B\\x3D-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_RAWTEXT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x3B\\x3D-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_PLAINTEXT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
         RUN_RES = [RUN_DATA, RUN_DATA, RUN_RAWTEXT, RUN_RAWTEXT, RUN_PLAINTEXT].freeze # by LEX_ state
         NON_WS_RE = /[^\t\n\x0C ]/n
         CONT_BYTES = "\x80-\xBF".b.freeze
@@ -2273,15 +2272,13 @@ module Nokogiri
           run
         end
 
-        RUN_TAG_NAME = Regexp.new("(?:[\\x21-\\x2E\\x30-\\x3D\\x3F-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_ATTR_NAME = Regexp.new("(?:[\\x21\\x23-\\x26\\x28-\\x2E\\x30-\\x3B\\x3F-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_ATTR_VALUE_DQ = Regexp.new("(?:[\\t\\n\\x0C\\x20\\x21\\x23-\\x25\\x27-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_ATTR_VALUE_SQ = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x25\\x28-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_ATTR_VALUE_UQ = Regexp.new("(?:[\\x21\\x23-\\x25\\x28-\\x3B\\x3F-\\x5F\\x61-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_COMMENT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x2C\\x2E-\\x3B\\x3D-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        RUN_BOGUS_COMMENT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x3D\\x3F-\\x7E]|#{SAFE_MB})+".b, Regexp::NOENCODING)
-        UPPER = "A-Z".b.freeze
-        LOWER = "a-z".b.freeze
+        RUN_TAG_NAME = Regexp.new("(?:[\\x21-\\x2E\\x30-\\x3D\\x3F-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_NAME = Regexp.new("(?:[\\x21\\x23-\\x26\\x28-\\x2E\\x30-\\x3B\\x3F-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_VALUE_DQ = Regexp.new("(?:[\\t\\n\\x0C\\x20\\x21\\x23-\\x25\\x27-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_VALUE_SQ = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x25\\x28-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_ATTR_VALUE_UQ = Regexp.new("(?:[\\x21\\x23-\\x25\\x28-\\x3B\\x3F-\\x5F\\x61-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_COMMENT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x2C\\x2E-\\x3B\\x3D-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
+        RUN_BOGUS_COMMENT = Regexp.new("(?:[\\t\\n\\x0C\\x20-\\x3D\\x3F-\\x7E]++|#{SAFE_MB})+".b, Regexp::NOENCODING)
 
         def scan_text_run
           return nil unless @state <= LEX_PLAINTEXT && @buffered_emit_char == NO_CHAR && @resume_pos.nil? &&
