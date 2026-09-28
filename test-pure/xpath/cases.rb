@@ -77,5 +77,8 @@ EXPRS = [
   ["//li[3]", "(preceding-sibling::li)[1]"], ["//li[3]", "preceding-sibling::li[last()]"], ["//li[3]", "following-sibling::li | preceding-sibling::li"],
   ["//li[3]", "text()"], ["//li[3]/text()", "."], ["//li[3]/text()", ".."], ["//li[3]/text()", "following::text()"], ["//li[3]/text()", "preceding::text()[2]"],
   ["//div/@class", "."], ["//div/@class", ".."], ["//div/@class", "string()"], ["//div/@class", "following::*[1]"], ["//div/@class", "preceding::*"], ["//div/@class", "ancestor::*"],
+  ["/", "//*:item"], ["/", "//*:*"], ["/", "//@*:attr"], ["/", "//@*:*"], ["/", "count(//*:x[1])"], ["/", "*:root/*:group/*:x[2]"], ["/", "//*:li[2]"], ["/", "//*: li"], ["/", "//* :li"], ["/", "*:"],
+  ["/", "string(1)", { handler: true }], ["/", "nokogiri:string(1)", { handler: true }], ["/", "nokogiri:raiser()", { handler: true }], ["/", "raiser()", { handler: true }],
+  ["/", "//*[local-name()='item'][nokogiri:thing(.)]", { handler: true }],
   ["//div/@class", "self::node()"], ["//div/@class", "child::node()"], ["//div/@class", "following-sibling::node()"], ["//div/@class", "../@id"], ["//div/@class", "name()"],
 ]

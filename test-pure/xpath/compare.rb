@@ -68,6 +68,8 @@ class Handler
   def bad = :sym
   def args(*a) = a.map { |x| x.class.name }.join(",")
   def bool = true
+  def string(*) = "handled"
+  def raiser = raise(ArgumentError, "boom")
 end
 
 load CASES

@@ -70,10 +70,13 @@ module Nokogiri
         "self" => AXIS_SELF,
       }.freeze
 
+      # nokogiri libxml2 patch 0009-allow-wildcard-namespaces
+      WILDCARD_PREFIX = "*"
+
       # xmlXPathStepOp. +c1+/+c2+ are the resolved children (steps[ch1], steps[ch2]).
       class Op
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
-          :index, :positional, :max_pos, :last_fn, :first_one
+          :index, :positional, :max_pos, :last_fn, :first_one, :plan
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -122,6 +125,7 @@ module Nokogiri
       def self.precompute_op(comp, op)
         case op.op
         when OP_COLLECT
+          op.plan = FastCollect.plan_for(op.value, op.value2, op.value3, op.value4, op.value5)
           # xmlXPathIsPositionalPredicate on the first predicate
           if (pred = op.c2)
             max = positional_predicate(pred)
@@ -825,7 +829,10 @@ module Nokogiri
           skip_blanks
           if name.nil? && cur == 0x2A
             next_ch
-            return [NODE_TEST_ALL, 0, nil, nil]
+            # nokogiri libxml2 patch 0009 (wildcard namespaces): "*:name"
+            return [NODE_TEST_ALL, 0, nil, nil] if cur != 0x3A
+
+            name = WILDCARD_PREFIX
           end
 
           name ||= parse_ncname
@@ -883,6 +890,10 @@ module Nokogiri
           else
             name = nil
             if cur == 0x2A
+              if nxt(1) == 0x3A
+                next_ch
+                name = WILDCARD_PREFIX
+              end
               axis = AXIS_CHILD
             else
               name = parse_ncname

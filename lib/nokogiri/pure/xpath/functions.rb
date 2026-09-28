@@ -687,13 +687,11 @@ module Nokogiri
 
       ESCAPE_URI_NS = "http://www.w3.org/2002/08/xquery-functions"
 
+      # xmlXPathStandardFunctions (static table, nokogiri libxml2 patch 0019)
+      STANDARD_FUNCS = FN.reject { |name, _| name == "escape-uri" }.freeze
+
       # the function table xmlXPathRegisterAllFunctions installs, as [name, ns_uri] => callable
-      DEFAULT_FUNCS = begin
-        h = {}
-        FN.each { |name, f| h[[name, nil]] = f unless name == "escape-uri" }
-        h[["escape-uri", ESCAPE_URI_NS]] = FN["escape-uri"]
-        h.freeze
-      end
+      DEFAULT_FUNCS = { ["escape-uri", ESCAPE_URI_NS] => FN["escape-uri"] }.freeze
 
       module_function
 

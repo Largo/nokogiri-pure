@@ -206,16 +206,18 @@ module Nokogiri
 
         # xmlXPathFunctionLookup
         def function_lookup(name)
-          if (f = @func_lookup_func)
-            ret = f.call(@func_lookup_data, name, nil)
-            return ret if ret
-          end
           function_lookup_ns(name, nil)
         end
 
-        # xmlXPathFunctionLookupNS
+        # xmlXPathFunctionLookupNS. With nokogiri's libxml2 patch 0019 ("xpath: Use separate
+        # static hash table for standard functions") the XPath 1.0 core functions are looked up
+        # first, in a static table, and can't be overridden.
         def function_lookup_ns(name, ns_uri)
           return nil if name.nil?
+
+          if ns_uri.nil? && (sf = STANDARD_FUNCS[name])
+            return sf
+          end
 
           if (f = @func_lookup_func)
             ret = f.call(@func_lookup_data, name, ns_uri)
@@ -1508,3 +1510,4 @@ end
 require_relative "xpath/compiler"
 require_relative "xpath/evaluator"
 require_relative "xpath/functions"
+require_relative "xpath/fast_collect"

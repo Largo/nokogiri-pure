@@ -550,7 +550,7 @@ module Nokogiri
 
         # xmlXPathCompOpEvalToBoolean
         def comp_op_eval_to_boolean(op, is_predicate)
-          loop do
+          while true
             case op.op
             when OP_END
               return false
@@ -1054,7 +1054,7 @@ module Nokogiri
           xp_error(INVALID_TYPE) unless obj.instance_of?(Array)
           @value_tab.pop
 
-          if prefix
+          if prefix && prefix != WILDCARD_PREFIX
             uri = xpctxt.ns_lookup(prefix)
             xp_error(UNDEF_PREFIX_ERROR) if uri.nil?
           end
@@ -1102,6 +1102,7 @@ module Nokogiri
             end
           end
           break_on_first_hit = to_bool && pred_op.nil?
+          fast = first.nil? && last.nil? && !has_axis_range && !break_on_first_hit ? op.plan : nil
 
           old_context_node = xpctxt.node
           out_seq = nil
@@ -1123,9 +1124,13 @@ module Nokogiri
             outcome = nil # nil (normal end), :range_end, :first_hit
 
             cur = nil
-            loop do
+            if fast && (cn = xpctxt.node).type != NAMESPACE_DECL
+              fast[0].call(cn, xpctxt.doc, name, uri, seq, fast[1])
+              cur = nil
+            else
               cur = axis_next(next_axis, cur)
-              break if cur.nil?
+            end
+            while cur
 
               if first_node
                 break if first_node.equal?(cur)
@@ -1158,6 +1163,8 @@ module Nokogiri
                   ns = cur.ns
                   if prefix.nil?
                     hit = :node if ns.nil?
+                  elsif prefix == WILDCARD_PREFIX
+                    hit = :node
                   elsif ns && uri == ns.href
                     hit = :node
                   end
@@ -1207,7 +1214,10 @@ module Nokogiri
                 return
               end
 
-              next if hit.nil?
+              if hit.nil?
+                cur = axis_next(next_axis, cur)
+                next
+              end
 
               if hit == :ns
                 has_ns_nodes = true
@@ -1239,6 +1249,7 @@ module Nokogiri
                   break
                 end
               end
+              cur = axis_next(next_axis, cur)
             end
             any_ns ||= has_ns_nodes
 

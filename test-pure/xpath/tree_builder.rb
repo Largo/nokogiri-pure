@@ -45,6 +45,8 @@ module XPathScratch
     when REXML::CData
       T.add_child(parent, T.new_cdata_block(doc, r.value))
     when REXML::Text
+      return if parent.equal?(doc) # (REXML keeps whitespace outside the root element)
+
       T.add_child(parent, T.new_doc_text(doc, r.value))
     when REXML::Comment
       T.add_child(parent, T.new_doc_comment(doc, r.string))
