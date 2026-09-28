@@ -858,12 +858,12 @@ module Nokogiri
           # express lane: a run of plain chars ending at '<' or '&' before the flush limit, far
           # from the end of the buffer -- exactly one iteration of the loop below
           if readahead == 0 && @disable_sax <= 1 && (c = @buf.getbyte(@cur)) && c < 0x80 && c != 0 &&
-              c != 0x3C && c != 0x26 &&
-              (n = text_run_length((@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII)) &&
+              c != 0x3C && c != 0x26 && (ss = (@scanner ||= StringScanner.new(@buf))) && (ss.pos = @cur) &&
+              (n = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII)) &&
               n < HTML_PARSER_BIG_BUFFER_SIZE && ((e = @buf.getbyte(@cur + n)) == 0x3C || e == 0x26) &&
               @buf.bytesize - @cur - n >= INPUT_CHUNK
             @clen = 1
-            run = bytes_at_cur(n)
+            run = ss.matched # (a copy)
             advance_run(run)
             deliver_chars(run)
             return
@@ -1604,12 +1604,13 @@ module Nokogiri
 
           buf = @buf
           start = @cur
-          ss = scanner
+          ss = (@scanner ||= StringScanner.new(buf))
           ss.pos = start + 1
           nlen = ss.skip(EXPRESS_TAG_NAME)
           return false if nlen.nil? || TAG_NAME_CHAR[buf.getbyte(start + 1 + nlen) || 0]
 
-          name = cached_name(ss.matched)
+          m = ss.matched
+          name = NAME_CACHE[m] || cached_name(m)
           return false if EXPRESS_SPECIAL.key?(name)
           return false if !push && @name && (closes = CLOSED_BY[name]) && closes.key?(@name)
 
@@ -1623,7 +1624,7 @@ module Nokogiri
           atts = nil
           attre = (@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII
           while true
-            ss.pos = pos
+            # (the scanner is at pos)
             if (bl = ss.skip(EXPRESS_BLANKS)) > 0
               # (htmlSkipBlankChars: a newline starts a new line, other blanks are a column each)
               if bl == 1
@@ -1666,7 +1667,8 @@ module Nokogiri
               value = nil
               col += len
             end
-            attname = cached_name(ss[1])
+            m = ss[1]
+            attname = NAME_CACHE[m] || cached_name(m)
             if atts
               j = 0
               while j < atts.length

@@ -53,24 +53,31 @@ module Nokogiri
           doc.end_document
         end
 
+        UTF8 = Encoding::UTF_8
+
+        # (str() inlined for the UTF-8 strings the parser passes)
         def start_element(_ctxt, name, atts)
           attributes = []
           if atts
             i = 0
-            while i < atts.length
-              attributes << [str(atts[i]), str(atts[i + 1])]
+            n = atts.length
+            while i < n
+              a = atts[i]
+              v = atts[i + 1]
+              attributes << [a && a.encoding == UTF8 ? a.dup : str(a),
+                             v.nil? ? nil : (v.encoding == UTF8 ? v.dup : str(v)),]
               i += 2
             end
           end
-          doc.start_element(str(name), attributes)
+          doc.start_element(name && name.encoding == UTF8 ? name.dup : str(name), attributes)
         end
 
         def end_element(_ctxt, name)
-          doc.end_element(str(name))
+          doc.end_element(name && name.encoding == UTF8 ? name.dup : str(name))
         end
 
         def characters(_ctxt, s)
-          doc.characters(str(s))
+          doc.characters(s && s.encoding == UTF8 ? s.dup : str(s))
         end
 
         def comment(_ctxt, s)
