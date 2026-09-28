@@ -2323,7 +2323,8 @@ module Nokogiri
         FT_ATTR = "#{FT_WS}++(#{FT_ANAME})(?:=(?:\"(#{FT_DQV})\"|'(#{FT_SQV})'|(#{FT_UQV})))?"
         FAST_ATTR = Regexp.new(FT_ATTR.b, Regexp::NOENCODING)
         UPPER = /[A-Z]/n
-        NON_PLAIN = /[^\x20-\x7E]/n
+        NL = "\n".b.freeze
+        TAB = "\t".b.freeze
         FAST_TAG_NAME = Regexp.new(FT_TNAME.b, Regexp::NOENCODING)
         FAST_TAG_END = Regexp.new("#{FT_WS}*+>".b, Regexp::NOENCODING)
         FAST_TAG_SELF_CLOSING_END = Regexp.new("#{FT_WS}*+/>".b, Regexp::NOENCODING)
@@ -2335,6 +2336,7 @@ module Nokogiri
           start = @start
           ss = (@scanner ||= StringScanner.new(@input))
           attrs = nil
+          non_ascii = false
           if @input.getbyte(start + 1) == 0x2F
             ss.pos = start + 2
             return false unless ss.skip(FAST_TAG_NAME)
@@ -2360,7 +2362,13 @@ module Nokogiri
               return false if max_attributes >= 0 && attrs.length >= max_attributes
               return false if attrs.any? { |a| a.name == aname }
 
-              attrs << Attribute.new(aname, ss[2] || ss[3] || ss[4] || EMPTY.dup, orig_len)
+              value = ss[2] || ss[3] || ss[4]
+              if value
+                non_ascii = true unless value.ascii_only?
+              else
+                value = EMPTY.dup
+              end
+              attrs << Attribute.new(aname, value, orig_len)
             end
             reset_rel = ss.pos - start
             if (tail = ss.skip(FAST_TAG_END))
@@ -2378,13 +2386,13 @@ module Nokogiri
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
           iter_mark
-          # @next_nonplain: the first byte at or after some position <= start that isn't
-          # printable ASCII (tabs and newlines included), found without rescanning
-          np = @next_nonplain
-          if np.nil? || np < start
-            np = @next_nonplain = @input.byteindex(NON_PLAIN, start) || @end
-          end
-          if np >= start + len
+          # (@next_nl/@next_tab: the next "\n"/"\t" at or after some position <= start, found
+          # without rescanning; names are ASCII and non-ASCII values were noted above)
+          nl = @next_nl
+          nl = @next_nl = @input.byteindex(NL, start) || @end if nl.nil? || nl < start
+          tab = @next_tab
+          tab = @next_tab = @input.byteindex(TAB, start) || @end if tab.nil? || tab < start
+          if !non_ascii && nl >= start + len && tab >= start + len
             # one column per byte: move straight to the reset point, then onto the '>'
             @column += reset_rel
             @offset += reset_rel
