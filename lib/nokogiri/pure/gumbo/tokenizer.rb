@@ -2298,6 +2298,77 @@ module Nokogiri
           run
         end
 
+        # A whole tag that the tag states would tokenize without any error, character reference,
+        # carriage return or input-dependent branching: "<name attr=value ...>" / "</name>".
+        FT_WS = "[\\t\\n\\f ]"
+        FT_TNAME = "[A-Za-z][\\x21-\\x2E\\x30-\\x3D\\x3F-\\x7E]*+"
+        FT_ANAME = "[\\x21\\x23-\\x26\\x28-\\x2E\\x30-\\x3B\\x3F-\\x7E]++"
+        FT_DQV = "(?:[\\t\\n\\x0C\\x20\\x21\\x23-\\x25\\x27-\\x7E]++|#{SAFE_MB})*+"
+        FT_SQV = "(?:[\\t\\n\\x0C\\x20-\\x25\\x28-\\x7E]++|#{SAFE_MB})*+"
+        FT_UQV = "(?:[\\x21\\x23-\\x25\\x28-\\x3B\\x3F-\\x5F\\x61-\\x7E]++|#{SAFE_MB})++"
+        FT_ATTR = "#{FT_WS}++(#{FT_ANAME})(?:=(?:\"(#{FT_DQV})\"|'(#{FT_SQV})'|(#{FT_UQV})))?"
+        FAST_START_TAG = Regexp.new(
+          "<(#{FT_TNAME})((?:#{FT_ATTR.gsub("(", "(?:").gsub("(?:?:", "(?:")})*+)#{FT_WS}*+(/?)>".b, Regexp::NOENCODING
+        )
+        FAST_ATTR = Regexp.new(FT_ATTR.b, Regexp::NOENCODING)
+        FAST_END_TAG = Regexp.new("</(#{FT_TNAME})>".b, Regexp::NOENCODING)
+
+        # Tokenizes such a tag starting at the current '<' (in the data state) in one go, leaving
+        # the tokenizer exactly as the character-by-character state machine would. Returns false
+        # (without touching anything) when the tag isn't that simple.
+        def fast_tag(output)
+          start = @start
+          ss = (@scanner ||= StringScanner.new(@input))
+          ss.pos = start
+          attrs = []
+          if @input.getbyte(start + 1) == 0x2F
+            len = ss.skip(FAST_END_TAG)
+            return false unless len
+
+            raw_name = ss[1]
+            is_start = false
+            self_closing = false
+            reset_rel = len - 1
+          else
+            len = ss.skip(FAST_START_TAG)
+            return false unless len
+
+            raw_name = ss[1]
+            attr_src = ss[2]
+            self_closing = ss[3].bytesize == 1
+            is_start = true
+            reset_rel = 1 + raw_name.bytesize + attr_src.bytesize
+            unless attr_src.empty?
+              max_attributes = @parser.max_attributes
+              as = StringScanner.new(attr_src)
+              until as.eos?
+                as.skip(FAST_ATTR)
+                aname = as[1].downcase
+                return false if max_attributes >= 0 && attrs.length >= max_attributes
+                return false if attrs.any? { |a| a.name == aname }
+
+                attrs << Attribute.new(aname, as[2] || as[3] || as[4] || EMPTY.dup, as[1].bytesize)
+              end
+            end
+          end
+          name = raw_name.downcase
+
+          # <: set_mark; start_new_tag; the name and attributes; the last
+          # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
+          iter_mark
+          advance_over(@input.byteslice(start, reset_rel))
+          reset_tag_buffer_start_point
+          advance_over(@input.byteslice(start + reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
+          @tag = Util.tagn_enum(name)
+          @tag_name = name if @tag == TAG_UNKNOWN
+          @drop_next_attr_value = false
+          @is_start_tag = is_start
+          @is_self_closing = self_closing
+          @tag_attributes = attrs
+          @state = LEX_DATA
+          emit_current_tag(output)
+        end
+
         # gumbo_lex
         def lex(output)
           if @buffered_emit_char != NO_CHAR
@@ -2312,6 +2383,8 @@ module Nokogiri
 
           handlers = HANDLERS
           while true
+            return if @state == LEX_DATA && @current == 0x3c && fast_tag(output)
+
             result = __send__(handlers[@state], @current, output)
             should_advance = !@reconsume
             @reconsume = false
