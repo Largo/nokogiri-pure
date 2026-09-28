@@ -1146,14 +1146,25 @@ module Nokogiri
           "(?=[\\t\\n\\r >]))|(?=[^A-Za-z0-9:_.\\-=\\t\\n\\r ]))".b, Regexp::NOENCODING
         )
 
+        TAG_NAME_FAST = /[A-Za-z_:.][A-Za-z0-9:_.\-]{0,99}/n
+
         # htmlParseStartTag: returns 0 on success, -1 on error, 1 if discarded
         def parse_start_tag
           return -1 unless @has_input
           return -1 if cur_byte != 0x3C
 
-          next_char
-          grow_macro
-          name = parse_html_name
+          ss = scanner
+          ss.pos = @cur + 1
+          if (len = ss.skip(TAG_NAME_FAST)) && @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
+            # NEXT; GROW; htmlParseHTMLName without any input grow
+            name = cached_name(ss.matched)
+            @cur += len + 1
+            @col += len + 1
+          else
+            next_char
+            grow_macro
+            name = parse_html_name
+          end
           if name.nil?
             html_err(Err::NAME_REQUIRED, "htmlParseStartTag: invalid element name\n")
             next_char while cur_byte != 0 && cur_byte != 0x3E && !stopped?
@@ -1242,7 +1253,25 @@ module Nokogiri
         end
 
         # htmlParseEndTag: returns 1 if the current level should be closed
+        END_TAG_FAST = %r{</([A-Za-z_:.][A-Za-z0-9:_.\-]{0,99})>}n
+
         def parse_end_tag
+          # fast path: "</name>" closing the current element, far enough from the end of the
+          # buffer that no NEXT can grow the input
+          ss = scanner
+          ss.pos = @cur
+          if (len = ss.skip(END_TAG_FAST)) && @buf.bytesize - @cur - len >= INPUT_CHUNK
+            name = cached_name(ss[1])
+            if name == @name && (@depth <= 0 || (name != "html" && name != "body" && name != "head"))
+              @cur += len
+              @col += len
+              sax_end_element(name)
+              @node_infos.pop
+              name_pop
+              return 1
+            end
+          end
+
           if cur_byte != 0x3C || nxt(1) != 0x2F
             html_err(Err::LTSLASH_REQUIRED, "htmlParseEndTag: '</' not found\n")
             return 0
@@ -1340,15 +1369,22 @@ module Nokogiri
           info = HTMLParser.tag_lookup(name)
           html_err(Err::HTML_UNKNOWN_TAG, "Tag #{name} invalid\n", name) if info.nil?
 
-          if cur_byte == 0x2F && nxt(1) == 0x3E
+          c = @buf.getbyte(@cur) || 0
+          if c == 0x2F && nxt(1) == 0x3E
             skip(2)
             sax_end_element(name)
             name_pop
             return
           end
 
-          if cur_byte == 0x3E
-            next_char
+          if c == 0x3E
+            if @buf.bytesize - @cur >= INPUT_CHUNK
+              # NEXT over '>' without a grow
+              @cur += 1
+              @col += 1
+            else
+              next_char
+            end
           else
             html_err(Err::GT_REQUIRED, "Couldn't find end of Start Tag #{name}\n", name)
             if name == @name
@@ -1365,33 +1401,36 @@ module Nokogiri
           end
         end
 
-        # htmlParseContentInternal
+        # htmlParseContentInternal (GROW/SHRINK/CUR/NXT inlined)
         def parse_content_internal
           depth = @name_tab.length
           current_node = depth <= 0 ? nil : @name
-          until stopped?
-            grow_macro
-            c = cur_byte
+          while @disable_sax <= 1
+            grow if @buf.bytesize - @cur < INPUT_CHUNK && (@input_flags & INPUT_PROGRESSIVE) == 0
+            c = @buf.getbyte(@cur) || 0
 
-            if c == 0x3C && nxt(1) == 0x2F
-              if parse_end_tag == 1 && (current_node || @name_tab.empty?)
-                depth = @name_tab.length
-                current_node = depth <= 0 ? nil : @name
-              end
-              next
-            elsif c == 0x3C && (ascii_letter?(nxt(1)) || nxt(1) == 0x5F || nxt(1) == 0x3A)
-              name = parse_html_name_non_invasive
-              if name.nil?
-                html_err(Err::NAME_REQUIRED, "htmlParseStartTag: invalid element name\n")
-                # (libxml2 has a no-op `while ((CUR == 0) && (CUR != '>')) NEXT;` here)
-                finish_element_parsing
-                current_node = @name
-                depth = @name_tab.length
+            if c == 0x3C
+              c1 = @buf.getbyte(@cur + 1) || 0
+              if c1 == 0x2F
+                if parse_end_tag == 1 && (current_node || @name_tab.empty?)
+                  depth = @name_tab.length
+                  current_node = depth <= 0 ? nil : @name
+                end
                 next
-              end
-              if @name && HTMLParser.check_auto_close(name, @name)
-                auto_close(name)
-                next
+              elsif (c1 >= 0x61 && c1 <= 0x7A) || (c1 >= 0x41 && c1 <= 0x5A) || c1 == 0x5F || c1 == 0x3A
+                name = parse_html_name_non_invasive
+                if name.nil?
+                  html_err(Err::NAME_REQUIRED, "htmlParseStartTag: invalid element name\n")
+                  # (libxml2 has a no-op `while ((CUR == 0) && (CUR != '>')) NEXT;` here)
+                  finish_element_parsing
+                  current_node = @name
+                  depth = @name_tab.length
+                  next
+                end
+                if @name && HTMLParser.check_auto_close(name, @name)
+                  auto_close(name)
+                  next
+                end
               end
             end
 
@@ -1402,38 +1441,45 @@ module Nokogiri
               next
             end
 
-            c = cur_byte
+            c = @buf.getbyte(@cur) || 0
             if c != 0 && (current_node == "script" || current_node == "style")
               parse_script
-            elsif c == 0x3C && nxt(1) == 0x21
-              if upp(2) == 0x44 && upp(3) == 0x4F && upp(4) == 0x43 && upp(5) == 0x54 &&
-                  upp(6) == 0x59 && upp(7) == 0x50 && upp(8) == 0x45
-                html_err(Err::HTML_STRUCURE_ERROR, "Misplaced DOCTYPE declaration\n", "DOCTYPE")
-                parse_doctype_decl
-              elsif nxt(2) == 0x2D && nxt(3) == 0x2D
-                parse_comment
-              else
-                skip_bogus_comment
-              end
-            elsif c == 0x3C && nxt(1) == 0x3F
-              parse_pi
-            elsif c == 0x3C && ascii_letter?(nxt(1))
-              parse_element_internal
-              current_node = @name
-              depth = @name_tab.length
             elsif c == 0x3C
-              sax_characters(+"<") if @disable_sax == 0
-              next_char
+              c1 = @buf.getbyte(@cur + 1) || 0
+              if c1 == 0x21
+                if upp(2) == 0x44 && upp(3) == 0x4F && upp(4) == 0x43 && upp(5) == 0x54 &&
+                    upp(6) == 0x59 && upp(7) == 0x50 && upp(8) == 0x45
+                  html_err(Err::HTML_STRUCURE_ERROR, "Misplaced DOCTYPE declaration\n", "DOCTYPE")
+                  parse_doctype_decl
+                elsif nxt(2) == 0x2D && nxt(3) == 0x2D
+                  parse_comment
+                else
+                  skip_bogus_comment
+                end
+              elsif c1 == 0x3F
+                parse_pi
+              elsif (c1 >= 0x61 && c1 <= 0x7A) || (c1 >= 0x41 && c1 <= 0x5A)
+                parse_element_internal
+                current_node = @name
+                depth = @name_tab.length
+              else
+                sax_characters(+"<") if @disable_sax == 0
+                next_char
+              end
             elsif c == 0x26
               parse_reference
             elsif c == 0
               auto_close_on_end
               break
             else
-              parse_char_data
+              parse_char_data_internal(0)
             end
-            shrink_macro
-            grow_macro
+            # SHRINK; GROW
+            if (@input_flags & INPUT_PROGRESSIVE) == 0
+              avail = @buf.bytesize - @cur
+              parser_shrink if @cur - @base > 2 * INPUT_CHUNK && avail < 2 * INPUT_CHUNK
+              grow if @buf.bytesize - @cur < INPUT_CHUNK
+            end
           end
         end
 
