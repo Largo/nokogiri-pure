@@ -226,6 +226,37 @@ module Nokogiri
 
         XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/"
 
+        # lookup in the (name, uri) -> index table of xmlParseStartTag2 (linear while small)
+        def seen_lookup(names, uris, idx, name, uri)
+          if names.size > 16
+            h = @seen_hash
+            if h.nil? || @seen_hash_n != names.size || !@seen_hash_names.equal?(names)
+              h = @seen_hash = {}
+              names.each_with_index { |n, k| h[[n, uris[k]]] ||= idx[k] }
+              @seen_hash_names = names
+              @seen_hash_n = names.size
+            end
+            return h[[name, uri]]
+          end
+          k = 0
+          while k < names.size
+            return idx[k] if names[k] == name && uris[k] == uri
+
+            k += 1
+          end
+          nil
+        end
+
+        def seen_add(names, uris, idx, name, uri, i)
+          names << name
+          uris << uri
+          idx << i
+          if @seen_hash && @seen_hash_names.equal?(names)
+            @seen_hash[[name, uri]] ||= i
+            @seen_hash_n = names.size
+          end
+        end
+
         # xmlParseStartTag2: returns [localname, prefix, uri, nb_ns] (localname nil on failure)
         def parse_start_tag2
           return [nil, nil, nil, 0] if cur_byte != 0x3C
@@ -371,16 +402,8 @@ module Nokogiri
               else
                 nsuri = @ns_tab[an][1]
               end
-              res = nil
-              k = 0
               name = a.name
-              while k < seen_names.size
-                if seen_names[k] == name && seen_uris[k] == nsuri
-                  res = seen_idx[k]
-                  break
-                end
-                k += 1
-              end
+              res = seen_lookup(seen_names, seen_uris, seen_idx, name, nsuri)
               if res
                 if a.prefix == atts[res].prefix
                   err_attribute_dup(a.prefix, a.name)
@@ -391,9 +414,7 @@ module Nokogiri
                   num_ns_err += 1
                 end
               else
-                seen_names << name
-                seen_uris << nsuri
-                seen_idx << i
+                seen_add(seen_names, seen_uris, seen_idx, name, nsuri, i)
               end
               i += 1
             end
@@ -426,24 +447,14 @@ module Nokogiri
                 end
               end
               if max_atts > 1
-                res = nil
-                k = 0
-                while k < seen_names.size
-                  if seen_names[k] == attname && seen_uris[k] == nsuri
-                    res = seen_idx[k]
-                    break
-                  end
-                  k += 1
-                end
+                res = seen_lookup(seen_names, seen_uris, seen_idx, attname, nsuri)
                 if res
                   next if aprefix == atts[res].prefix
 
                   ns_err(ErrCode::NS_ERR_ATTRIBUTE_REDEFINED,
                     "Namespaced Attribute #{attname} in '#{nsuri}' redefined\n", attname, nsuri)
                 else
-                  seen_names << attname
-                  seen_uris << nsuri
-                  seen_idx << atts.length
+                  seen_add(seen_names, seen_uris, seen_idx, attname, nsuri, atts.length)
                 end
               end
               parser_entity_check(attr.expanded_size)
