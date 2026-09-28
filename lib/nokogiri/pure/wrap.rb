@@ -103,7 +103,17 @@ module Nokogiri
         set.instance_variable_set(:@document, rb_document)
         rb_document.decorate(set)
       end
-      c_nodes&.each { |n| wrap_node_set_result(n) }
+      if c_nodes
+        i = 0
+        while i < c_nodes.length
+          n = c_nodes[i]
+          i += 1
+          # (skip the nodes wrap_node_set_result would return the cached wrapper of)
+          next if n && n._private && (n.is_a?(XmlNs) || ((d = n.doc) && d._ruby_doc))
+
+          wrap_node_set_result(n)
+        end
+      end
       set
     end
 

@@ -489,6 +489,43 @@ module Nokogiri
           end
         end
 
+        # Can the arguments +args+ (Op#fast_args) be pushed by #push_fast_args? The steps need
+        # a context node that isn't a namespace node, and the ARG chain walk that is skipped must
+        # not have hit the recursion limit (its deepest op is a step under the SORT of the first
+        # argument, #args + 1 levels down).
+        def fast_args_ok?(args)
+          (n = @context.node) && n.type != NAMESPACE_DECL &&
+            @depth + args.length + 1 < XPATH_MAX_RECURSION_DEPTH
+        end
+
+        # push the values of the arguments +args+ (Op#fast_args), exactly as evaluating the
+        # function's ARG chain would
+        def push_fast_args(args)
+          ctx = @context
+          n = ctx.node
+          i = 0
+          len = args.length
+          while i < len
+            kind, x = args[i]
+            i += 1
+            case kind
+            when :value
+              @value_tab.push(x.value4)
+            when :node
+              @value_tab.push([n])
+            else
+              seq = []
+              plan = x.plan
+              plan[2].call(n, ctx.doc, x.value5, x.value4 ? op_uri(x) : nil, seq, plan[1])
+              @sorted = seq if x.sorted_axis
+              if kind == :sorted_step && seq.length > 1 && !seq.equal?(@sorted)
+                XPath.node_set_sort(seq)
+              end
+              @value_tab.push(seq)
+            end
+          end
+        end
+
         # count(<sibling axis>::test) from +n+ for the fused COLLECT op +st+. The memo lives for
         # one evaluation and is dropped around anything that could run user code (extension
         # functions, variable lookups), the only way the tree can change during an evaluation.
@@ -530,7 +567,11 @@ module Nokogiri
               return
             end
             frame = @value_tab.length
-            comp_op_eval(op.c1) if op.c1
+            if (args = op.fast_args) && fast_args_ok?(args)
+              push_fast_args(args)
+            elsif op.c1
+              comp_op_eval(op.c1)
+            end
             nargs = op.value
             xp_error(INVALID_OPERAND) if @value_tab.length < frame + nargs
             m.bind_call(self, nargs) # (not __send__ with a varying name: see FastCollect.plan_for)
@@ -541,7 +582,10 @@ module Nokogiri
 
           ctx = @context
           frame = @value_tab.length
-          if op.c1
+          if (args = op.fast_args) && fast_args_ok?(args)
+            push_fast_args(args)
+            check_error!
+          elsif op.c1
             comp_op_eval(op.c1)
             check_error!
           end
@@ -761,6 +805,20 @@ module Nokogiri
 
               comp_op_eval(op.c1)
               node_collect_and_test(op, nil, nil, true)
+              res = @value_tab.pop
+            when 3 # OP_EQUAL
+              if (step = op.eq_step) && (n = @context.node) && n.type != NAMESPACE_DECL &&
+                  @depth < XPATH_MAX_RECURSION_DEPTH
+                # the fused "step = literal" of comp_op_eval, without the value stack
+                seq = []
+                plan = step.plan
+                plan[2].call(n, @context.doc, step.value5, step.value4 ? op_uri(step) : nil, seq, plan[1])
+                v = op.eq_value
+                neq = op.value == 0
+                return v.is_a?(String) ? equal_node_set_string(seq, v, neq) : equal_node_set_float(seq, v, neq)
+              end
+
+              comp_op_eval(op)
               res = @value_tab.pop
             else
               comp_op_eval(op)

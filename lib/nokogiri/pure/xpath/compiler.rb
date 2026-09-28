@@ -78,7 +78,7 @@ module Nokogiri
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
           :dos_op, :impure, :std_fn, :std_meth, :fused, :sorted_axis,
-          :eq_step, :eq_value, :count_step, :count_meth
+          :eq_step, :eq_value, :count_step, :count_meth, :fast_args
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -117,7 +117,12 @@ module Nokogiri
           @steps.each { |op| XPath.precompute_op(self, op) }
           @steps.each { |op| XPath.precompute_dos_rewrite(op) if op.op == OP_COLLECT }
           @steps.each { |op| XPath.precompute_equal(op) if op.op == OP_EQUAL }
-          @steps.each { |op| XPath.precompute_count(op) if op.op == OP_FUNCTION }
+          @steps.each do |op|
+            next unless op.op == OP_FUNCTION
+
+            XPath.precompute_count(op)
+            XPath.precompute_args(op)
+          end
           @root = @last >= 0 ? @steps[@last] : nil
           self
         end
@@ -197,6 +202,51 @@ module Nokogiri
           op.count_step = st
           st.count_meth = FastCollect.method(:"count_#{st.plan[0]}")
         end
+      end
+
+      # Function arguments that are all literals, "." or steps from the context node (fused
+      # COLLECTs, possibly under their SORT), in argument order, as [kind, op] pairs:
+      # ParserContext#push_fast_args pushes their values without walking the ARG chain.
+      def self.precompute_args(op)
+        args = []
+        a = op.c1
+        while a
+          return unless a.op == OP_ARG && a.c2
+
+          args << a.c2
+          a = a.c1
+        end
+        return if args.empty? || args.length != op.value
+
+        args.reverse!
+        kinds = args.map do |x|
+          case x.op
+          when OP_VALUE
+            [:value, x]
+          when OP_COLLECT
+            return unless x.fused
+
+            [:step, x]
+          when OP_NODE
+            return unless x.c1.nil? && x.c2.nil?
+
+            [:node, x]
+          when OP_SORT
+            y = x.c1
+            return if y.nil?
+
+            if y.op == OP_COLLECT && y.fused
+              [:sorted_step, y]
+            elsif y.op == OP_NODE && y.c1.nil? && y.c2.nil?
+              [:node, y]
+            else
+              return
+            end
+          else
+            return
+          end
+        end
+        op.fast_args = kinds.freeze
       end
 
       # Static result types of the standard functions (used by the rewrite below)

@@ -14,20 +14,32 @@ module Nokogiri
 
       # _noko_xml_xpath_context__css_class: find a CSS class in a `class` attribute value
       CSS_CLASS_RE = {}
+      CSS_CLASS_RE_BY_NAME = {}.compare_by_identity
       BLANK_BYTES_RE = /[ \t\n\r]/n
 
       def css_class_match?(str, val)
         return false if str.nil? || val.nil?
 
-        vb = val.b
-        if !vb.empty? && !BLANK_BYTES_RE.match?(vb)
-          # a blank-free class name matches iff it equals one of the blank-separated words
-          re = CSS_CLASS_RE[vb] ||= begin
-            CSS_CLASS_RE.clear if CSS_CLASS_RE.size > 1000
-            /(?:\A|[ \t\n\r])#{Regexp.escape(vb)}(?:[ \t\n\r]|\z)/n
+        # (the class name is usually the same frozen literal of a cached compiled expression)
+        re = val.frozen? ? CSS_CLASS_RE_BY_NAME[val] : nil
+        unless re
+          vb = val.b
+          if !vb.empty? && !BLANK_BYTES_RE.match?(vb)
+            # a blank-free class name matches iff it equals one of the blank-separated words
+            re = CSS_CLASS_RE[vb] ||= begin
+              CSS_CLASS_RE.clear if CSS_CLASS_RE.size > 1000
+              /(?:\A|[ \t\n\r])#{Regexp.escape(vb)}(?:[ \t\n\r]|\z)/n
+            end
+            if val.frozen?
+              CSS_CLASS_RE_BY_NAME.clear if CSS_CLASS_RE_BY_NAME.size > 1000
+              CSS_CLASS_RE_BY_NAME[val] = re
+            end
           end
-          return re.match?(str.b)
         end
+        # (an ASCII-only string has the same bytes)
+        return re.match?(str.ascii_only? ? str : str.b) if re
+
+        vb = val.b
 
         val_len = vb.bytesize
         return true if val_len == 0
