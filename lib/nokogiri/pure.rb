@@ -108,6 +108,7 @@ require_relative "pure/errors"
 require_relative "pure/wrap"
 require_relative "pure/encoding"
 require_relative "pure/save"
+require_relative "pure/xpath"
 require_relative "pure/c14n"
 require_relative "pure/xinclude"
 require_relative "pure/parser" if File.exist?(File.join(__dir__, "pure", "parser.rb"))
