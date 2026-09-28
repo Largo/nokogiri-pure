@@ -41,9 +41,10 @@ module Nokogiri
     # entity flags
     ENT_PARSED = 1 << 0
     ENT_CHECKED = 1 << 1
-    ENT_EXPANDING = 1 << 2
-    ENT_CHECKED_LAX = 1 << 3
-    ENT_CONTAINS_LT = 1 << 4
+    ENT_VALIDATED = 1 << 2
+    ENT_EXPANDING = 1 << 3
+    ENT_CHECKED_LAX = 1 << 4
+    ENT_CONTAINS_LT = 1 << 5
 
     # xmlAttributeType
     ATTRIBUTE_CDATA = 1
@@ -1858,7 +1859,7 @@ module Nokogiri
 
         html = doc && doc.type == HTML_DOCUMENT_NODE
         keep_non_ascii = (doc && doc.encoding) || html
-        out = +""
+        out = +"".b
         bytes = input.b
         i = 0
         len = bytes.bytesize
