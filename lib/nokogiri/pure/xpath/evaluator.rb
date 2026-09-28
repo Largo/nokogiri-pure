@@ -23,6 +23,7 @@ module Nokogiri
           @xptr = 0
           @sorted = nil
           @func_cache = nil
+          @depth = context ? context.depth : 0
         end
 
         # ---- value stack ------------------------------------------------------------------
@@ -227,14 +228,14 @@ module Nokogiri
           if comp.nil? || comp.root.nil?
             xp_error(STACK_ERROR)
           end
-          old_depth = @context.depth
+          old_depth = @depth
           if to_bool
             res = comp_op_eval_to_boolean(comp.root, false)
-            @context.depth = old_depth
+            @depth = old_depth
             return res
           end
           comp_op_eval(comp.root)
-          @context.depth = old_depth
+          @depth = old_depth
           0
         end
 
@@ -243,36 +244,48 @@ module Nokogiri
         # xmlXPathCompOpEval
         def comp_op_eval(op)
           ctx = @context
-          xp_error(RECURSION_LIMIT_EXCEEDED) if ctx.depth >= XPATH_MAX_RECURSION_DEPTH
-          ctx.depth += 1
+          xp_error(RECURSION_LIMIT_EXCEEDED) if @depth >= XPATH_MAX_RECURSION_DEPTH
+          @depth += 1
           case op.op
-          when OP_COLLECT
-            if (c1 = op.c1)
+          when 10 # OP_COLLECT
+            if (c1 = op.c1) && c1.op == OP_NODE && c1.c1.nil? && c1.c2.nil? && op.c2.nil? && op.plan &&
+                (n = ctx.node) && n.type != NAMESPACE_DECL
+              # "axis::test" from the context node: same as pushing the node-set of the context
+              # node and running the collector's single-node fast path
+              seq = []
+              FastCollect.__send__(op.plan[0], n, ctx.doc, op.value5, op_uri(op), seq, op.plan[1])
+              @value_tab.push(seq)
+              @sorted = seq if SORTED_AXES.include?(op.value)
+            elsif (d = op.dos_op) && (op.impure.nil? || pure_functions?(op.impure))
+              comp_op_eval(d.c1)
+              node_collect_and_test(d, nil, nil, false)
+            elsif (c1 = op.c1)
               comp_op_eval(c1)
               node_collect_and_test(op, nil, nil, false)
             end
-          when OP_SORT
+          when 17 # OP_SORT
             comp_op_eval(op.c1) if op.c1
             v = @value_tab.last
             if v.is_a?(Array) && v.length > 1 && !v.equal?(@sorted)
               XPath.node_set_sort(v)
             end
-          when OP_NODE
+          when 9 # OP_NODE
             comp_op_eval(op.c1) if op.c1
             comp_op_eval(op.c2) if op.c2
-            @value_tab.push(XPath.node_set_create(ctx.node))
-          when OP_ROOT
+            n = ctx.node
+            @value_tab.push(n.nil? ? [] : (n.type == NAMESPACE_DECL ? [XPath.node_set_dup_ns(n.next, n)] : [n]))
+          when 8 # OP_ROOT
             @value_tab.push(ctx.doc ? [ctx.doc] : [])
-          when OP_VALUE
-            @value_tab.push(XPath.object_copy(op.value4))
-          when OP_FUNCTION
+          when 11 # OP_VALUE
+            @value_tab.push(op.value4) # (compiled literals are frozen Strings / Floats)
+          when 13 # OP_FUNCTION
             eval_function(op)
-          when OP_ARG
+          when 14 # OP_ARG
             comp_op_eval(op.c1) if op.c1
             comp_op_eval(op.c2) if op.c2
-          when OP_PREDICATE, OP_FILTER
+          when 15, 16 # OP_PREDICATE, OP_FILTER
             eval_filter(op)
-          when OP_AND
+          when 1 # OP_AND
             comp_op_eval(op.c1)
             fn_boolean(1)
             v = @value_tab.last
@@ -282,7 +295,7 @@ module Nokogiri
               fn_boolean(1)
               @value_tab[-1] = (@value_tab.last && arg2) unless @value_tab.empty?
             end
-          when OP_OR
+          when 2 # OP_OR
             comp_op_eval(op.c1)
             fn_boolean(1)
             v = @value_tab.last
@@ -292,16 +305,16 @@ module Nokogiri
               fn_boolean(1)
               @value_tab[-1] = (@value_tab.last || arg2) unless @value_tab.empty?
             end
-          when OP_EQUAL
+          when 3 # OP_EQUAL
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             equal = op.value != 0 ? equal_values : not_equal_values
             @value_tab.push(equal)
-          when OP_CMP
+          when 4 # OP_CMP
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             @value_tab.push(compare_values(op.value != 0, op.value2 != 0))
-          when OP_PLUS
+          when 5 # OP_PLUS
             comp_op_eval(op.c1)
             comp_op_eval(op.c2) if op.c2
             case op.value
@@ -312,7 +325,7 @@ module Nokogiri
               cast_top_to_number
               check_type_number
             end
-          when OP_MULT
+          when 6 # OP_MULT
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             case op.value
@@ -320,7 +333,7 @@ module Nokogiri
             when 1 then div_values
             when 2 then mod_values
             end
-          when OP_UNION
+          when 7 # OP_UNION
             comp_op_eval(op.c1)
             comp_op_eval(op.c2)
             arg2 = @value_tab.pop
@@ -333,14 +346,35 @@ module Nokogiri
               XPath.node_set_merge(arg1, arg2)
             end
             @value_tab.push(arg1)
-          when OP_VARIABLE
+          when 12 # OP_VARIABLE
             eval_variable(op)
-          when OP_END
+          when 0 # OP_END
             # nothing
           else
             xp_error(INVALID_OPERAND)
           end
-          ctx.depth -= 1
+          @depth -= 1
+        end
+
+        # the namespace URI for a COLLECT op's prefix (nil for none / the "*" wildcard)
+        def op_uri(op)
+          prefix = op.value4
+          return nil if prefix.nil? || prefix == WILDCARD_PREFIX
+
+          uri = @context.ns_lookup(prefix)
+          xp_error(UNDEF_PREFIX_ERROR) if uri.nil?
+          uri
+        end
+
+        # do these (prefixed) function calls resolve to side-effect free builtins?
+        def pure_functions?(ops)
+          ctx = @context
+          return false if ctx.func_lookup_func
+
+          ops.all? do |f|
+            uri = ctx.ns_lookup(f.value5)
+            uri && PURE_FUNCS[ctx.function_lookup_ns(f.value4, uri)]
+          end
         end
 
         def eval_variable(op)
@@ -358,6 +392,17 @@ module Nokogiri
         end
 
         def eval_function(op)
+          if (m = op.std_fn)
+            frame = @value_tab.length
+            comp_op_eval(op.c1) if op.c1
+            nargs = op.value
+            xp_error(INVALID_OPERAND) if @value_tab.length < frame + nargs
+            __send__(m, nargs)
+            check_error!
+            xp_error(STACK_ERROR) if @value_tab.length != frame + 1
+            return
+          end
+
           ctx = @context
           frame = @value_tab.length
           if op.c1
@@ -426,8 +471,8 @@ module Nokogiri
         # xmlXPathCompOpEvalFirst
         def comp_op_eval_first(op, first)
           ctx = @context
-          xp_error(RECURSION_LIMIT_EXCEEDED) if ctx.depth >= XPATH_MAX_RECURSION_DEPTH
-          ctx.depth += 1
+          xp_error(RECURSION_LIMIT_EXCEEDED) if @depth >= XPATH_MAX_RECURSION_DEPTH
+          @depth += 1
           case op.op
           when OP_END
             # nothing
@@ -471,14 +516,14 @@ module Nokogiri
           else
             comp_op_eval(op)
           end
-          ctx.depth -= 1
+          @depth -= 1
         end
 
         # xmlXPathCompOpEvalLast
         def comp_op_eval_last(op, last)
           ctx = @context
-          xp_error(RECURSION_LIMIT_EXCEEDED) if ctx.depth >= XPATH_MAX_RECURSION_DEPTH
-          ctx.depth += 1
+          xp_error(RECURSION_LIMIT_EXCEEDED) if @depth >= XPATH_MAX_RECURSION_DEPTH
+          @depth += 1
           case op.op
           when OP_END
             # nothing
@@ -520,7 +565,7 @@ module Nokogiri
           else
             comp_op_eval(op)
           end
-          ctx.depth -= 1
+          @depth -= 1
         end
 
         # xmlXPathCompOpEvalFilterFirst
@@ -552,17 +597,17 @@ module Nokogiri
         def comp_op_eval_to_boolean(op, is_predicate)
           while true
             case op.op
-            when OP_END
+            when 0 # OP_END
               return false
-            when OP_VALUE
+            when 11 # OP_VALUE
               res = op.value4
               return is_predicate ? evaluate_predicate_result(res) : XPath.cast_to_boolean(res)
-            when OP_SORT
+            when 17 # OP_SORT
               return false if op.c1.nil?
 
               op = op.c1
               next
-            when OP_COLLECT
+            when 10 # OP_COLLECT
               return false if op.c1.nil?
 
               comp_op_eval(op.c1)
@@ -642,10 +687,10 @@ module Nokogiri
           if op.c1
             xp_error(INVALID_OPERAND) if op.c1.op != OP_PREDICATE
             ctx = @context
-            xp_error(RECURSION_LIMIT_EXCEEDED) if ctx.depth >= XPATH_MAX_RECURSION_DEPTH
-            ctx.depth += 1
+            xp_error(RECURSION_LIMIT_EXCEEDED) if @depth >= XPATH_MAX_RECURSION_DEPTH
+            @depth += 1
             comp_op_eval_predicate(op.c1, set, 1, set.length, has_ns_nodes)
-            ctx.depth -= 1
+            @depth -= 1
           end
           node_set_filter(set, op.c2, min_pos, max_pos, has_ns_nodes) if op.c2
         end
@@ -990,6 +1035,72 @@ module Nokogiri
 
         # ---- xmlXPathNodeCollectAndTest -----------------------------------------------------
 
+        # xmlXPathNodeCollectAndTest's context-node loop, for specialised traversals (no
+        # first/last limits, not stopping at the first hit, no namespace context nodes)
+        def collect_fast_multi(op, plan, context_seq, uri, pred_op, has_predicate_range, has_axis_range,
+          max_pos, to_bool, dedup)
+          doc = @context.doc
+          name = op.value5
+          sym, arg = plan
+          out_seq = nil
+          seq = []
+          merge_state = dedup ? [] : nil
+          range_buf = has_axis_range ? [] : nil
+          i = 0
+          n = context_seq.length
+          while i < n
+            cn = context_seq[i]
+            i += 1
+            if has_axis_range
+              FastCollect.__send__(sym, cn, doc, name, uri, range_buf, arg)
+              if max_pos >= 1 && range_buf.length >= max_pos
+                seq << range_buf[max_pos - 1]
+                range_buf.clear
+                if out_seq.nil?
+                  out_seq = seq
+                  seq = []
+                elsif dedup
+                  merge_and_clear(out_seq, seq, merge_state)
+                else
+                  out_seq.concat(seq)
+                  seq.clear
+                end
+                break if to_bool
+              else
+                range_buf.clear
+              end
+              next
+            end
+
+            FastCollect.__send__(sym, cn, doc, name, uri, seq, arg)
+            next if seq.empty?
+
+            if pred_op
+              if has_predicate_range
+                comp_op_eval_predicate(pred_op, seq, max_pos, max_pos, false)
+              else
+                comp_op_eval_predicate(pred_op, seq, 1, seq.length, false)
+              end
+              next if seq.empty?
+            end
+
+            if out_seq.nil?
+              out_seq = seq
+              seq = []
+            elsif dedup
+              merge_and_clear(out_seq, seq, merge_state)
+            else
+              out_seq.concat(seq)
+              seq.clear
+            end
+            break if to_bool
+          end
+          out_seq ||= seq.empty? ? seq : []
+          @value_tab.push(out_seq)
+          @sorted = out_seq if n == 1 && SORTED_AXES.include?(op.value)
+          nil
+        end
+
         # merge +set2+ into +set1+ skipping duplicates (xmlXPathNodeSetMergeAndClear); +state+ keeps
         # identity tables of set1 across calls within one collect.
         def merge_and_clear(set1, set2, state)
@@ -1037,6 +1148,10 @@ module Nokogiri
           set1
         end
 
+        # axes visiting a bounded, small number of nodes
+        BOUNDED_AXES = [AXIS_CHILD, AXIS_ATTRIBUTE, AXIS_SELF, AXIS_FOLLOWING_SIBLING,
+                        AXIS_PRECEDING_SIBLING].freeze
+
         # axes whose traversal from a single context node yields document order
         SORTED_AXES = [AXIS_CHILD, AXIS_DESCENDANT, AXIS_DESCENDANT_OR_SELF, AXIS_ATTRIBUTE, AXIS_SELF,
                        AXIS_FOLLOWING_SIBLING].freeze
@@ -1057,6 +1172,18 @@ module Nokogiri
           if prefix && prefix != WILDCARD_PREFIX
             uri = xpctxt.ns_lookup(prefix)
             xp_error(UNDEF_PREFIX_ERROR) if uri.nil?
+          end
+
+          # fast path: one context node, no predicate, specialised traversal (identical result;
+          # in boolean mode only the emptiness of the result matters)
+          if (plan = op.plan) && obj.length == 1 && op.c2.nil? && first.nil? && last.nil? &&
+              (!to_bool || axis != AXIS_DESCENDANT && axis != AXIS_DESCENDANT_OR_SELF) &&
+              (cn = obj[0]).type != NAMESPACE_DECL
+            seq = []
+            FastCollect.__send__(plan[0], cn, xpctxt.doc, name, uri, seq, plan[1])
+            @value_tab.push(seq)
+            @sorted = seq if SORTED_AXES.include?(axis)
+            return
           end
 
           dedup = true
@@ -1102,7 +1229,16 @@ module Nokogiri
             end
           end
           break_on_first_hit = to_bool && pred_op.nil?
-          fast = first.nil? && last.nil? && !has_axis_range && !break_on_first_hit ? op.plan : nil
+          fast = first.nil? && last.nil? && !break_on_first_hit ? op.plan : nil
+          if fast && (!has_axis_range || BOUNDED_AXES.include?(axis)) &&
+              context_seq.none? { |n| n.type == NAMESPACE_DECL }
+            return collect_fast_multi(op, fast, context_seq, uri, pred_op, has_predicate_range,
+              has_axis_range, max_pos, to_bool, dedup)
+          end
+          # with an axis range ([n]) the specialised traversal can't stop early: only use it for
+          # the short, bounded axes
+          fast = nil if has_axis_range && !BOUNDED_AXES.include?(axis)
+          range_buf = [] if fast && has_axis_range
 
           old_context_node = xpctxt.node
           out_seq = nil
@@ -1125,7 +1261,17 @@ module Nokogiri
 
             cur = nil
             if fast && (cn = xpctxt.node).type != NAMESPACE_DECL
-              fast[0].call(cn, xpctxt.doc, name, uri, seq, fast[1])
+              if has_axis_range
+                # the node at position max_pos among the hits (XP_TEST_HIT with hasAxisRange)
+                FastCollect.__send__(fast[0], cn, xpctxt.doc, name, uri, range_buf, fast[1])
+                if max_pos >= 1 && range_buf.length >= max_pos
+                  seq << range_buf[max_pos - 1]
+                  outcome = :range_end
+                end
+                range_buf.clear
+              else
+                FastCollect.__send__(fast[0], cn, xpctxt.doc, name, uri, seq, fast[1])
+              end
               cur = nil
             else
               cur = axis_next(next_axis, cur)
@@ -1317,9 +1463,29 @@ module Nokogiri
 
         # ---- comparisons / arithmetic -----------------------------------------------------
 
+        # the string-value of +node+ when it is trivially consistent with xmlXPathNodeValHash
+        # (single text child / text-like node), else nil
+        def simple_string_value(node)
+          case node.type
+          when 2, 1 # ATTRIBUTE_NODE, ELEMENT_NODE
+            c = node.children
+            return "" if c.nil?
+            return nil unless c.next.nil? && ((t = c.type) == TEXT_NODE || t == CDATA_SECTION_NODE)
+
+            c.content || ""
+          when 3, 4, 8, 7 # TEXT, CDATA, COMMENT, PI
+            node.content || ""
+          end
+        end
+
         # xmlXPathEqualNodeSetString
         def equal_node_set_string(arg, str, neq)
           return false if arg.empty?
+
+          if arg.length == 1 && (v = simple_string_value(arg[0]))
+            # (the hash pre-check can't change the outcome for such nodes)
+            return neq ? v != str : v == str
+          end
 
           hash = XPath.string_hash(str)
           arg.each do |node|

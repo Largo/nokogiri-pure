@@ -13,10 +13,22 @@ module Nokogiri
       module_function
 
       # _noko_xml_xpath_context__css_class: find a CSS class in a `class` attribute value
+      CSS_CLASS_RE = {}
+      BLANK_BYTES_RE = /[ \t\n\r]/n
+
       def css_class_match?(str, val)
         return false if str.nil? || val.nil?
 
         vb = val.b
+        if !vb.empty? && !BLANK_BYTES_RE.match?(vb)
+          # a blank-free class name matches iff it equals one of the blank-separated words
+          re = CSS_CLASS_RE[vb] ||= begin
+            CSS_CLASS_RE.clear if CSS_CLASS_RE.size > 1000
+            /(?:\A|[ \t\n\r])#{Regexp.escape(vb)}(?:[ \t\n\r]|\z)/n
+          end
+          return re.match?(str.b)
+        end
+
         val_len = vb.bytesize
         return true if val_len == 0
 
@@ -63,6 +75,9 @@ module Nokogiri
         name = node.is_a?(XmlNs) ? node.href : node.name
         ctxt.value_push(!name.nil? && name == element_name)
       end
+
+      PURE_FUNCS[CSS_CLASS_FUNC] = true
+      PURE_FUNCS[LOCAL_NAME_IS_FUNC] = true
 
       # _noko_xml_xpath_context__xpath2ruby: returns the Ruby object, or :undef
       def xpath2ruby(obj, context)

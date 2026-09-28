@@ -13,26 +13,37 @@ module Nokogiri
       module FastCollect
         # node test kinds (op.matcher)
         MATCHERS = {
-          elem_name: "cur.type == ELEMENT_NODE && cur.name == name && cur.ns.nil?",
-          elem_name_uri: "cur.type == ELEMENT_NODE && cur.name == name && (ns = cur.ns) && ns.href == uri",
-          elem_name_wild: "cur.type == ELEMENT_NODE && cur.name == name",
-          elem_all: "cur.type == ELEMENT_NODE",
-          elem_all_uri: "cur.type == ELEMENT_NODE && (ns = cur.ns) && ns.href == uri",
-          attr_name: "cur.type == ATTRIBUTE_NODE && cur.name == name && ((ns = cur.ns).nil? || ns.prefix.nil?)",
-          attr_name_uri: "cur.type == ATTRIBUTE_NODE && cur.name == name && (ns = cur.ns) && ns.href == uri",
-          attr_all: "cur.type == ATTRIBUTE_NODE",
-          attr_all_uri: "cur.type == ATTRIBUTE_NODE && (ns = cur.ns) && ns.href == uri",
-          node: "NODE_TYPE_SET[cur.type]",
-          text: "(t = cur.type) == TEXT_NODE || t == CDATA_SECTION_NODE",
-          comment: "cur.type == COMMENT_NODE",
-          pi: "cur.type == PI_NODE",
-          pi_name: "cur.type == PI_NODE && cur.name == name",
+          elem_name: "t == ELEMENT_NODE && cur.name == name && cur.ns.nil?",
+          elem_name_uri: "t == ELEMENT_NODE && cur.name == name && (ns = cur.ns) && ns.href == uri",
+          elem_name_wild: "t == ELEMENT_NODE && cur.name == name",
+          elem_all: "t == ELEMENT_NODE",
+          elem_all_uri: "t == ELEMENT_NODE && (ns = cur.ns) && ns.href == uri",
+          attr_name: "t == ATTRIBUTE_NODE && cur.name == name && ((ns = cur.ns).nil? || ns.prefix.nil?)",
+          attr_name_uri: "t == ATTRIBUTE_NODE && cur.name == name && (ns = cur.ns) && ns.href == uri",
+          attr_all: "t == ATTRIBUTE_NODE",
+          attr_all_uri: "t == ATTRIBUTE_NODE && (ns = cur.ns) && ns.href == uri",
+          node: "NODE_TYPE_SET[t]",
+          text: "t == TEXT_NODE || t == CDATA_SECTION_NODE",
+          comment: "t == COMMENT_NODE",
+          pi: "t == PI_NODE",
+          pi_name: "t == PI_NODE && cur.name == name",
         }.freeze
 
         # node types matched by node() (namespace nodes are handled by the generic collector)
         NODE_TYPE_SET = [].tap do |a|
           [DOCUMENT_NODE, HTML_DOCUMENT_NODE, ELEMENT_NODE, ATTRIBUTE_NODE, PI_NODE, COMMENT_NODE,
            CDATA_SECTION_NODE, TEXT_NODE].each { |t| a[t] = true }
+        end.freeze
+
+        # context node types xmlXPathNextChild / xmlXPathNextChildElement descend into
+        CHILD_CTX = [].tap do |a|
+          [ELEMENT_NODE, TEXT_NODE, CDATA_SECTION_NODE, ENTITY_REF_NODE, ENTITY_NODE, PI_NODE,
+           COMMENT_NODE, NOTATION_NODE, DTD_NODE, DOCUMENT_NODE, DOCUMENT_TYPE_NODE,
+           DOCUMENT_FRAG_NODE, HTML_DOCUMENT_NODE].each { |t| a[t] = true }
+        end.freeze
+        CHILD_ELEM_CTX = [].tap do |a|
+          [ELEMENT_NODE, DOCUMENT_FRAG_NODE, ENTITY_REF_NODE, ENTITY_NODE, DOCUMENT_NODE,
+           HTML_DOCUMENT_NODE].each { |t| a[t] = true }
         end.freeze
 
         # choose the matcher for a COLLECT op (nil: use the generic collector)
@@ -71,21 +82,23 @@ module Nokogiri
           # xmlXPathNextDescendant / xmlXPathNextDescendantOrSelf
           class_eval <<~RUBY, __FILE__, __LINE__ + 1
             def self.descendant_#{m}(ctxnode, doc, name, uri, seq, include_self)
-              t = ctxnode.type
+              ctype = ctxnode.type
               if include_self
                 cur = ctxnode
+                t = ctype
                 seq << cur if #{cond}
               end
-              return if t == ATTRIBUTE_NODE || t == NAMESPACE_DECL
+              return if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
 
               cur = ctxnode.equal?(doc) ? doc.children : ctxnode.children
               while cur
+                t = cur.type
                 seq << cur if #{cond}
                 # advance (xmlXPathNextDescendant)
                 ch = cur.children
-                if ch && ch.type != ENTITY_DECL
+                if ch && (ct = ch.type) != ENTITY_DECL
                   cur = ch
-                  next if cur.type != DTD_NODE
+                  next if ct != DTD_NODE
                 end
                 break if cur.equal?(ctxnode)
 
@@ -117,14 +130,11 @@ module Nokogiri
 
             # xmlXPathNextChild
             def self.child_#{m}(ctxnode, doc, name, uri, seq, _unused)
-              case ctxnode.type
-              when ELEMENT_NODE, TEXT_NODE, CDATA_SECTION_NODE, ENTITY_REF_NODE, ENTITY_NODE, PI_NODE,
-                   COMMENT_NODE, NOTATION_NODE, DTD_NODE, DOCUMENT_NODE, DOCUMENT_TYPE_NODE,
-                   DOCUMENT_FRAG_NODE, HTML_DOCUMENT_NODE
+              if CHILD_CTX[ctxnode.type]
                 cur = ctxnode.children
                 while cur
-                  seq << cur if #{cond}
                   t = cur.type
+                  seq << cur if #{cond}
                   break if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE
 
                   cur = cur.next
@@ -134,12 +144,11 @@ module Nokogiri
 
             # xmlXPathNextChildElement
             def self.child_elem_#{m}(ctxnode, doc, name, uri, seq, _unused)
-              case ctxnode.type
-              when ELEMENT_NODE, DOCUMENT_FRAG_NODE, ENTITY_REF_NODE, ENTITY_NODE, DOCUMENT_NODE,
-                   HTML_DOCUMENT_NODE
+              if CHILD_ELEM_CTX[ctxnode.type]
                 cur = ctxnode.children
                 while cur
-                  seq << cur if cur.type == ELEMENT_NODE && (#{cond})
+                  t = cur.type
+                  seq << cur if t == ELEMENT_NODE && (#{cond})
                   cur = cur.next
                 end
               end
@@ -151,14 +160,48 @@ module Nokogiri
 
               cur = ctxnode.properties
               while cur
+                t = cur.type
                 seq << cur if #{cond}
                 cur = cur.next
+              end
+            end
+
+            # xmlXPathNextFollowingSibling
+            def self.following_sibling_#{m}(ctxnode, doc, name, uri, seq, _unused)
+              ctype = ctxnode.type
+              return if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
+
+              cur = ctxnode.next
+              while cur
+                t = cur.type
+                seq << cur if #{cond}
+                break if cur.equal?(doc)
+
+                cur = cur.next
+              end
+            end
+
+            # xmlXPathNextPrecedingSibling
+            def self.preceding_sibling_#{m}(ctxnode, doc, name, uri, seq, _unused)
+              ctype = ctxnode.type
+              return if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
+
+              cur = ctxnode.prev
+              while cur
+                t = cur.type
+                seq << cur if #{cond}
+                break if cur.equal?(doc)
+
+                pr = cur.prev
+                cur = pr if pr && pr.type == DTD_NODE
+                cur = cur.prev
               end
             end
 
             # xmlXPathNextSelf
             def self.self_#{m}(ctxnode, doc, name, uri, seq, _unused)
               cur = ctxnode
+              t = cur.type
               seq << cur if #{cond}
             end
           RUBY
@@ -170,6 +213,8 @@ module Nokogiri
           AXIS_CHILD => ["child", nil],
           AXIS_ATTRIBUTE => ["attribute", nil],
           AXIS_SELF => ["self", nil],
+          AXIS_FOLLOWING_SIBLING => ["following_sibling", nil],
+          AXIS_PRECEDING_SIBLING => ["preceding_sibling", nil],
         }.freeze
 
         # [method, extra_arg] for a COLLECT op, or nil
@@ -184,7 +229,7 @@ module Nokogiri
           if axis == AXIS_CHILD && (test == NODE_TEST_NAME || test == NODE_TEST_ALL) && type == NODE_TYPE_NODE
             meth = "child_elem"
           end
-          [method("#{meth}_#{m}"), kind[1]]
+          [:"#{meth}_#{m}", kind[1]]
         end
       end
     end

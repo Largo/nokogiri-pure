@@ -20,6 +20,7 @@ DOCS = {
   "d2" => <<~XML,
     <html><body><div class="a b  c" id="d1"><p class="x">P1</p><p>P2<span>S</span></p></div><div class="b"><p>P3</p><div><p class="x y">P4</p></div></div><ul><li>1</li><li>2</li><li>3</li><li>4</li></ul></body></html>
   XML
+  "d3" => "<r xmlns:p='urn:p' xmlns:q='urn:q'>" + (1..30).map { |i| "<e n='#{i}' m='#{i % 3}'>t#{i}<f xmlns:z='urn:z#{i}'>#{i}</f><!--c#{i}--></e>" }.join + "</r>",
 }
 
 EXPRS = [
@@ -80,5 +81,15 @@ EXPRS = [
   ["/", "//*:item"], ["/", "//*:*"], ["/", "//@*:attr"], ["/", "//@*:*"], ["/", "count(//*:x[1])"], ["/", "*:root/*:group/*:x[2]"], ["/", "//*:li[2]"], ["/", "//*: li"], ["/", "//* :li"], ["/", "*:"],
   ["/", "string(1)", { handler: true }], ["/", "nokogiri:string(1)", { handler: true }], ["/", "nokogiri:raiser()", { handler: true }], ["/", "raiser()", { handler: true }],
   ["/", "//*[local-name()='item'][nokogiri:thing(.)]", { handler: true }],
+  ["/", "//@* | //*"], ["/", "//text() | //comment() | //@*"], ["/", "//namespace::* | //*"], ["/", "//*[@n > 25]/namespace::* | //*[@n > 25]"],
+  ["/", "(//*)[position() mod 3 = 0] | (//*)[position() mod 2 = 0]"], ["/", "//*[@n=7]/preceding::*[2]"], ["/", "//*[@n=7]/preceding::node()"], ["/", "//f[. = 9]/ancestor::*[2]"],
+  ["/", "//f | //e[@m=1] | //@m | //comment()[contains(., '2')]"], ["/", "count(//namespace::*)"], ["/", "//e[f = 3]"], ["/", "//e[@m = 0][last()]"], ["/", "//e[position() = last() - 1]"],
+  ["/", "//e[@n mod 5 = 0]/following-sibling::e[1]"], ["/", "//e[@n > 27]/following::node()"], ["/", "//*[@n=3]/following::text()[1]"], ["/", "sum(//f)"], ["/", "sum(//@n) div count(//@n)"],
+  ["/", "//e[not(@m = preceding-sibling::e/@m)]"], ["/", "//e[@m = following-sibling::e[1]/@m + 1]"], ["/", "//e[string(f) = @n]"], ["/", "//e[f > 10][f < 15]"],
+  ["/", "//f/namespace::*[name() = 'z']"], ["/", "//f/namespace::z"], ["/", "count(//f/namespace::*[. = 'urn:p'])"], ["/", "//namespace::*[. = 'urn:z3']/.."],
+  ["/", "(//namespace::*)[3]"], ["/", "(//namespace::*)[last()]"], ["/", "//e[5]/namespace::*"], ["/", "//e[5]/f/namespace::* | //e[5]/namespace::*"],
+  ["/", "nokogiri:nodes(//e[3]/f/namespace::*) | //e[3]", { handler: true }], ["/", "nokogiri:arr(//e[@m=2]) | //e[@m=1]", { handler: true }],
+  ["/", "//e[3]/f/namespace::*[3]/self::node()"], ["/", "//e[3]/f/namespace::*/parent::*"], ["/", "//e[3]/f/namespace::*/following::*[1]"], ["/", "//e[3]/f/namespace::*/preceding::*[1]"],
+  ["/", "//e[3]/f/namespace::*/ancestor-or-self::node()"], ["/", "//e[3]/f/namespace::*/descendant-or-self::node()"], ["/", "//e[3]/f/namespace::*/child::node()"],
   ["//div/@class", "self::node()"], ["//div/@class", "child::node()"], ["//div/@class", "following-sibling::node()"], ["//div/@class", "../@id"], ["//div/@class", "name()"],
 ]

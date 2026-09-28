@@ -130,6 +130,10 @@ module Nokogiri
         end
       end
 
+      # callables registered as XPath functions that have no side effects and don't depend on
+      # the context position (see Compiler's descendant rewrite); glue code adds to it
+      PURE_FUNCS = {}.compare_by_identity
+
       # XPATH_UNDEFINED value
       UNDEFINED_VALUE = Object.new.freeze
 

@@ -651,6 +651,35 @@ module Nokogiri
       end
 
       FN = {}
+      STANDARD_FN_METHODS = {
+        "boolean" => :fn_boolean,
+        "ceiling" => :fn_ceiling,
+        "count" => :fn_count,
+        "concat" => :fn_concat,
+        "contains" => :fn_contains,
+        "id" => :fn_id,
+        "false" => :fn_false,
+        "floor" => :fn_floor,
+        "last" => :fn_last,
+        "lang" => :fn_lang,
+        "local-name" => :fn_local_name,
+        "not" => :fn_not,
+        "name" => :fn_name,
+        "namespace-uri" => :fn_namespace_uri,
+        "normalize-space" => :fn_normalize_space,
+        "number" => :fn_number,
+        "position" => :fn_position,
+        "round" => :fn_round,
+        "string" => :fn_string,
+        "string-length" => :fn_string_length,
+        "starts-with" => :fn_starts_with,
+        "substring" => :fn_substring,
+        "substring-before" => :fn_substring_before,
+        "substring-after" => :fn_substring_after,
+        "sum" => :fn_sum,
+        "true" => :fn_true,
+        "translate" => :fn_translate,
+      }.freeze
       {
         "boolean" => :fn_boolean,
         "ceiling" => :fn_ceiling,

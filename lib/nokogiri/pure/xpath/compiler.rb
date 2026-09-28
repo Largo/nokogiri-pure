@@ -76,7 +76,8 @@ module Nokogiri
       # xmlXPathStepOp. +c1+/+c2+ are the resolved children (steps[ch1], steps[ch2]).
       class Op
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
-          :index, :positional, :max_pos, :last_fn, :first_one, :plan
+          :index, :positional, :max_pos, :last_fn, :first_one, :plan,
+          :dos_op, :impure, :std_fn
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -113,6 +114,7 @@ module Nokogiri
             op.c2 = op.ch2 >= 0 ? @steps[op.ch2] : nil
           end
           @steps.each { |op| XPath.precompute_op(self, op) }
+          @steps.each { |op| XPath.precompute_dos_rewrite(op) if op.op == OP_COLLECT }
           @root = @last >= 0 ? @steps[@last] : nil
           self
         end
@@ -134,6 +136,9 @@ module Nokogiri
               op.max_pos = max
             end
           end
+        when OP_FUNCTION
+          # standard functions are looked up first in a static table (patch 0019): static binding
+          op.std_fn = STANDARD_FN_METHODS[op.value4] if op.value5.nil?
         when OP_PREDICATE, OP_FILTER
           c1 = op.c1
           c2 = op.c2
@@ -150,6 +155,81 @@ module Nokogiri
             end
           end
         end
+      end
+
+      # Static result types of the standard functions (used by the rewrite below)
+      FUNC_TYPES = {}.tap do |h|
+        %w[boolean not true false contains starts-with lang].each { |n| h[n] = :boolean }
+        %w[string concat substring substring-before substring-after normalize-space translate
+           local-name name namespace-uri].each { |n| h[n] = :string }
+        %w[count sum number floor ceiling round string-length last position].each { |n| h[n] = :number }
+        h["id"] = :nodeset
+      end.freeze
+
+      def self.static_type(op)
+        case op.op
+        when OP_EQUAL, OP_CMP, OP_AND, OP_OR then :boolean
+        when OP_PLUS, OP_MULT then :number
+        when OP_VALUE then op.value4.is_a?(Float) ? :number : :string
+        when OP_COLLECT, OP_ROOT, OP_NODE, OP_UNION then :nodeset
+        when OP_SORT then op.c1 ? static_type(op.c1) : :unknown
+        when OP_FILTER then op.c1 && static_type(op.c1) == :nodeset ? :nodeset : :unknown
+        when OP_FUNCTION
+          # prefixed functions qualify only if they turn out to be the nokogiri builtins, which
+          # return booleans (checked at evaluation time)
+          op.value5.nil? ? (FUNC_TYPES[op.value4] || :unknown) : :boolean
+        else :unknown
+        end
+      end
+
+      # Is +op+ free of context-position dependencies (at the top level, +top+) and of calls to
+      # functions with possible side effects? Prefixed function ops are collected in +impure+.
+      def self.position_free?(op, top, impure)
+        return true if op.nil?
+
+        case op.op
+        when OP_FUNCTION
+          if op.value5.nil?
+            return false unless STANDARD_FUNCS.key?(op.value4)
+            return false if top && (op.value4 == "last" || op.value4 == "position")
+          else
+            impure << op
+          end
+          position_free?(op.c1, top, impure)
+        when OP_COLLECT, OP_FILTER
+          position_free?(op.c1, top, impure) && position_free?(op.c2, false, impure)
+        else
+          position_free?(op.c1, top, impure) && position_free?(op.c2, top, impure)
+        end
+      end
+
+      # "descendant-or-self::node()/child::x[p]" with position-independent, non-numeric
+      # predicates selects the same nodes as "descendant::x[p]" (libxml2 only rewrites it when
+      # there is no predicate, because of positional predicates). The result order before the
+      # final sort differs, but every node-set result that is observed gets sorted.
+      def self.precompute_dos_rewrite(op)
+        return unless op.value == AXIS_CHILD && (dos = op.c1) && (pred = op.c2)
+        return unless dos.op == OP_COLLECT && dos.value == AXIS_DESCENDANT_OR_SELF && dos.c2.nil? &&
+          dos.value2 == NODE_TEST_TYPE && dos.value3 == NODE_TYPE_NODE && dos.c1
+
+        impure = []
+        p = pred
+        while p
+          return unless p.op == OP_PREDICATE && p.c2
+
+          type = static_type(p.c2)
+          return if type == :number || type == :unknown
+          return unless position_free?(p.c2, true, impure)
+
+          p = p.c1
+        end
+        d = Op.new(OP_COLLECT, dos.ch1, op.ch2, AXIS_DESCENDANT, op.value2, op.value3, op.value4, op.value5)
+        d.c1 = dos.c1
+        d.c2 = pred
+        d.index = op.index
+        d.plan = FastCollect.plan_for(AXIS_DESCENDANT, op.value2, op.value3, op.value4, op.value5)
+        op.dos_op = d
+        op.impure = impure.empty? ? nil : impure
       end
 
       # xmlXPathIsPositionalPredicate: returns maxPos or nil

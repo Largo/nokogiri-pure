@@ -27,9 +27,13 @@ queries = {
   "xpath (//li)[last()]" => -> { doc.xpath("(//li)[last()]").length },
   "at_css span" => -> { doc.at_css("span").name },
 }
-n = (ENV["N"] || 20).to_i
+n = (ENV["N"] || 10).to_i
+def cpu = Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
+total = 0.0
 queries.each do |name, q|
   r = q.call
-  t = Benchmark.realtime { n.times { q.call } }
-  printf("%-34s %8.2f ms/iter  (%s)\n", name, t * 1000 / n, r)
+  best = 5.times.map { t0 = cpu; n.times { q.call }; (cpu - t0) / n }.min
+  total += best
+  printf("%-34s %8.3f ms/iter  (%s)\n", name, best * 1000, r)
 end
+printf("%-34s %8.3f ms\n", "TOTAL", total * 1000)
