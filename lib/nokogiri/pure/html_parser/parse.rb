@@ -1173,17 +1173,48 @@ module Nokogiri
         # (without '&', NUL or newlines, ending before a blank or '>'), or by a char that neither
         # continues the name nor starts " = value" (then the value is NULL).
         ATTR_NAME_SRC = "([A-Za-z_:.][A-Za-z0-9:_.\\-]{0,99})"
-        ATTR_FAST_ASCII = Regexp.new(
-          "#{ATTR_NAME_SRC}(?:=(?:\"([^\\x00&\"\\n\\x80-\\xFF]*)\"|'([^\\x00&'\\n\\x80-\\xFF]*)'|" \
-          "([^\\x00&>\\t\\n\\r \"'\\x80-\\xFF][^\\x00&>\\t\\n\\r \\x80-\\xFF]*)(?=[\\t\\n\\r >]))|" \
-          "(?=[^A-Za-z0-9:_.\\-=\\t\\n\\r ]))".b, Regexp::NOENCODING
-        )
-        ATTR_FAST_UTF8 = Regexp.new(
-          "#{ATTR_NAME_SRC}(?:=(?:\"((?:[^\\x00&\"\\n\\x80-\\xFF]|#{UTF8_CHAR_SRC})*)\"|" \
-          "'((?:[^\\x00&'\\n\\x80-\\xFF]|#{UTF8_CHAR_SRC})*)'|" \
-          "((?:[^\\x00&>\\t\\n\\r \"'\\x80-\\xFF]|#{UTF8_CHAR_SRC})(?:[^\\x00&>\\t\\n\\r \\x80-\\xFF]|#{UTF8_CHAR_SRC})*)" \
-          "(?=[\\t\\n\\r >]))|(?=[^A-Za-z0-9:_.\\-=\\t\\n\\r ]))".b, Regexp::NOENCODING
-        )
+        # an entity or char reference htmlParseHTMLAttribute may decode without errors (checked
+        # again by expand_attr_refs)
+        ATTR_REF_SRC = "&(?:[A-Za-z_:][A-Za-z0-9_\\-:.]*+|#[0-9]{1,7}+|#[xX][0-9A-Fa-f]{1,6}+);"
+
+        def self.attr_fast_re(utf8)
+          mb = utf8 ? "|#{UTF8_CHAR_SRC}" : ""
+          v = ->(cls) { "(?:[#{cls}]#{mb}|#{ATTR_REF_SRC})" }
+          Regexp.new(
+            "#{ATTR_NAME_SRC}(?:=(?:\"(#{v["^\\x00&\"\\n\\x80-\\xFF"]}*+)\"|'(#{v["^\\x00&'\\n\\x80-\\xFF"]}*+)'|" \
+            "(#{v["^\\x00&>\\t\\n\\r \"'\\x80-\\xFF"]}#{v["^\\x00&>\\t\\n\\r \\x80-\\xFF"]}*+)(?=[\\t\\n\\r >]))|" \
+            "(?=[^A-Za-z0-9:_.\\-=\\t\\n\\r ]))".b, Regexp::NOENCODING
+          )
+        end
+        ATTR_FAST_ASCII = attr_fast_re(false)
+        ATTR_FAST_UTF8 = attr_fast_re(true)
+        ATTR_REF = Regexp.new(ATTR_REF_SRC.b, Regexp::NOENCODING)
+        AMP = "&".b.freeze
+
+        # the value of +raw+ (from ATTR_FAST_*) with its references decoded as
+        # htmlParseHTMLAttribute does, or nil if one of them is unknown or invalid
+        def expand_attr_refs(raw)
+          out = +"".b
+          pos = 0
+          while (i = raw.byteindex(AMP, pos))
+            out << raw.byteslice(pos, i - pos) if i > pos
+            m = ATTR_REF.match(raw, i)
+            ref = m[0]
+            if ref.getbyte(1) == 0x23
+              v = ref.getbyte(2) == 0x78 || ref.getbyte(2) == 0x58 ? ref[3..-2].to_i(16) : ref[2..-2].to_i
+              return nil unless ChValid.char?(v)
+            else
+              ent = ENTITY_BY_NAME[ref[1..-2]]
+              return nil unless ent && ent.value > 0
+
+              v = ent.value
+            end
+            HTMLParser.utf8_append(out, v)
+            pos = i + ref.bytesize
+          end
+          out << raw.byteslice(pos, raw.bytesize - pos) if pos < raw.bytesize
+          out
+        end
 
         TAG_NAME_FAST = /[A-Za-z_:.][A-Za-z0-9:_.\-]{0,99}/n
 
@@ -1243,12 +1274,17 @@ module Nokogiri
             # entities, line breaks or input grows
             ss = scanner
             ss.pos = @cur
-            if (len = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII)) &&
-                @buf.bytesize - @cur - len >= INPUT_CHUNK
+            raw = attvalue = nil
+            len = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII)
+            len = nil if len && @buf.bytesize - @cur - len < INPUT_CHUNK
+            if len
+              raw = ss[2] || ss[3] || ss[4]
+              attvalue = raw && raw.include?(AMP) ? expand_attr_refs(raw) : raw
+            end
+            if len && (attvalue || raw.nil?)
               attname = cached_name(ss[1])
-              attvalue = ss[2] || ss[3] || ss[4]
-              if attvalue && !attvalue.ascii_only?
-                @col += len - attvalue.count(CONT_BYTES)
+              if raw && !raw.ascii_only?
+                @col += len - raw.count(CONT_BYTES)
               else
                 @col += len
               end
