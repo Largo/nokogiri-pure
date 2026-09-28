@@ -185,3 +185,15 @@ CASES << {
   X
   instances_inline: [["x", "<r><a/><b/></r>"]],
 }
+
+CASES << {
+  id: "io/missing-import",
+  xsd_string: %(<xs:schema #{XS}><xs:import namespace="urn:a" schemaLocation="nope.xsd"/><xs:include schemaLocation="http://example.com/a.xsd"/></xs:schema>),
+  instances_inline: [],
+}
+
+CASES << {
+  id: "io/missing-include",
+  xsd_string: %(<xs:schema #{XS}><xs:include schemaLocation="nope.xsd"/></xs:schema>),
+  instances_inline: [],
+}

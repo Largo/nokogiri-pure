@@ -1,0 +1,11 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:redefine schemaLocation="base_redef.xsd">
+    <xs:complexType name="person"><xs:complexContent><xs:extension base="person"><xs:sequence><xs:element name="age" type="xs:int"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+    <xs:simpleType name="code"><xs:restriction base="code"><xs:length value="2"/></xs:restriction></xs:simpleType>
+    <xs:group name="g"><xs:sequence><xs:group ref="g"/><xs:element name="y"/></xs:sequence></xs:group>
+    <xs:attributeGroup name="ag"><xs:attributeGroup ref="ag"/><xs:attribute name="a2" use="required"/></xs:attributeGroup>
+  </xs:redefine>
+  <xs:element name="r"><xs:complexType><xs:sequence>
+    <xs:element name="p" type="person"/><xs:element name="c" type="code"/><xs:group ref="g"/>
+  </xs:sequence><xs:attributeGroup ref="ag"/></xs:complexType></xs:element>
+</xs:schema>

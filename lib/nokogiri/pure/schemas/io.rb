@@ -28,7 +28,7 @@ module Nokogiri
 
         path = location_to_path(location)
         if path.nil?
-          io_error(location, network: location.match?(%r{\A[a-z][a-z0-9+.-]*://}i) && nonet?)
+          io_error(location, network: true)
           return nil
         end
         content = begin
@@ -61,16 +61,21 @@ module Nokogiri
         end
       end
 
-      # emulate the IO error libxml2 raises for an unloadable resource (xmlLoadResource)
+      # emulate the IO errors libxml2 2.13 raises for an unloadable resource (xmlLoadResource,
+      # xmlNoNetExternalEntityLoader)
       def self.io_error(location, network: false)
-        if network
-          err = XmlError.new(domain: Domain::IO, code: ErrCode::IO_NETWORK_ATTEMPT, level: Level::ERROR,
-            message: "Attempt to load network entity #{location}\n", str1: location)
+        if network && nonet?
+          Errors.report(XmlError.new(domain: Domain::IO, code: ErrCode::IO_NETWORK_ATTEMPT, level: Level::WARNING,
+            message: "failed to load \"#{location}\": Attempt to load network entity\n", str1: location))
+          Errors.report(XmlError.new(domain: Domain::IO, code: ErrCode::IO_NETWORK_ATTEMPT, level: Level::ERROR,
+            message: "Attempt to load network entity: #{location}\n", str1: location))
+        elsif network
+          Errors.report(XmlError.new(domain: Domain::IO, code: ErrCode::IO_LOAD_ERROR, level: Level::FATAL,
+            message: "failed to load \"<null>\": loading error\n", str1: "<null>"))
         else
-          err = XmlError.new(domain: Domain::IO, code: ErrCode::IO_LOAD_ERROR, level: Level::WARNING,
-            message: "failed to load \"#{location}\": No such file or directory\n", str1: location)
+          Errors.report(XmlError.new(domain: Domain::IO, code: ErrCode::IO_ENOENT, level: Level::WARNING,
+            message: "failed to load \"#{location}\": No such file or directory\n", str1: location))
         end
-        Errors.report(err)
       end
     end
   end
