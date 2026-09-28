@@ -9,8 +9,8 @@ module Nokogiri
       # xmlSAX2EndElementNs) in one method, with the same effects in the same order. They return
       # false, having changed nothing, whenever the general path is needed.
       class Ctxt
-        # an unprefixed ASCII name directly followed by ">" or "/>"
-        SIMPLE_TAG_NAME_RE = /[A-Za-z_][-A-Za-z0-9_.]*(?=\/?>)/
+        # an unprefixed ASCII name directly followed by ">", "/>" or a space
+        SIMPLE_TAG_NAME_RE = /[A-Za-z_][-A-Za-z0-9_.]*(?=\/?>| )/
 
         # the content loop may use the fused paths (default tree-building handler)
         def lean_handler?
@@ -34,6 +34,16 @@ module Nokogiri
           return false if n.nil? || n > XML_MAX_NAME_LENGTH
 
           b = @buf
+          e = cur + 1 + n
+          dcol = n + 1
+          atts = nil
+          if b.getbyte(e) == 0x20
+            # attributes: single-space separated, unprefixed, not xmlns, plain values, distinct names
+            return false if @atts_special
+
+            atts, e, dcol = lean_attributes(e, dcol)
+            return false if atts.nil?
+          end
           # xmlParseElementStart: spacePush
           snr = @space_nr
           if snr == 0
@@ -54,10 +64,9 @@ module Nokogiri
             uri = @ns_tab[idx][1]
             uri = nil if uri.empty?
           end
-          e = cur + 1 + n
           @cur = e
-          @col += n + 1
-          # xmlSAX2StartElementNs (no namespaces, no attributes, not validating)
+          @col += dcol
+          # xmlSAX2StartElementNs (no namespaces, not validating)
           ret = XmlNode.new(ELEMENT_NODE, name, @my_doc)
           @nodemem = -1
           sax2_append_child(ret)
@@ -71,6 +80,22 @@ module Nokogiri
               Tree.new_ns(ret, nil, nil)
               ctxt_err(nil, Domain::NAMESPACE, ErrCode::NS_ERR_UNDEFINED_NAMESPACE, Level::WARNING, nil, nil,
                 nil, 0, "Namespace default prefix was not found\n")
+            end
+          end
+          if atts
+            # the attributes, as xmlSAX2AttributeNs(name, NULL, value, not allocated) makes them
+            prev = nil
+            j = 0
+            while j < atts.length
+              attr = sax2_attribute_ns(-atts[j], nil, atts[j + 1], false)
+              if prev.nil?
+                ret.properties = attr
+              else
+                prev.next = attr
+                attr.prev = prev
+              end
+              prev = attr
+              j += 2
             end
           end
           # nameNsPush
@@ -101,6 +126,44 @@ module Nokogiri
             @space_tab[snr - 1] = -1
           end
           true
+        end
+
+        # the attributes after the element name at +e+ (a space): [[name, value, ...], end, dcol], or
+        # nil if the general path is needed
+        def lean_attributes(e, dcol)
+          ss = @ss
+          b = @buf
+          atts = []
+          while true
+            c1 = b.getbyte(e + 1)
+            return nil if c1 == 0x20 || c1 == 0x0A || c1 == 0x09 || c1 == 0x0D
+
+            ss.pos = e + 1
+            n = ss.skip(ATTR_FAST_RE)
+            return nil if n.nil? || ss[2]
+
+            name = ss[1]
+            return nil if name == "xmlns" || name.bytesize > XML_MAX_NAME_LENGTH
+
+            value = ss[3] || ss[4]
+            atts << name << value
+            dcol += 1 + (value.ascii_only? ? n : n - value.bytesize + value.length)
+            e += 1 + n
+            c = b.getbyte(e)
+            break if c == 0x3E || (c == 0x2F && b.getbyte(e + 1) == 0x3E)
+            return nil if c != 0x20
+          end
+          # duplicates are reported by the general path
+          if atts.length > 2
+            names = []
+            k = 0
+            while k < atts.length
+              names << atts[k]
+              k += 2
+            end
+            return nil if names.uniq!
+          end
+          [atts, e, dcol]
         end
 
         # "</qname>" closing the current element
