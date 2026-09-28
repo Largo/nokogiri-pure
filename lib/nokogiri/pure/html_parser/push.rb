@@ -266,9 +266,8 @@ module Nokogiri
                   throw :done unless terminate
                   nx = 0x20
                 else
-                  nx = nxt(1)
+                  nx = @buf.getbyte(@cur + 1) || 0
                 end
-                cur = cur_byte
                 if cur != 0x3C
                   @instate = PARSER_CONTENT
                   next
@@ -290,7 +289,8 @@ module Nokogiri
                 info = HTMLParser.tag_lookup(name)
                 html_err(Err::HTML_UNKNOWN_TAG, "Tag #{name} invalid\n", name) if info.nil?
 
-                if cur_byte == 0x2F && nxt(1) == 0x3E
+                c = @buf.getbyte(@cur) || 0
+                if c == 0x2F && nxt(1) == 0x3E
                   skip(2)
                   sax_end_element(name)
                   name_pop
@@ -298,8 +298,14 @@ module Nokogiri
                   next
                 end
 
-                if cur_byte == 0x3E
-                  next_char
+                if c == 0x3E
+                  if (@input_flags & INPUT_PROGRESSIVE) != 0
+                    # NEXT (xmlParserGrow does nothing for push input)
+                    @cur += 1
+                    @col += 1
+                  else
+                    next_char
+                  end
                 else
                   html_err(Err::GT_REQUIRED, "Couldn't find end of Start Tag #{name}\n", name)
                   if name == @name
@@ -336,8 +342,7 @@ module Nokogiri
                   end
                 end
                 throw :done if avail < 2
-                cur = cur_byte
-                nx = nxt(1)
+                nx = @buf.getbyte(@cur + 1) || 0
                 if @name == "script" || @name == "style"
                   unless terminate
                     idx = lookup_sequence(0x3C, 0x2F, 0, false)
@@ -387,13 +392,13 @@ module Nokogiri
                 else
                   throw :done if !terminate && lookup_sequence(0x3C, 0, 0, false) < 0
                   @check_index = 0
-                  while !stopped? && cur != 0x3C && @cur < @buf.bytesize
+                  while @disable_sax <= 1 && cur != 0x3C && @cur < @buf.bytesize
                     if cur == 0x26
                       parse_reference
                     else
-                      parse_char_data
+                      parse_char_data_internal(0)
                     end
-                    cur = cur_byte
+                    cur = @buf.getbyte(@cur) || 0
                   end
                 end
               when PARSER_END_TAG
