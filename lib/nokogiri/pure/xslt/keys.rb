@@ -466,7 +466,7 @@ module Nokogiri
           return -1
         end
         base = Tree.node_get_base(style.doc, cur)
-        uri = Util.build_uri(uri_ref, base)
+        uri = URI_.build_uri(uri_ref, base)
         if uri.nil?
           transform_error(nil, style, cur, "xsl:import : invalid URI reference #{uri_ref}\n")
           return -1
@@ -504,7 +504,7 @@ module Nokogiri
           return -1
         end
         base = Tree.node_get_base(style.doc, cur)
-        uri = Util.build_uri(uri_ref, base)
+        uri = URI_.build_uri(uri_ref, base)
         if uri.nil?
           transform_error(nil, style, cur, "xsl:include : invalid URI reference #{uri_ref}\n")
           return -1

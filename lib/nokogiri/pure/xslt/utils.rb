@@ -213,21 +213,39 @@ module Nokogiri
         [ns.href, qname[idx + 1..]]
       end
 
-      # xmlValidateQName(value, 0) == 0
-      def valid_qname?(value)
-        Util.respond_to?(:validate_qname) ? Util.validate_qname(value) : QNAME_RE.match?(value)
+      def ncname_scan(cps, i)
+        c = cps[i]
+        return nil if c.nil? || !(XPath::Chars.letter?(c) || c == 0x5F)
+
+        i += 1
+        while (c = cps[i]) && (XPath::Chars.letter?(c) || XPath::Chars.digit?(c) || c == 0x2E || c == 0x2D ||
+              c == 0x5F || XPath::Chars.combining?(c) || XPath::Chars.extender?(c))
+          i += 1
+        end
+        i
       end
 
-      NCNAME_START = "A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF" \
-                     "\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD" \
-                     "\\u{10000}-\\u{EFFFF}"
-      NCNAME_CHAR = "#{NCNAME_START}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040"
-      NCNAME_RE = /\A[#{NCNAME_START}][#{NCNAME_CHAR}]*\z/
-      QNAME_RE = /\A[#{NCNAME_START}][#{NCNAME_CHAR}]*(?::[#{NCNAME_START}][#{NCNAME_CHAR}]*)?\z/
+      # xmlValidateQName(value, 0) == 0
+      def valid_qname?(value)
+        return false if value.nil?
+
+        cps = value.codepoints
+        i = ncname_scan(cps, 0)
+        return false if i.nil?
+
+        if cps[i] == 0x3A
+          i = ncname_scan(cps, i + 1)
+          return false if i.nil?
+        end
+        i == cps.length
+      end
 
       # xmlValidateNCName(value, 0) == 0
       def valid_ncname?(value)
-        NCNAME_RE.match?(value)
+        return false if value.nil?
+
+        cps = value.codepoints
+        ncname_scan(cps, 0) == cps.length
       end
 
       # xmlSplitQName2: returns [localname, prefix] or nil when not prefixed
@@ -602,12 +620,12 @@ module Nokogiri
             begin
               while child
                 node_dump_output(buf, result, child, 0, indent == 1, encoding)
-                if indent != -1 && indent != 0 && (child.type == DTD_NODE || (child.type == COMMENT_NODE && child.next))
+                if indent != 0 && (child.type == DTD_NODE || (child.type == COMMENT_NODE && child.next))
                   buf.write("\n")
                 end
                 child = child.next
               end
-              buf.write("\n") if indent != -1 && indent != 0
+              buf.write("\n") if indent != 0
             ensure
               result.children = children
             end

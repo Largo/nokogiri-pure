@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Runs XSLT cases (JSON on stdin: [{"name", "xsl", "xml", "params", "xsl_url", "xml_url"}]) and prints
+# Runs XSLT cases (Marshal on stdin: [{"name", "xsl", "xml", "params", "xsl_url", "xml_url"}]) and prints
 # JSON results. Usage:
 #   ruby test-pure/xslt/runner.rb native < cases.json     (installed nokogiri gem)
 #   ruby test-pure/xslt/runner.rb pure   < cases.json     (nokogiri-pure)
@@ -21,7 +21,7 @@ def parse_xml(str, url, xslt)
   if mode_pure_scratch?
     XSLTScratch.xml(str)
   else
-    opts = xslt ? Nokogiri::XML::ParseOptions::DEFAULT_XSLT : Nokogiri::XML::ParseOptions::DEFAULT_XML
+    opts = Nokogiri::XML::ParseOptions::DEFAULT_XSLT
     Nokogiri::XML::Document.parse(str, url, nil, opts)
   end
 end
@@ -30,7 +30,8 @@ def mode_pure_scratch?
   defined?(XSLTScratch) && !defined?(Nokogiri::Pure::Parser)
 end
 
-cases = JSON.parse($stdin.read)
+$stdin.binmode
+cases = Marshal.load($stdin.read)
 results = {}
 old_stderr = $stderr.dup
 cases.each do |c|
@@ -52,4 +53,5 @@ cases.each do |c|
   end
   results[c["name"]] = res
 end
-puts JSON.generate(results)
+$stdout.binmode
+$stdout.write(Marshal.dump(results))
