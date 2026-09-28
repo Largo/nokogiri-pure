@@ -2325,8 +2325,6 @@ module Nokogiri
         FAST_TAG_NAME = Regexp.new(FT_TNAME.b, Regexp::NOENCODING)
         FAST_TAG_END = Regexp.new("#{FT_WS}*+>".b, Regexp::NOENCODING)
         FAST_TAG_SELF_CLOSING_END = Regexp.new("#{FT_WS}*+/>".b, Regexp::NOENCODING)
-        # printable ASCII only (one column per byte)
-        PLAIN_ASCII = /[\x20-\x7E]*+/n
 
         # Tokenizes such a tag starting at the current '<' (in the data state) in one go, leaving
         # the tokenizer exactly as the character-by-character state machine would. Returns false
@@ -2377,8 +2375,8 @@ module Nokogiri
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
           iter_mark
-          ss.pos = start
-          if ss.skip(PLAIN_ASCII) >= len
+          text = @input.byteslice(start, len)
+          if text.ascii_only? && !text.include?("\n") && !text.include?("\t")
             # one column per byte: move straight to the reset point, then onto the '>'
             @column += reset_rel
             @offset += reset_rel
@@ -2391,9 +2389,9 @@ module Nokogiri
             @current = 0x3e
             @width = 1
           else
-            advance_over(@input.byteslice(start, reset_rel))
+            advance_over(text.byteslice(0, reset_rel))
             reset_tag_buffer_start_point
-            advance_over(@input.byteslice(start + reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
+            advance_over(text.byteslice(reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
           end
           @tag = tag = Util.tagn_enum(name)
           @drop_next_attr_value = false

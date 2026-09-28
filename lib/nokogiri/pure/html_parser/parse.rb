@@ -252,6 +252,32 @@ module Nokogiri
           ss.scan(re)
         end
 
+        # Length of the run of +re+ (a repetition of whole chars) at @cur. A run that the caller
+        # only partly consumed is remembered, so that a long run is scanned once, not once per
+        # consumed piece: any suffix of a run starting at a char boundary is itself a run.
+        def text_run_length(re)
+          if @run_end && @run_end > @cur && @run_buf.equal?(@buf) && @run_re.equal?(re)
+            return @run_end - @cur
+          end
+
+          ss = scanner
+          ss.pos = @cur
+          n = ss.skip(re)
+          if n
+            @run_end = @cur + n
+            @run_buf = @buf
+            @run_re = re
+          end
+          n
+        end
+
+        # a copy of +n+ bytes at @cur
+        def bytes_at_cur(n)
+          ss = scanner
+          ss.pos = @cur
+          ss.peek(n)
+        end
+
         # a StringScanner over @buf (strings it returns are copies, never shared with @buf)
         def scanner
           ss = @scanner
@@ -731,14 +757,20 @@ module Nokogiri
                 break
               end
             end
-            if cur < 0x80 && cur != 0x3C && l == 1 && cur == @buf.getbyte(@cur) &&
-                (cur >= 0x20 || cur == 0x9 || cur == 0xA || cur == 0xD) &&
-                (run = scan_at(@cur, /[^<\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n))
-              # fast path: copy a run of plain ASCII
+            if (l >= 2 || (cur < 0x80 && cur == @buf.getbyte(@cur))) &&
+                (n = text_run_length((@input_flags & INPUT_HAS_ENCODING) != 0 ? SCRIPT_RUN_UTF8 : SCRIPT_RUN_ASCII))
+              # fast path: copy a run of chars copied without errors (see parse_char_data_internal)
               lim = HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize
-              lim = [lim, @buf.bytesize - INPUT_CHUNK - @cur].min if growable?
+              if growable?
+                g = @buf.bytesize - INPUT_CHUNK - @cur
+                lim = g if g < lim
+              end
               lim = 1 if lim < 1
-              run = run.byteslice(0, lim) if run.bytesize > lim
+              if n > lim
+                lim += 1 while ((@buf.getbyte(@cur + lim) || 0) & 0xC0) == 0x80
+                n = lim
+              end
+              run = bytes_at_cur(n)
               buf << run
               advance_run(run)
             else
@@ -792,6 +824,11 @@ module Nokogiri
           "(?:[\\x09\\x0A\\x0D\\x20-\\x25\\x27-\\x3B\\x3D-\\x7F]+|#{UTF8_CHAR_SRC})+".b, Regexp::NOENCODING
         )
         BLANK_RUN = /\A[ \t\n\r]*\z/n
+        # the same for htmlParseScript (which stops at '<' only)
+        SCRIPT_RUN_ASCII = /[^<\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]+/n
+        SCRIPT_RUN_UTF8 = Regexp.new(
+          "(?:[\\x09\\x0A\\x0D\\x20-\\x3B\\x3D-\\x7F]+|#{UTF8_CHAR_SRC})+".b, Regexp::NOENCODING
+        )
 
         def deliver_chars(buf)
           return unless @disable_sax == 0
@@ -821,18 +858,19 @@ module Nokogiri
             # errors, up to the next flush point and before any char whose CUR_CHAR could grow
             # the input
             if (l >= 2 || (cur < 0x80 && cur == @buf.getbyte(@cur))) &&
-                (run = scan_at(@cur, (@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII))
+                (n = text_run_length((@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII))
               lim = HTML_PARSER_BIG_BUFFER_SIZE - buf.bytesize
               if growable?
                 g = @buf.bytesize - INPUT_CHUNK - @cur
                 lim = g if g < lim
               end
               lim = 1 if lim < 1
-              if run.bytesize > lim
+              if n > lim
                 # the char straddling the limit is still copied before the flush
-                lim += 1 while ((run.getbyte(lim) || 0) & 0xC0) == 0x80
-                run = run.byteslice(0, lim)
+                lim += 1 while ((@buf.getbyte(@cur + lim) || 0) & 0xC0) == 0x80
+                n = lim
               end
+              run = bytes_at_cur(n)
               buf << run
               advance_run(run)
             else
@@ -1014,8 +1052,8 @@ module Nokogiri
         COMMENT_END = "-->".b.freeze
         COMMENT_BANG_END = "--!>".b.freeze
         # comment content the loop in htmlParseComment copies char by char without any error
-        COMMENT_TEXT_ASCII = /[\t\n\r\x20-\x7F]*+/n
-        COMMENT_TEXT_UTF8 = Regexp.new("(?:[\\t\\n\\r\\x20-\\x7F]++|#{UTF8_CHAR_SRC})*+".b, Regexp::NOENCODING)
+        COMMENT_TEXT_ASCII = /\A[\t\n\r\x20-\x7F]*+\z/n
+        COMMENT_TEXT_UTF8 = Regexp.new("\\A(?:[\\t\\n\\r\\x20-\\x7F]++|#{UTF8_CHAR_SRC})*+\\z".b, Regexp::NOENCODING)
 
         # htmlParseComment after "<!--" for a comment that is terminated by "-->" well inside the
         # buffer (so that no CUR_CHAR/NEXT can grow the input) and contains only chars that are
@@ -1029,16 +1067,11 @@ module Nokogiri
           e = buf.byteindex(COMMENT_END, start)
           return false if e.nil? || buf.bytesize - (e + 2) < INPUT_CHUNK
 
-          bang = buf.byteindex(COMMENT_BANG_END, start)
-          return false if bang && bang < e
+          content = bytes_at_cur(e - start) # (a copy: a substring would share @buf's memory)
+          # a "--!>" starting before "-->" lies entirely inside the content
+          return false if content.include?(COMMENT_BANG_END)
+          return false unless content.match?((@input_flags & INPUT_HAS_ENCODING) != 0 ? COMMENT_TEXT_UTF8 : COMMENT_TEXT_ASCII)
 
-          ss = scanner
-          ss.pos = start
-          len = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? COMMENT_TEXT_UTF8 : COMMENT_TEXT_ASCII)
-          return false if len < e - start
-
-          ss.pos = start
-          content = ss.peek(e - start) # (a copy: a substring would share @buf's memory)
           advance_run(content) # NEXTL over the content ...
           @cur += 3 # ... and over "--", NEXT over '>'
           @col += 3
