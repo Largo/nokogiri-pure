@@ -82,12 +82,14 @@ module Nokogiri
         0
       end
 
-      # Errors raised with neither a structured nor a generic handler go to the global
-      # structured handler when one is set, else xmlGenericError prints them on stderr.
+      # Errors raised through a context without handlers go to the global structured handler
+      # when one is set, else to xmlGenericError which prints them on stderr. The exception are
+      # errors raised with no channel at all (xmlregexp.c's), which are then silently dropped.
       def with_generic_errors(&block)
         return yield if Errors.handler
 
-        Errors.with_handler(->(err) { $stderr.write(format_error(err)) }, &block)
+        printer = ->(err) { $stderr.write(format_error(err)) unless err.domain == Domain::REGEXP }
+        Errors.with_handler(printer, &block)
       end
 
       # xmlRelaxNGSchemaFreeValue

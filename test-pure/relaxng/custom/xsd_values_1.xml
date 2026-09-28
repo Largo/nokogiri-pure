@@ -1,0 +1,24 @@
+<r xmlns:t="urn:s">
+<dec>1</dec><dec>1.00</dec><dec>+01.0</dec><dec>1.1</dec>
+<qn>t:foo</qn><qn>s:foo</qn><qn xmlns:s="urn:other">s:foo</qn><qn>foo</qn>
+<dt>2020-01-01T01:00:00+01:00</dt><dt>2020-01-01T00:00:00</dt><dt>2019-12-31T24:00:00Z</dt>
+<dur>P30D</dur><dur>P1M</dur><dur>P0Y1M</dur>
+<flt>NaN</flt><flt>nan</flt>
+<dbl>1</dbl><dbl>1.0E0</dbl><dbl>2</dbl>
+<bool>1</bool><bool>false</bool>
+<hex>0a</hex><hex>0B</hex>
+<b64>QQ==</b64><b64> Q Q = = </b64>
+<tok>a b</tok><tok>a  b</tok>
+<nstr>a b</nstr><nstr>a	b</nstr>
+<lng>en-US</lng>
+<uri>http://x/%20y</uri><uri>http://x/ y</uri>
+<int>7</int><int> 7 </int>
+<ulong>18446744073709551615</ulong><ulong>18446744073709551616</ulong>
+<gy>2020</gy><gy>2020Z</gy>
+<idrefs>a b</idrefs><ent>foo</ent><nota>x</nota><id>a</id><id>a</id>
+<nm>abc</nm><nm>ab</nm><nm>ABC</nm>
+<uint>5</uint><uint>6</uint><uint>11</uint>
+<bad>x</bad><badpat>x</badpat><unk>x</unk>
+<lenlist>a b</lenlist><lenlist>a</lenlist>
+<datemin>2021-01-01</datemin><datemin>2019-01-01</datemin>
+</r>

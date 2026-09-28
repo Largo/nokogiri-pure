@@ -1,0 +1,34 @@
+<element name="r" xmlns="http://relaxng.org/ns/structure/1.0" xmlns:s="urn:s"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <zeroOrMore>
+    <choice>
+      <element name="dec"><value type="decimal">1.0</value></element>
+      <element name="qn"><value type="QName">s:foo</value></element>
+      <element name="dt"><value type="dateTime">2020-01-01T00:00:00Z</value></element>
+      <element name="dur"><value type="duration">P1M</value></element>
+      <element name="flt"><value type="float">NaN</value></element>
+      <element name="dbl"><value type="double">1e0</value></element>
+      <element name="bool"><value type="boolean">true</value></element>
+      <element name="hex"><value type="hexBinary">0A</value></element>
+      <element name="b64"><value type="base64Binary">QQ==</value></element>
+      <element name="tok"><value type="token"> a  b </value></element>
+      <element name="nstr"><value type="normalizedString">a	b</value></element>
+      <element name="lng"><value type="language">EN-us</value></element>
+      <element name="uri"><value type="anyURI">http://x/ y</value></element>
+      <element name="int"><value type="int">007</value></element>
+      <element name="ulong"><value type="unsignedLong">18446744073709551615</value></element>
+      <element name="gy"><value type="gYear">2020</value></element>
+      <element name="idrefs"><data type="IDREFS"/></element>
+      <element name="ent"><data type="ENTITY"/></element>
+      <element name="nota"><data type="NOTATION"/></element>
+      <element name="id"><data type="ID"/></element>
+      <element name="nm"><data type="Name"><param name="minLength">3</param><param name="pattern">[a-z:]+</param></data></element>
+      <element name="uint"><data type="unsignedInt"><param name="maxInclusive">10</param><param name="enumeration">5</param></data></element>
+      <element name="bad"><data type="string"><param name="minLength">abc</param></data></element>
+      <element name="badpat"><data type="string"><param name="pattern">[a-</param></data></element>
+      <element name="unk"><data type="string"><param name="bogus">1</param></data></element>
+      <element name="lenlist"><data type="NMTOKENS"><param name="length">2</param></data></element>
+      <element name="datemin"><data type="date"><param name="minInclusive">2020-01-01</param></data></element>
+    </choice>
+  </zeroOrMore>
+</element>
