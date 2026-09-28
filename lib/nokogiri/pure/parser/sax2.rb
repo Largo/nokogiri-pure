@@ -715,6 +715,9 @@ module Nokogiri
       # The hot SAX2.c tree-building callbacks as parser-context methods (direct ivar access); the
       # SAX2 module functions above delegate here.
       class Ctxt
+        # a '&' that does not start "&#38;", or a NUL
+        NOT_AMP38_RE = /&(?!#38;)|\0/
+
         # xmlSAX2AppendChild
         def sax2_append_child(node)
           parent = if @in_subset == 1
@@ -757,7 +760,16 @@ module Nokogiri
               ret.children = ret.last = tmp
               tmp.parent = ret
             elsif !value.empty?
-              Tree.node_parse_content(ret, value)
+              if value.match?(NOT_AMP38_RE)
+                Tree.node_parse_content(ret, value)
+              else
+                # only "&#38;" references (how the parser keeps '&' in values) and no NUL: what
+                # xmlNodeParseContent makes of it is one text node with those turned into '&'
+                tmp = XmlNode.new(TEXT_NODE, STRING_TEXT, ret.doc)
+                tmp.content = value.include?("&") ? value.gsub("&#38;", "&") : value.dup
+                ret.children = ret.last = tmp
+                tmp.parent = ret
+              end
             end
           elsif value
             tmp = XmlNode.new(TEXT_NODE, STRING_TEXT, ret.doc)
