@@ -10,6 +10,7 @@
 #   HTMLParser::Context                                   htmlParserCtxt (SAX handler pluggable)
 #   HTMLParser.tag_lookup / entity_lookup / ...           see html_parser/tables.rb
 
+require "strscan"
 require_relative "tree"
 require_relative "errors"
 require_relative "encoding"
