@@ -98,7 +98,28 @@ module Nokogiri
         with_handler(->(err) { list << Pure.wrap_error(err) }, &block)
       end
 
+      # xmlVUpdateError: derive file/line from the error's node (walking up to an element)
+      def fill_location(err)
+        node = err.node
+        return err if node.nil? || !node.respond_to?(:parent)
+
+        10.times do
+          break if node.type == ELEMENT_NODE || node.parent.nil?
+
+          node = node.parent
+        end
+        err.node = node
+        err.file ||= node.doc.url if node.doc.respond_to?(:url)
+        if err.line.nil? || err.line == 0
+          line = node.type == ELEMENT_NODE ? node.line : 0
+          line = Tree.get_line_no(node) if line == 0 || line == 65535
+          err.line = line
+        end
+        err
+      end
+
       def report(err)
+        fill_location(err)
         h = handler
         h&.call(err)
         err
