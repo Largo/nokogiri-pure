@@ -250,7 +250,8 @@ module Nokogiri
       end
 
       class Context
-        attr_accessor :sax, :user_data, :my_doc, :node, :node_tab, :name, :name_tab, :html, :depth,
+        attr_reader :sax
+        attr_accessor :user_data, :my_doc, :node, :node_tab, :name, :name_tab, :html, :depth,
           :options, :recovery, :keep_blanks, :disable_sax, :well_formed, :err_no, :instate,
           :encoding, :linenumbers, :record_info, :pedantic, :replace_entities, :validate,
           :dict_names, :loadsubset, :nb_errors, :nb_warnings, :error_handler, :valid,
