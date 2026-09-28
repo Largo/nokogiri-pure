@@ -858,6 +858,7 @@ module Nokogiri
           old_space_nr = space_nr
           old_node_nr = node_nr
           grow
+          lean = lean_handler?
           while @cur < @end && @disable_sax <= 1
             b = @buf
             c = b.getbyte(@cur)
@@ -866,7 +867,10 @@ module Nokogiri
               if c1 == 0x2F
                 break if @name_tab.length <= old_name_nr
 
-                parse_element_end
+                parse_element_end unless lean && lean_end_tag
+              elsif lean && c1 && ((c1 >= 0x61 && c1 <= 0x7A) || (c1 >= 0x41 && c1 <= 0x5A) || c1 == 0x5F) &&
+                  lean_start_tag
+                # (done)
               elsif c1 == 0x3F
                 parse_pi
               elsif c1 == 0x21 && cmp?("<![CDATA[")
