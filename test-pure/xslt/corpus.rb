@@ -33,6 +33,24 @@ Dir[File.join(REF, "XSLTMark", "*.xsl")].sort.each do |xsl|
 
   cases << { "name" => "XSLTMark/#{base}", "xsl" => read(xsl), "xml" => read(xml), "xsl_url" => xsl, "xml_url" => xml }
 end
+# big real-world stylesheets (opt-in: pass a filter matching "big/")
+if ARGV[0]&.include?("big")
+  %w[html fo xhtml].each do |kind|
+    %w[gdp-handbook article book table sectest qa callout].each do |t|
+      xsl = File.join(REF, "docbook", kind, "docbook.xsl")
+      xml = File.join(REF, "docbook", "test", "#{t}.xml")
+      next unless File.exist?(xml)
+
+      cases << { "name" => "big/docbook-#{kind}-#{t}", "xsl" => read(xsl), "xml" => read(xml),
+                 "xsl_url" => xsl, "xml_url" => xml, "timeout" => 600 }
+    end
+  end
+  xsl = File.join(REF, "xmlspec", "xmlspec.xsl")
+  xml = File.join(REF, "xmlspec", "REC-xml-20001006.xml")
+  cases << { "name" => "big/xmlspec", "xsl" => read(xsl), "xml" => read(xml), "xsl_url" => xsl, "xml_url" => xml, "timeout" => 600 }
+  xsl = File.join(REF, "xmlspec", "REC-xml-2e.xsl")
+  cases << { "name" => "big/xmlspec-2e", "xsl" => read(xsl), "xml" => read(xml), "xsl_url" => xsl, "xml_url" => xml, "timeout" => 600 }
+end
 # nokogiri's own fixtures
 {
   "staff.xslt" => "staff.xml", "exslt.xslt" => "exslt.xml", "xslt_included.xsl" => "staff.xml",

@@ -401,12 +401,38 @@ module XSLTInlineCases
     X
   ].freeze
 
+  HTML_INPUT = <<~H
+    <!DOCTYPE html>
+    <html><head><title>T</title><meta charset="utf-8"></head>
+    <body><div id="main" class="a b"><p>One <b>bold</b> &amp; <i>it</i></p><p>Two&nbsp;&eacute;</p>
+    <ul><li>x</li><li>y</li></ul><img src="a.png"><br>tail</div><!-- c --><script>if (a < b) {}</script></body></html>
+  H
+
+  HTML_CASES = [
+    ["html-identity", <<~X],
+      <xsl:template match="@*|node()"><xsl:copy><xsl:apply-templates select="@*|node()"/></xsl:copy></xsl:template>
+    X
+    ["html-extract", <<~X],
+      <xsl:output method="xml" indent="yes"/>
+      <xsl:template match="/"><r><xsl:for-each select="//p"><para n="{position()}"><xsl:value-of select="normalize-space(.)"/></para></xsl:for-each><xsl:copy-of select="//ul"/><title><xsl:value-of select="/html/head/title"/></title></r></xsl:template>
+    X
+    ["html-to-html", <<~X],
+      <xsl:output method="html"/>
+      <xsl:template match="/"><html><body><xsl:apply-templates select="//li"/><xsl:copy-of select="//img"/></body></html></xsl:template>
+      <xsl:template match="li"><p class="{.}"><xsl:value-of select="."/></p></xsl:template>
+    X
+  ].freeze
+
   module_function
 
   def cases
-    CASES.map do |name, xsl, xml, params|
+    out = CASES.map do |name, xsl, xml, params|
       xsl = format(WRAP, xsl) unless xsl.lstrip.start_with?("<xsl:stylesheet", "<html", "<?xml")
       { "name" => "inline/#{name}", "xsl" => xsl, "xml" => xml, "params" => params }
     end
+    HTML_CASES.each do |name, xsl|
+      out << { "name" => "inline/#{name}", "xsl" => format(WRAP, xsl), "xml" => HTML_INPUT, "html" => true }
+    end
+    out
   end
 end

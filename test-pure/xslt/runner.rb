@@ -41,7 +41,11 @@ cases.each do |c|
     Timeout.timeout(c["timeout"] || 20) do
       xsl_doc = parse_xml(c["xsl"], c["xsl_url"], true)
       ss = Nokogiri::XSLT::Stylesheet.parse_stylesheet_doc(xsl_doc)
-      doc = parse_xml(c["xml"], c["xml_url"], false)
+      doc = if c["html"]
+        Nokogiri::HTML4::Document.parse(c["xml"], c["xml_url"])
+      else
+        parse_xml(c["xml"], c["xml_url"], false)
+      end
       out = ss.transform(doc, c["params"] || [])
       res["serialize"] = ss.serialize(out)
       res["to_s"] = out.to_s rescue "ERR #{$!.class}"
