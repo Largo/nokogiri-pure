@@ -30,6 +30,17 @@ module Nokogiri
           @line = 0
         end
 
+        # the fields of an element node, in one call (same order as the individual setters)
+        def set_element(tag, name, tag_namespace, attributes, line)
+          @children = []
+          @attributes = attributes
+          @tag = tag
+          @name = name
+          @tag_namespace = tag_namespace
+          @line = line
+          self
+        end
+
         def element?
           @type == NODE_ELEMENT || @type == NODE_TEMPLATE
         end
@@ -767,7 +778,7 @@ module Nokogiri
         end
 
         def pop_current_node
-          maybe_flush_text_node_buffer
+          maybe_flush_text_node_buffer unless @text_buffer.empty?
           @open_elements.pop
         end
 
@@ -792,33 +803,23 @@ module Nokogiri
         end
 
         def create_element(tag)
-          node = Node.new(NODE_ELEMENT)
-          node.children = []
-          node.attributes = []
-          node.tag = tag
-          node.name = TAG_NAMES[tag]
-          node.tag_namespace = NAMESPACE_HTML
-          node.line = @current_token ? @current_token.line : 0
-          node
+          Node.new(NODE_ELEMENT).set_element(tag, TAG_NAMES[tag], NAMESPACE_HTML, [],
+            @current_token ? @current_token.line : 0)
         end
 
         def create_element_from_token(token, tag_namespace)
-          type = tag_namespace == NAMESPACE_HTML && token.tag == TAG_TEMPLATE ? NODE_TEMPLATE : NODE_ELEMENT
-          node = Node.new(type)
-          node.children = []
+          tag = token.tag
+          type = tag_namespace == NAMESPACE_HTML && tag == TAG_TEMPLATE ? NODE_TEMPLATE : NODE_ELEMENT
           attributes = token.attributes
-          node.attributes = attributes.equal?(NO_ATTRIBUTES) ? [] : attributes
-          node.tag = token.tag
-          node.name = token.name || TAG_NAMES[token.tag]
-          node.tag_namespace = tag_namespace
-          node.line = token.line
+          node = Node.new(type).set_element(tag, token.name || TAG_NAMES[tag], tag_namespace,
+            attributes.equal?(NO_ATTRIBUTES) ? [] : attributes, token.line)
           token.attributes = NO_ATTRIBUTES # (only ever read: a new array per tag isn't needed)
           token.name = nil
           node
         end
 
         def insert_element(node, is_reconstructing_formatting_elements)
-          maybe_flush_text_node_buffer unless is_reconstructing_formatting_elements
+          maybe_flush_text_node_buffer unless is_reconstructing_formatting_elements || @text_buffer.empty?
           if @foster_parent_insertions
             target, index = get_appropriate_insertion_location(nil)
             insert_node(node, target, index)
