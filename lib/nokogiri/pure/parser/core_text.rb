@@ -46,6 +46,7 @@ module Nokogiri
         TEST_CHAR_DATA_RE = /[\t\x20-\x25\x27-\x3B\x3D-\x5C\x5E-\x7F]+/
         TEST_CHAR_DATA_BOUNDED_RE = /[\t\x20-\x25\x27-\x3B\x3D-\x5C\x5E-\x7F]{1,8192}/
         NEWLINES_RE = /\n+/
+        TEXT_RUN_RE = /[\t\n\x20-\x25\x27-\x3B\x3D-\x5C\x5E-\x7F]+/
         SPACES_RE = / +/
         NEWLINES_BOUNDED_RE = /\n{1,8192}/
         SPACES_BOUNDED_RE = / {1,8192}/
@@ -755,6 +756,47 @@ module Nokogiri
         # read so far (it stops at the buffer's NUL terminator), so long runs are delivered in
         # pieces at 4000-byte read boundaries like in libxml2.
         def parse_char_data_internal(partial)
+          # Fast path: a run of plain ASCII text/blanks (no CR, ']' or controls) ending at '<' or '&'
+          # inside the current read window. libxml2 delivers it as one chunk; the areBlanks
+          # dispatch below is the one its loop applies to such a run.
+          inp = @input
+          if inp.pending_error.nil?
+            cur = @cur
+            ss = @ss
+            ss.pos = cur
+            if (n = ss.skip(TEXT_RUN_RE))
+              buf = @buf
+              e = cur + n
+              c = buf.getbyte(e)
+              if (c == 0x3C || c == 0x26) && (inp.windows.nil? || e < inp.window_limit(cur))
+                tmp = buf.byteslice(cur, n)
+                if (nl = tmp.byterindex("\n"))
+                  @line += tmp.count("\n")
+                  @col = n - nl
+                else
+                  @col += n
+                end
+                @cur = e
+                return if @disable_sax != 0
+
+                sax = @sax
+                chars = sax.characters
+                if !sax.ignorable_whitespace.equal?(chars) && ((c = tmp.getbyte(0)) == 0x20 || c == 0x0A || c == 0x09)
+                  if are_blanks(tmp, 0)
+                    sax.ignorable_whitespace&.call(@user_data, tmp)
+                  else
+                    chars&.call(@user_data, tmp)
+                    self.space = -2 if space == -1
+                  end
+                elsif chars.equal?(SAX2::CHARACTERS)
+                  SAX2.text(@user_data, tmp, TEXT_NODE)
+                else
+                  chars&.call(@user_data, tmp)
+                end
+                return
+              end
+            end
+          end
           line = @line
           col = @col
           grow

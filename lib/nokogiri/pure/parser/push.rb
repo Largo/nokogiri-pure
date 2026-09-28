@@ -325,7 +325,10 @@ module Nokogiri
               uri = nil
               nb_ns = 0
               if @sax2 != 0
-                name, prefix, uri, nb_ns = parse_start_tag2
+                name = parse_start_tag2
+                prefix = @tag_prefix
+                uri = @tag_uri
+                nb_ns = @tag_nb_ns
               else
                 name = parse_start_tag
               end
