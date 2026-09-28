@@ -99,20 +99,36 @@ module Nokogiri
         end
 
         # xmlParseLookupGt
+        GT_SCAN_RE = /[^"'>]*/
+        NOT_SQ_RE = /[^']*/
+        NOT_DQ_RE = /[^"]*/
+
         def lookup_gt
           cur = @check_index == 0 ? @cur + 1 : @cur + @check_index
           state = @end_check_state
           b = @buf
-          while cur < @end
-            c = b.getbyte(cur)
+          e = @end
+          ss = @ss
+          # (the C loop, a byte at a time: in a quoted value skip to the closing quote, else stop at
+          # a quote or '>')
+          while cur < e
+            ss.pos = cur
             if state != 0
-              state = 0 if c == state
-            elsif c == 0x27 || c == 0x22
+              cur += ss.skip(state == 0x27 ? NOT_SQ_RE : NOT_DQ_RE)
+              break if cur >= e
+
+              state = 0
+            else
+              cur += ss.skip(GT_SCAN_RE)
+              break if cur >= e
+
+              c = b.getbyte(cur)
+              if c == 0x3E
+                @check_index = 0
+                @end_check_state = 0
+                return true
+              end
               state = c
-            elsif c == 0x3E
-              @check_index = 0
-              @end_check_state = 0
-              return true
             end
             cur += 1
           end
@@ -265,10 +281,11 @@ module Nokogiri
             avail = @end - @cur
             break if avail < 1
 
+            # (integer literals so the case compiles to a jump table)
             case @instate
-            when XML_PARSER_EOF
+            when -1 # XML_PARSER_EOF
               break
-            when XML_PARSER_START
+            when 0 # XML_PARSER_START
               if @input.raw && @input.decoder.nil?
                 avail = @input.raw.bytesize - @input.raw_offset(@cur)
               end
@@ -282,7 +299,7 @@ module Nokogiri
 
               detect_encoding
               @instate = XML_PARSER_XML_DECL
-            when XML_PARSER_XML_DECL
+            when 17 # XML_PARSER_XML_DECL
               break if !terminate && avail < 2
 
               c = cur_byte
@@ -304,7 +321,7 @@ module Nokogiri
                 cb.call(@user_data)
               end
               @instate = XML_PARSER_MISC
-            when XML_PARSER_START_TAG
+            when 6 # XML_PARSER_START_TAG
               line = @line
               break if !terminate && avail < 2
 
@@ -316,11 +333,15 @@ module Nokogiri
               end
               break if !terminate && !lookup_gt
 
-              if space_nr == 0 || space == -2
-                space_push(-1)
+              # spacePush
+              snr = @space_nr
+              if snr == 0
+                @space_tab[0] = -1
               else
-                space_push(space)
+                sp = @space_tab[snr - 1]
+                @space_tab[snr] = sp == -2 ? -1 : sp
               end
+              @space_nr = snr + 1
               prefix = nil
               uri = nil
               nb_ns = 0
@@ -345,7 +366,11 @@ module Nokogiri
                 skip(2)
                 if @sax2 != 0
                   if @disable_sax == 0 && (cb = @sax.end_element_ns)
-                    cb.call(@user_data, name, prefix, uri)
+                    if cb.equal?(SAX2::END_ELEMENT_NS)
+                      @user_data.sax2_end_element_ns
+                    else
+                      cb.call(@user_data, name, prefix, uri)
+                    end
                   end
                   ns_pop(nb_ns) if nb_ns > 0
                 elsif @disable_sax == 0 && (cb = @sax.end_element)
@@ -353,8 +378,16 @@ module Nokogiri
                 end
                 space_pop
               elsif cur_byte == 0x3E
-                next_char
-                name_ns_push(name, prefix, uri, line, nb_ns)
+                if @input.pending_error
+                  next_char
+                else
+                  @cur += 1
+                  @col += 1
+                end
+                # nameNsPush
+                (tab = @name_tab) << name
+                @name = name
+                @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, nb_ns)
               else
                 fatal_err_msg_str(ErrCode::ERR_GT_REQUIRED, "Couldn't find end of Start Tag #{name}\n", name)
                 node_pop
@@ -362,7 +395,7 @@ module Nokogiri
                 ns_pop(nb_ns) if nb_ns > 0
               end
               @instate = name_nr == 0 ? XML_PARSER_EPILOG : XML_PARSER_CONTENT
-            when XML_PARSER_CONTENT
+            when 7 # XML_PARSER_CONTENT
               c = cur_byte
               if c == 0x3C
                 break if !terminate && avail < 2
@@ -415,7 +448,7 @@ module Nokogiri
                 next
               end
               @instate = XML_PARSER_START_TAG
-            when XML_PARSER_END_TAG
+            when 9 # XML_PARSER_END_TAG
               break if !terminate && !lookup_char(0x3E)
 
               if @sax2 != 0
@@ -425,7 +458,7 @@ module Nokogiri
                 parse_end_tag1(0)
               end
               @instate = name_nr == 0 ? XML_PARSER_EPILOG : XML_PARSER_CONTENT
-            when XML_PARSER_CDATA_SECTION
+            when 8 # XML_PARSER_CDATA_SECTION
               term = if terminate
                 bindex("]]>", @cur)
               else
@@ -476,7 +509,7 @@ module Nokogiri
                 skipl(base + 3)
                 @instate = XML_PARSER_CONTENT
               end
-            when XML_PARSER_MISC, XML_PARSER_PROLOG, XML_PARSER_EPILOG
+            when 1, 4, 14 # XML_PARSER_MISC, XML_PARSER_PROLOG, XML_PARSER_EPILOG
               skip_blanks
               avail = @end - @cur
               break if avail < 1
@@ -536,7 +569,7 @@ module Nokogiri
               else
                 @instate = XML_PARSER_START_TAG
               end
-            when XML_PARSER_DTD
+            when 3 # XML_PARSER_DTD
               break if !terminate && !lookup_internal_subset
 
               parse_internal_subset

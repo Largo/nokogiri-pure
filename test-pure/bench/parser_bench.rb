@@ -5,6 +5,7 @@
 #   ruby [--yjit] test-pure/bench/parser_bench.rb [pure|native] [-n REPS] [-o dom,sax,push] [-d doc,...]
 #
 # Prints MB/s per (document, mode) plus the geometric mean, best of REPS runs.
+# PROF=out.dump profiles the timed runs with stackprof (PROF_MODE=wall|cpu|object).
 mode = ARGV.first == "native" ? ARGV.shift : (ARGV.first == "pure" ? ARGV.shift : "pure")
 reps = 3
 if (i = ARGV.index("-n"))
@@ -102,12 +103,15 @@ docs.select! { |k, _| only.include?(k) } if only
 
 class NullSax < Nokogiri::XML::SAX::Document; end
 
+# process CPU time by default (less sensitive to other load on the machine); WALL=1 for wall time
+CLOCK = ENV["WALL"] ? Process::CLOCK_MONOTONIC : Process::CLOCK_PROCESS_CPUTIME_ID
+
 def best(reps)
   (1..reps).map do
     GC.start
-    t = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    t = Process.clock_gettime(CLOCK)
     yield
-    Process.clock_gettime(Process::CLOCK_MONOTONIC) - t
+    Process.clock_gettime(CLOCK) - t
   end.min
 end
 
@@ -131,7 +135,15 @@ ops.each do |op|
       }
     end
     run.call if yjit # warm up
-    t = best(reps, &run)
+    t = if ENV["PROF"]
+      require "stackprof"
+      tt = nil
+      StackProf.run(mode: (ENV["PROF_MODE"] || "wall").to_sym, raw: true, interval: 200,
+        out: "#{ENV["PROF"]}.#{op}.#{name}") { tt = best(reps, &run) }
+      tt
+    else
+      best(reps, &run)
+    end
     mbs = xml.bytesize / t / 1_000_000.0
     rates << mbs
     printf("%-5s %-8s %7.1f KB %8.3f s %7.2f MB/s\n", op, name, xml.bytesize / 1000.0, t, mbs)

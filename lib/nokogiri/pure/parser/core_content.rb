@@ -236,6 +236,7 @@ module Nokogiri
         ATTR_FAST_RE = /([A-Za-z_][-A-Za-z0-9_.]*)(?::([A-Za-z_][-A-Za-z0-9_.]*))?[ \t]*=[ \t]*(?:"([^"&<\x00-\x1F\uFFFD-\uFFFF]*)"|'([^'&<\x00-\x1F\uFFFD-\uFFFF]*)')/
 
         XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/"
+        EMPTY_ARRAY = [].freeze
 
         # does the DTD declare a non-CDATA type for this attribute (so its value is normalized)?
         def special_attr?(pref, elem, aprefix, aname)
@@ -324,7 +325,9 @@ module Nokogiri
             if fast && (ss.pos = @cur) && (n = ss.skip(ATTR_FAST_RE)) &&
                 (attname = ss[1]).bytesize <= XML_MAX_NAME_LENGTH &&
                 ((aprefix = ss[2]).nil? || aprefix.bytesize <= XML_MAX_NAME_LENGTH) &&
-                (@atts_special.nil? || !special_attr?(prefix, localname, aprefix ? attname : nil, aprefix || attname))
+                # a value the DTD makes normalized is taken as is only if it has no space
+                (@atts_special.nil? || !special_attr?(prefix, localname, aprefix ? attname : nil, aprefix || attname) ||
+                  !(ss[3] || ss[4]).include?(" "))
               # captures: [1] = first NCName, [2] = the local part after a ':' (if any)
               if aprefix
                 t = attname
@@ -415,23 +418,34 @@ module Nokogiri
           nbdef = 0
           defaults = @atts_default && @atts_default[[localname, prefix]]
           if atts.nil?
-            atts = []
+            atts = defaults ? [] : EMPTY_ARRAY
             nbdef, nb_ns = start_tag2_attributes(atts, localname, prefix, defaults, nb_ns) if defaults
           elsif defaults || prefixed || (atts.length > 1 && Ctxt.dup_att_names?(atts))
             nbdef, nb_ns = start_tag2_attributes(atts, localname, prefix, defaults, nb_ns)
           end
           # (otherwise every attribute is unprefixed with a distinct name: nothing to resolve or report)
 
-          uri = ns_lookup_uri(prefix)
-          if prefix && uri.nil?
-            ns_err(ErrCode::NS_ERR_UNDEFINED_NAMESPACE, "Namespace prefix #{prefix} on #{localname} is not defined\n",
-              prefix, localname)
+          if prefix
+            uri = ns_lookup_uri(prefix)
+            if uri.nil?
+              ns_err(ErrCode::NS_ERR_UNDEFINED_NAMESPACE, "Namespace prefix #{prefix} on #{localname} is not defined\n",
+                prefix, localname)
+            end
+          else
+            # xmlParserNsLookupUri(NULL)
+            idx = @ns_default_index
+            if idx == INT_MAX || idx < @min_ns_index
+              uri = nil
+            else
+              uri = @ns_tab[idx][1]
+              uri = nil if uri.empty?
+            end
           end
 
           if @disable_sax == 0 && (cb = @sax.start_element_ns)
-            namespaces = nb_ns > 0 ? @ns_tab[(@ns_tab.length - nb_ns)..] : []
+            namespaces = nb_ns > 0 ? @ns_tab[(@ns_tab.length - nb_ns)..] : EMPTY_ARRAY
             if cb.equal?(SAX2::START_ELEMENT_NS)
-              SAX2.start_element_ns(@user_data, localname, prefix, uri, nb_ns, namespaces, atts.length, nbdef, atts)
+              @user_data.sax2_start_element_ns(localname, prefix, uri, nb_ns, namespaces, atts.length, nbdef, atts)
             else
               cb.call(@user_data, localname, prefix, uri, nb_ns, namespaces, atts.length, nbdef, atts)
             end
@@ -630,12 +644,16 @@ module Nokogiri
               @cur = p + 1
               if @disable_sax == 0 && (cb = @sax.end_element_ns)
                 if cb.equal?(SAX2::END_ELEMENT_NS)
-                  SAX2.end_element_ns(@user_data, @name, pfx, tag.uri)
+                  @user_data.sax2_end_element_ns
                 else
                   cb.call(@user_data, @name, pfx, tag.uri)
                 end
               end
-              space_pop
+              # spacePop
+              if (snr = @space_nr) > 0
+                @space_nr = snr - 1
+                @space_tab[snr - 1] = -1
+              end
               ns_pop(tag.ns_nr) if tag.ns_nr != 0
               return
             end
@@ -760,20 +778,21 @@ module Nokogiri
           old_space_nr = space_nr
           old_node_nr = node_nr
           grow
-          while @cur < @end && !stopped?
-            c = @buf.getbyte(@cur)
+          while @cur < @end && @disable_sax <= 1
+            b = @buf
+            c = b.getbyte(@cur)
             if c == 0x3C
-              c1 = @buf.getbyte(@cur + 1)
-              if c1 == 0x3F
+              c1 = b.getbyte(@cur + 1)
+              if c1 == 0x2F
+                break if @name_tab.length <= old_name_nr
+
+                parse_element_end
+              elsif c1 == 0x3F
                 parse_pi
               elsif c1 == 0x21 && cmp?("<![CDATA[")
                 parse_cdsect
               elsif c1 == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
                 parse_comment
-              elsif c1 == 0x2F
-                break if name_nr <= old_name_nr
-
-                parse_element_end
               else
                 parse_element_start
               end
@@ -782,7 +801,7 @@ module Nokogiri
             else
               parse_char_data_internal(0)
             end
-            grow
+            grow if @input.pending_error
           end
 
           if name_nr > old_name_nr && @cur >= @end && @well_formed != 0
@@ -833,13 +852,15 @@ module Nokogiri
             halt
             return -1
           end
+          # spacePush
           snr = @space_nr
           if snr == 0
-            space_push(-1)
+            @space_tab[0] = -1
           else
             sp = @space_tab[snr - 1]
-            space_push(sp == -2 ? -1 : sp)
+            @space_tab[snr] = sp == -2 ? -1 : sp
           end
+          @space_nr = snr + 1
           line = @line
           if @sax2 != 0
             name = parse_start_tag2
@@ -856,7 +877,10 @@ module Nokogiri
             space_pop
             return -1
           end
-          name_ns_push(name, prefix, uri, line, nb_ns)
+          # nameNsPush
+          (tab = @name_tab) << name
+          @name = name
+          @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, nb_ns)
 
           if @validate != 0 && @well_formed != 0 && @my_doc && @node && @node.equal?(@my_doc.children)
             @valid &= Valid.validate_root(@vctxt, @my_doc)
@@ -875,7 +899,7 @@ module Nokogiri
             if @sax2 != 0
               if @disable_sax == 0 && (cb = @sax.end_element_ns)
                 if cb.equal?(SAX2::END_ELEMENT_NS)
-                  SAX2.end_element_ns(@user_data, name, prefix, uri)
+                  @user_data.sax2_end_element_ns
                 else
                   cb.call(@user_data, name, prefix, uri)
                 end
@@ -899,13 +923,19 @@ module Nokogiri
 
         # xmlParseElementEnd
         def parse_element_end
-          if name_nr <= 0
+          nn = @name_tab.length
+          if nn <= 0
             skip(2) if cur_byte == 0x3C && nxt(1) == 0x2F
             return
           end
           if @sax2 != 0
-            parse_end_tag2(@push_tab[name_nr - 1])
-            name_pop
+            parse_end_tag2(@push_tab[nn - 1])
+            # namePop
+            tab = @name_tab
+            unless tab.empty?
+              tab.pop
+              @name = tab[-1]
+            end
           else
             parse_end_tag1(0)
           end

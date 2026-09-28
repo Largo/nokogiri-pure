@@ -1110,7 +1110,11 @@ module Nokogiri
             return if val.nil?
 
             if @disable_sax == 0 && (cb = @sax.characters)
-              cb.call(@user_data, val.dup)
+              if cb.equal?(SAX2::CHARACTERS)
+                @user_data.sax2_text(val.dup, TEXT_NODE)
+              else
+                cb.call(@user_data, val.dup)
+              end
             end
             return
           end
@@ -1215,8 +1219,21 @@ module Nokogiri
           ent
         end
 
+        # "&" ASCII-Name ";" (the Name exactly as xmlParseName's ASCII fast path takes it)
+        ENTITY_REF_FAST_RE = /&[A-Za-z_:][-A-Za-z0-9_:.]*;/
+
         # xmlParseEntityRefInternal
         def parse_entity_ref_internal
+          if @input.pending_error.nil?
+            ss = @ss
+            ss.pos = @cur
+            if (n = ss.skip(ENTITY_REF_FAST_RE)) && n <= XML_MAX_NAME_LENGTH
+              name = -@buf.byteslice(@cur + 1, n - 2)
+              @cur += n
+              @col += n
+              return name
+            end
+          end
           grow
           return nil if cur_byte != 0x26
 

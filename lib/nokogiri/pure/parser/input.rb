@@ -40,6 +40,7 @@ module Nokogiri
           @io_error = nil
           @windows = nil
           @raw_chunks = nil
+          reset_window_cache
         end
 
         READ_CHUNK = 4000
@@ -78,12 +79,16 @@ module Nokogiri
 
         # buffer offsets where the reads end (pull mode)
         def compute_windows
+          reset_window_cache
           @win_idx = 0
           @windows = raw_boundaries.map { |q| buf_offset(q) }
         end
 
         # first read boundary at least INPUT_CHUNK bytes after +pos+ (else the buffer end)
         def window_limit(pos)
+          # cached: the result is w[i] for every pos in (w[i-1] - INPUT_CHUNK, w[i] - INPUT_CHUNK]
+          return @wl_lim if pos <= @wl_hi && pos > @wl_lo
+
           w = @windows
           return @buf.bytesize if w.nil?
 
@@ -92,7 +97,16 @@ module Nokogiri
           i = 0 if i > 0 && w[i - 1] >= target
           i += 1 while i < w.size && w[i] < target
           @win_idx = i
-          i < w.size ? w[i] : @buf.bytesize
+          return @buf.bytesize if i >= w.size
+
+          @wl_lo = i > 0 ? w[i - 1] - INPUT_CHUNK : -1
+          @wl_hi = w[i] - INPUT_CHUNK
+          @wl_lim = w[i]
+        end
+
+        def reset_window_cache
+          @wl_hi = -1
+          @wl_lo = 0
         end
 
         def encoder?
@@ -151,6 +165,7 @@ module Nokogiri
         def fill_windowed
           bounds = raw_boundaries.select { |q| q > @raw_done }
           @windows = @windows.select { |w| w < @buf.bytesize }
+          reset_window_cache
           @win_idx = 0
           start = @raw_done
           (bounds + [@raw.bytesize]).each_with_index do |q, i|
@@ -167,6 +182,7 @@ module Nokogiri
               @trailing_partial = true
             end
             @windows << @buf.bytesize unless last
+            reset_window_cache
           end
           @raw_done = @raw.bytesize
         end
@@ -208,6 +224,7 @@ module Nokogiri
           @raw_done = q
           @held = 0
           @windows = @windows&.select { |w| w < pos }
+          reset_window_cache
           @win_idx = 0
           fill
         end

@@ -789,7 +789,7 @@ module Nokogiri
                     self.space = -2 if space == -1
                   end
                 elsif chars.equal?(SAX2::CHARACTERS)
-                  SAX2.text(@user_data, tmp, TEXT_NODE)
+                  @user_data.sax2_text(tmp, TEXT_NODE)
                 else
                   chars&.call(@user_data, tmp)
                 end
