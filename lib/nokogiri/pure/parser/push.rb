@@ -350,6 +350,10 @@ module Nokogiri
               end
               break if !terminate && !lookup_gt
 
+              if @sax2 != 0 && lean_start_tag
+                @instate = name_nr == 0 ? XML_PARSER_EPILOG : XML_PARSER_CONTENT
+                next
+              end
               # spacePush
               snr = @space_nr
               if snr == 0
@@ -477,8 +481,10 @@ module Nokogiri
               break if !terminate && !lookup_char(0x3E)
 
               if @sax2 != 0
-                parse_end_tag2(@push_tab[name_nr - 1])
-                name_ns_pop
+                unless name_nr > 0 && lean_end_tag
+                  parse_end_tag2(@push_tab[name_nr - 1])
+                  name_ns_pop
+                end
               else
                 parse_end_tag1(0)
               end
