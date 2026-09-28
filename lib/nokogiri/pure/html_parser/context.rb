@@ -136,60 +136,70 @@ module Nokogiri
 
       EMPTY_BUF = "".b.freeze
 
-      # A decoder for an encoding handler: converts raw bytes to UTF-8, stopping at the first invalid
-      # sequence (like iconv / libxml2's built-in converters). Returns [utf8_bytes, consumed, status]
-      # where status is :ok, :partial (incomplete trailing sequence) or :error.
-      module Decoder
-        module_function
+      # A stateful decoder for an encoding handler (the equivalent of an iconv descriptor):
+      # converts raw bytes to UTF-8, stopping at the first invalid sequence. #convert returns
+      # [utf8_bytes, consumed, status], status :ok or :error. Incomplete trailing sequences are
+      # kept inside the converter (iconv leaves them in the raw buffer; the output is the same).
+      # After an error every further conversion fails, like libxml2 re-feeding the bad bytes.
+      class Decoder
+        GLIBC_SJIS = ["SHIFT_JIS", "SHIFT-JIS", "SJIS", "MS_KANJI", "CSSHIFTJIS"].freeze
 
-        def convert(handler, raw)
-          case handler.kind
+        def initialize(handler)
+          @handler = handler
+          @failed = false
+          @ec = nil
+          @renc = case handler.kind
+          when :utf16, :utf16le then Encoding::UTF_16LE
+          when :utf16be then Encoding::UTF_16BE
+          when :latin1, :ascii, :utf8 then nil
+          else handler.ruby_encoding
+          end
+          @sjis = GLIBC_SJIS.include?(handler.name.to_s.upcase)
+        end
+
+        def convert(raw)
+          return ["".b, 0, :error] if @failed
+
+          case @handler.kind
           when :latin1
             [raw.dup.force_encoding(Encoding::ISO_8859_1).encode(Encoding::UTF_8).b, raw.bytesize, :ok]
           when :ascii
             idx = raw.index(/[\x80-\xFF]/n)
             if idx
+              @failed = true
               [raw.byteslice(0, idx), idx, :error]
             else
               [raw.dup, raw.bytesize, :ok]
             end
-          when :utf16, :utf16le
-            convert_ruby(Encoding::UTF_16LE, raw)
-          when :utf16be
-            convert_ruby(Encoding::UTF_16BE, raw)
           when :utf8
             [raw.dup, raw.bytesize, :ok]
           else
-            res = convert_ruby(handler.ruby_encoding, raw)
-            if GLIBC_SJIS.include?(handler.name.to_s.upcase)
-              # glibc's SHIFT_JIS maps the JIS X 0201 Roman bytes 0x5C/0x7E to U+00A5/U+203E
-              res[0] = res[0].gsub("\\".b, "¥".b).gsub("~".b, "‾".b)
-            end
-            res
+            convert_ruby(raw)
           end
         end
 
-        GLIBC_SJIS = ["SHIFT_JIS", "SHIFT-JIS", "SJIS", "MS_KANJI", "CSSHIFTJIS"].freeze
+        private
 
-        def convert_ruby(enc, raw)
-          ec = begin
-            Encoding::Converter.new(enc, Encoding::UTF_8)
-          rescue Encoding::ConverterNotFoundError
-            return ["".b, 0, :error]
+        def convert_ruby(raw)
+          if @ec.nil?
+            begin
+              @ec = Encoding::Converter.new(@renc, Encoding::UTF_8)
+            rescue Encoding::ConverterNotFoundError, ArgumentError, TypeError
+              @failed = true
+              return ["".b, 0, :error]
+            end
           end
-          src = raw.dup.force_encoding(enc)
+          src = raw.dup.force_encoding(@renc)
           dst = +""
-          res = ec.primitive_convert(src, dst, nil, nil)
+          res = @ec.primitive_convert(src, dst, nil, nil, partial_input: true)
           dst = dst.b
-          case res
-          when :finished
+          # glibc's SHIFT_JIS maps the JIS X 0201 Roman bytes 0x5C/0x7E to U+00A5/U+203E
+          dst = dst.gsub("\\".b, "\u00A5".b).gsub("~".b, "\u203E".b) if @sjis
+          if res == :source_buffer_empty || res == :finished
             [dst, raw.bytesize, :ok]
-          when :incomplete_input
-            info = ec.primitive_errinfo
-            left = info[3].to_s.bytesize + info[4].to_s.bytesize + src.bytesize
-            [dst, raw.bytesize - left, :partial]
           else # :invalid_byte_sequence, :undefined_conversion
-            info = ec.primitive_errinfo
+            @failed = true
+            info = @ec.primitive_errinfo
             left = info[3].to_s.bytesize + info[4].to_s.bytesize + src.bytesize
             [dst, raw.bytesize - left, :error]
           end
@@ -285,6 +295,7 @@ module Nokogiri
           @input_flags = 0
           @filename = nil
           @encoder = nil
+          @decoder = nil
           @raw = +"".b
           @buf_error = 0
           @readcb = nil
@@ -470,7 +481,8 @@ module Nokogiri
         def char_enc_input
           return 0 if @raw.empty?
 
-          out, consumed, status = Decoder.convert(@encoder, @raw)
+          @decoder ||= Decoder.new(@encoder)
+          out, consumed, status = @decoder.convert(@raw)
           @raw = @raw.byteslice(consumed..) || +"".b
           @buf << out
           if status == :error && out.empty?
@@ -489,9 +501,11 @@ module Nokogiri
           return 0 if @encoder.nil? && handler.nil?
           if @encoder
             @encoder = handler
+            @decoder = nil
             return 0
           end
           @encoder = handler
+          @decoder = nil
           unless @buf.empty?
             # move unprocessed content to the raw buffer and convert it
             processed = @cur
