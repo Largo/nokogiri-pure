@@ -55,8 +55,17 @@ module SchemaCases
     JSON.parse(File.read(f))
   end
 
+  def fuzz_cases
+    f = File.join(HERE, "fuzz/cases.json")
+    return [] unless File.exist?(f)
+
+    require "json"
+    JSON.parse(File.read(f))
+  end
+
   def all(filter = nil)
     cs = libxml2_cases + upstream_cases + custom_cases + xsts_cases
+    cs += fuzz_cases if ENV["FUZZ"]
     cs = cs.select { |c| c["id"].include?(filter) } if filter
     cs
   end
