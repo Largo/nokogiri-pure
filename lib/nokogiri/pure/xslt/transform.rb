@@ -611,6 +611,111 @@ module Nokogiri
         end
       end
 
+      # dispatch a precompiled XSLT instruction (info.func) without a Method#call frame
+      def call_instruction(info, ctxt, node, inst)
+        case info.type
+        when FUNC_VALUEOF then value_of(ctxt, node, inst, info)
+        when FUNC_APPLYTEMPLATES then apply_templates(ctxt, node, inst, info)
+        when FUNC_CALLTEMPLATE then call_template(ctxt, node, inst, info)
+        when FUNC_IF then xslt_if(ctxt, node, inst, info)
+        when FUNC_CHOOSE then choose(ctxt, node, inst, info)
+        when FUNC_FOREACH then for_each(ctxt, node, inst, info)
+        when FUNC_COPYOF then copy_of(ctxt, node, inst, info)
+        when FUNC_TEXT then text(ctxt, node, inst, info)
+        when FUNC_ELEMENT then element(ctxt, node, inst, info)
+        when FUNC_ATTRIBUTE then attribute(ctxt, node, inst, info)
+        when FUNC_COPY then copy(ctxt, node, inst, info)
+        when FUNC_COMMENT then comment(ctxt, node, inst, info)
+        when FUNC_PI then processing_instruction(ctxt, node, inst, info)
+        when FUNC_NUMBER then number(ctxt, node, inst, info)
+        when FUNC_APPLYIMPORTS then apply_imports(ctxt, node, inst, info)
+        else info.func.call(ctxt, node, inst, info)
+        end
+      end
+
+      # xsltApplySequenceConstructor: an XSLT element without a transform function
+      def asc_xslt_element(ctxt, context_node, cur, info, insert, old_insert, level)
+        if info.nil?
+          if cur.name == "message"
+            message(ctxt, context_node, cur)
+          else
+            ctxt.insert = insert
+            if apply_fallbacks(ctxt, context_node, cur) == 0
+              generic_error("xsltApplySequenceConstructor: #{cur.name} was not compiled\n")
+            end
+            ctxt.insert = old_insert
+          end
+        elsif cur.name == "variable"
+          tmpvar = ctxt.vars
+          old_cur_inst = ctxt.inst
+          ctxt.inst = cur
+          parse_stylesheet_variable(ctxt, cur)
+          ctxt.inst = old_cur_inst
+          ctxt.vars.level = level unless tmpvar.equal?(ctxt.vars)
+        elsif cur.name == "message"
+          message(ctxt, context_node, cur)
+        else
+          transform_error(ctxt, nil, cur, "Unexpected XSLT element '#{cur.name}'.\n")
+        end
+      end
+
+      # xsltApplySequenceConstructor: an extension element
+      def asc_extension_element(ctxt, context_node, cur, insert, old_insert, old_local_fragment_top)
+        old_cur_inst = ctxt.inst
+        ctxt.inst = cur
+        function = if cur.psvi.equal?(EXT_MARKER)
+          ext_element_lookup(ctxt, cur.name, cur.ns.href)
+        else
+          cur.psvi.func
+        end
+        if function.nil?
+          found = false
+          ctxt.insert = insert
+          child = cur.children
+          while child
+            if xslt_elem?(child) && child.name == "fallback"
+              found = true
+              apply_sequence_constructor(ctxt, context_node, child.children, nil)
+            end
+            child = child.next
+          end
+          ctxt.insert = old_insert
+          unless found
+            transform_error(ctxt, nil, cur, "xsltApplySequenceConstructor: failed to find extension #{cur.name}\n")
+          end
+        else
+          ctxt.lasttext = nil if cur.psvi.equal?(EXT_MARKER)
+          ctxt.insert = insert
+          function.call(ctxt, context_node, cur, cur.psvi)
+          release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
+          ctxt.insert = old_insert
+        end
+        ctxt.inst = old_cur_inst
+      end
+
+      # xsltApplySequenceConstructor: a literal result element; returns the copy (nil on failure)
+      def asc_literal_result_element(ctxt, cur, insert, old_insert, templ)
+        old_cur_inst = ctxt.inst
+        ctxt.inst = cur
+        copy = shallow_copy_elem(ctxt, cur, insert, true)
+        return nil if copy.nil?
+
+        if templ && old_insert.equal?(insert) && ctxt.templ && ctxt.templ.inherited_ns
+          ctxt.templ.inherited_ns.each do |ns|
+            uri = ns_alias_lookup(ctxt.style, ns.href)
+            next if uri.equal?(UNDEFINED_DEFAULT_NS)
+
+            uri = ns.href if uri.nil?
+            ret = Tree.search_ns(copy.doc, copy, ns.prefix)
+            Tree.new_ns(copy, uri, ns.prefix) if ret.nil? || ret.href != uri
+          end
+          copy.ns = get_namespace(ctxt, cur, copy.ns, copy) if copy.ns
+        end
+        attr_list_template_process(ctxt, copy, cur.properties) if cur.properties
+        ctxt.inst = old_cur_inst
+        copy
+      end
+
       # xsltApplySequenceConstructor
       def apply_sequence_constructor(ctxt, context_node, list, templ)
         return if ctxt.nil? || list.nil?
@@ -629,7 +734,7 @@ module Nokogiri
 
         old_local_fragment_top = ctxt.local_rvt
         old_insert = insert = ctxt.insert
-        old_inst = old_cur_inst = ctxt.inst
+        old_inst = ctxt.inst
         old_context_node = ctxt.node
         old_vars_nr = ctxt.vars_tab.length
         begin
@@ -649,97 +754,40 @@ module Nokogiri
             break if insert.nil?
 
             copy = nil
-            skip_children = false
-            if xslt_elem?(cur)
+            skip_children = true
+            if (curns = cur.ns) && curns.href == NAMESPACE && cur.type == ELEMENT_NODE
               info = cur.psvi
-              if info.nil?
-                if cur.name == "message"
-                  message(ctxt, context_node, cur)
-                else
-                  ctxt.insert = insert
-                  if apply_fallbacks(ctxt, context_node, cur) == 0
-                    generic_error("xsltApplySequenceConstructor: #{cur.name} was not compiled\n")
-                  end
-                  ctxt.insert = old_insert
-                end
-                skip_children = true
-              elsif info.func
-                old_cur_inst = ctxt.inst
-                ctxt.inst = cur
+              if info&.func
                 ctxt.insert = insert
-                info.func.call(ctxt, context_node, cur, info)
+                # (dispatch inline: every Ruby frame counts against the VM stack in deep recursions)
+                case info.type
+                when FUNC_VALUEOF then value_of(ctxt, context_node, cur, info)
+                when FUNC_APPLYTEMPLATES then apply_templates(ctxt, context_node, cur, info)
+                when FUNC_CALLTEMPLATE then call_template(ctxt, context_node, cur, info)
+                when FUNC_IF then xslt_if(ctxt, context_node, cur, info)
+                when FUNC_CHOOSE then choose(ctxt, context_node, cur, info)
+                when FUNC_FOREACH then for_each(ctxt, context_node, cur, info)
+                else call_instruction(info, ctxt, context_node, cur)
+                end
                 release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
                 ctxt.insert = old_insert
-                ctxt.inst = old_cur_inst
-                skip_children = true
+                ctxt.inst = cur
               else
-                if cur.name == "variable"
-                  tmpvar = ctxt.vars
-                  old_cur_inst = ctxt.inst
-                  ctxt.inst = cur
-                  parse_stylesheet_variable(ctxt, cur)
-                  ctxt.inst = old_cur_inst
-                  ctxt.vars.level = level unless tmpvar.equal?(ctxt.vars)
-                elsif cur.name == "message"
-                  message(ctxt, context_node, cur)
-                else
-                  transform_error(ctxt, nil, cur, "Unexpected XSLT element '#{cur.name}'.\n")
-                end
-                skip_children = true
+                asc_xslt_element(ctxt, context_node, cur, info, insert, old_insert, level)
               end
             elsif cur.type == TEXT_NODE || cur.type == CDATA_SECTION_NODE
               break if copy_text(ctxt, insert, cur, ctxt.internalized).nil?
-            elsif cur.type == ELEMENT_NODE && cur.ns && !cur.psvi.nil?
-              old_cur_inst = ctxt.inst
-              ctxt.inst = cur
-              function = if cur.psvi.equal?(EXT_MARKER)
-                ext_element_lookup(ctxt, cur.name, cur.ns.href)
-              else
-                cur.psvi.func
-              end
-              if function.nil?
-                found = false
-                ctxt.insert = insert
-                child = cur.children
-                while child
-                  if xslt_elem?(child) && child.name == "fallback"
-                    found = true
-                    apply_sequence_constructor(ctxt, context_node, child.children, nil)
-                  end
-                  child = child.next
-                end
-                ctxt.insert = old_insert
-                unless found
-                  transform_error(ctxt, nil, cur, "xsltApplySequenceConstructor: failed to find extension #{cur.name}\n")
-                end
-              else
-                ctxt.lasttext = nil if cur.psvi.equal?(EXT_MARKER)
-                ctxt.insert = insert
-                function.call(ctxt, context_node, cur, cur.psvi)
-                release_local_rvts(ctxt, old_local_fragment_top) unless old_local_fragment_top.equal?(ctxt.local_rvt)
-                ctxt.insert = old_insert
-              end
-              ctxt.inst = old_cur_inst
-              skip_children = true
+
+              skip_children = false
+            elsif cur.type == ELEMENT_NODE && curns && !cur.psvi.nil?
+              asc_extension_element(ctxt, context_node, cur, insert, old_insert, old_local_fragment_top)
             elsif cur.type == ELEMENT_NODE
-              old_cur_inst = ctxt.inst
-              ctxt.inst = cur
-              copy = shallow_copy_elem(ctxt, cur, insert, true)
+              copy = asc_literal_result_element(ctxt, cur, insert, old_insert, templ)
               break if copy.nil?
 
-              if templ && old_insert.equal?(insert) && ctxt.templ && ctxt.templ.inherited_ns
-                ctxt.templ.inherited_ns.each do |ns|
-                  uri = ns_alias_lookup(ctxt.style, ns.href)
-                  next if uri.equal?(UNDEFINED_DEFAULT_NS)
-
-                  uri = ns.href if uri.nil?
-                  ret = Tree.search_ns(copy.doc, copy, ns.prefix)
-                  Tree.new_ns(copy, uri, ns.prefix) if ret.nil? || ret.href != uri
-                end
-                copy.ns = get_namespace(ctxt, cur, copy.ns, copy) if copy.ns
-              end
-              attr_list_template_process(ctxt, copy, cur.properties) if cur.properties
-              ctxt.inst = old_cur_inst
+              skip_children = false
+            else
+              skip_children = false
             end
 
             if !skip_children && cur.children && cur.children.type != ENTITY_DECL
