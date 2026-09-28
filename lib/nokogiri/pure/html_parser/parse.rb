@@ -696,9 +696,9 @@ module Nokogiri
         # ---- script / character data -------------------------------------------
 
         def flush_script(buf)
-          if @sax_flags[:cdata_block]
+          if @sax_cdata_block
             @sax.cdata_block(@user_data, buf.force_encoding(Encoding::UTF_8))
-          elsif @sax_flags[:characters]
+          elsif @sax_characters
             @sax.characters(@user_data, buf.force_encoding(Encoding::UTF_8))
           end
         end
@@ -857,7 +857,7 @@ module Nokogiri
           if target
             if cur_byte == 0x3E
               skip(1)
-              if @disable_sax == 0 && @sax_flags[:processing_instruction]
+              if @disable_sax == 0 && @sax_processing_instruction
                 @sax.processing_instruction(@user_data, target, nil)
               end
               @instate = state
@@ -889,7 +889,7 @@ module Nokogiri
               html_err(Err::PI_NOT_FINISHED, "ParsePI: PI #{target} never end ...\n", target)
             else
               skip(1)
-              if @disable_sax == 0 && @sax_flags[:processing_instruction]
+              if @disable_sax == 0 && @sax_processing_instruction
                 @sax.processing_instruction(@user_data, target, buf.force_encoding(Encoding::UTF_8))
               end
             end
@@ -957,7 +957,7 @@ module Nokogiri
           end
           if finished == 0x3E
             next_char
-            if @sax_flags[:comment] && @disable_sax == 0
+            if @sax_comment && @disable_sax == 0
               @sax.comment(@user_data, buf.force_encoding(Encoding::UTF_8))
             end
             @instate = state
@@ -1026,7 +1026,7 @@ module Nokogiri
             next_char while cur_byte != 0 && cur_byte != 0x3E && !stopped?
           end
           next_char if cur_byte == 0x3E
-          if @sax_flags[:internal_subset] && @disable_sax == 0
+          if @sax_internal_subset && @disable_sax == 0
             @sax.internal_subset(@user_data, name, external_id, uri)
           end
         end
@@ -1234,7 +1234,7 @@ module Nokogiri
             end
             if ent.nil? || !(ent.value > 0)
               check_paragraph
-              if @sax_flags[:characters]
+              if @sax_characters
                 sax_characters(+"&")
                 sax_characters(name.dup)
               end
@@ -1384,7 +1384,7 @@ module Nokogiri
         def parse_document
           return -1 unless @has_input
 
-          @sax.set_document_locator(@user_data, self) if @sax_flags[:set_document_locator]
+          @sax.set_document_locator(@user_data, self) if @sax_set_document_locator
 
           detect_encoding
 
@@ -1395,7 +1395,7 @@ module Nokogiri
           skip_blanks
           html_err(Err::DOCUMENT_EMPTY, "Document is empty\n") if cur_byte == 0
 
-          @sax.start_document(@user_data) if @sax_flags[:start_document] && @disable_sax == 0
+          @sax.start_document(@user_data) if @sax_start_document && @disable_sax == 0
 
           while (cur_byte == 0x3C && nxt(1) == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D) ||
               (cur_byte == 0x3C && nxt(1) == 0x3F)
@@ -1419,7 +1419,7 @@ module Nokogiri
 
           auto_close_on_end if cur_byte == 0
 
-          @sax.end_document(@user_data) if @sax_flags[:end_document]
+          @sax.end_document(@user_data) if @sax_end_document
 
           if (@options & PARSE_NODEFDTD) == 0 && @my_doc
             dtd = Tree.get_int_subset(@my_doc)

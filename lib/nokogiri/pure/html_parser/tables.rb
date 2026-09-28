@@ -1006,6 +1006,10 @@ module Nokogiri
 
       # start tags that imply the end of current element, keyed "old\0new" (htmlCheckAutoClose)
       START_CLOSE_SET = START_CLOSE.each_with_object({}) { |(o, n), h| h["#{o}\0#{n}"] = true }.freeze
+      # the same as nested hashes: START_CLOSE_MAP[old][new] (no key string to build per lookup)
+      START_CLOSE_MAP = START_CLOSE.each_with_object({}) { |(o, n), h| (h[o] ||= {})[n] = true }
+        .transform_values(&:freeze).freeze
+      START_CLOSE_NONE = {}.freeze
 
       # htmlNoContentElements
       NO_CONTENT_ELEMENTS = ["html", "head"].freeze
@@ -1113,7 +1117,9 @@ module Nokogiri
 
       # htmlCheckAutoClose: does +newtag+ implicitly close +oldtag+?
       def check_auto_close(newtag, oldtag)
-        START_CLOSE_SET.key?("#{oldtag}\0#{newtag}")
+        return false if newtag.nil? || oldtag.nil? || newtag.include?("\0") || oldtag.include?("\0")
+
+        (START_CLOSE_MAP[oldtag] || START_CLOSE_NONE).key?(newtag)
       end
 
       # htmlGetEndPriority

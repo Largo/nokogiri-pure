@@ -94,53 +94,84 @@ module Nokogiri
           end
           parse_try_or_finish(terminate)
           if terminate
-            @sax.end_document(@user_data) if @instate != PARSER_EOF && @sax_flags[:end_document]
+            @sax.end_document(@user_data) if @instate != PARSER_EOF && @sax_end_document
             @instate = PARSER_EOF
           end
           @err_no
         end
 
-        # htmlParseLookupSequence
+        LOOKUP_NEEDLES = Hash.new { |h, k| h[k] = k.pack("C*").b.freeze }
+        LOOKUP_QUOTE_RES = Hash.new { |h, c| h[c] = Regexp.new("[\"'#{Regexp.escape(c.chr)}]".b, Regexp::NOENCODING) }
+        DQUOTE = "\"".b.freeze
+        SQUOTE = "'".b.freeze
+
+        # htmlParseLookupSequence (the byte loop done with String#byteindex; same result, same
+        # check_index / end_check_state bookkeeping)
         def lookup_sequence(first, nxt_c, third, ignoreattrval)
           base = @check_index
           quote = @end_check_state
-          len = @buf.bytesize - @cur
+          cur = @cur
+          buf = @buf
+          len = buf.bytesize - cur
           if third != 0
             len -= 2
           elsif nxt_c != 0
             len -= 1
           end
-          while base < len
-            c = @buf.getbyte(@cur + base)
+          if base < len
             if ignoreattrval
-              if quote != 0
-                quote = 0 if c == quote
-                base += 1
-                next
-              end
-              if c == 0x22 || c == 0x27
-                quote = c
-                base += 1
-                next
-              end
-            end
-            if c == first
-              if third != 0
-                if (@buf.getbyte(@cur + base + 1) || 0) != nxt_c || (@buf.getbyte(@cur + base + 2) || 0) != third
+              re = LOOKUP_QUOTE_RES[first]
+              while base < len
+                if quote != 0
+                  i = buf.byteindex(quote == 0x22 ? DQUOTE : SQUOTE, cur + base)
+                  break if i.nil? || i - cur >= len
+
+                  quote = 0
+                  base = i - cur + 1
+                  next
+                end
+                i = buf.byteindex(re, cur + base)
+                break if i.nil? || i - cur >= len
+
+                base = i - cur
+                c = buf.getbyte(i)
+                if c == 0x22 || c == 0x27
+                  quote = c
                   base += 1
                   next
                 end
+                if third != 0
+                  if (buf.getbyte(i + 1) || 0) != nxt_c || (buf.getbyte(i + 2) || 0) != third
+                    base += 1
+                    next
+                  end
+                elsif nxt_c != 0
+                  if (buf.getbyte(i + 1) || 0) != nxt_c
+                    base += 1
+                    next
+                  end
+                end
+                @check_index = 0
+                @end_check_state = 0
+                return base
+              end
+              base = len if base < len
+            else
+              needle = if third != 0
+                LOOKUP_NEEDLES[[first, nxt_c, third]]
               elsif nxt_c != 0
-                if (@buf.getbyte(@cur + base + 1) || 0) != nxt_c
-                  base += 1
-                  next
-                end
+                LOOKUP_NEEDLES[[first, nxt_c]]
+              else
+                LOOKUP_NEEDLES[[first]]
               end
-              @check_index = 0
-              @end_check_state = 0
-              return base
+              i = buf.byteindex(needle, cur + base)
+              if i && i - cur < len
+                @check_index = 0
+                @end_check_state = 0
+                return i - cur
+              end
+              base = len
             end
-            base += 1
           end
           @check_index = base < 0 ? 0 : base
           @end_check_state = quote
@@ -177,7 +208,7 @@ module Nokogiri
           auto_close_on_end
           if @name_tab.empty? && @instate != PARSER_EOF
             @instate = PARSER_EOF
-            @sax.end_document(@user_data) if @sax_flags[:end_document]
+            @sax.end_document(@user_data) if @sax_end_document
           end
         end
 
@@ -209,8 +240,8 @@ module Nokogiri
                   skip_blanks
                   avail = @buf.bytesize - @cur
                 end
-                @sax.set_document_locator(@user_data, self) if @sax_flags[:set_document_locator]
-                @sax.start_document(@user_data) if @sax_flags[:start_document] && @disable_sax == 0
+                @sax.set_document_locator(@user_data, self) if @sax_set_document_locator
+                @sax.start_document(@user_data) if @sax_start_document && @disable_sax == 0
                 cur = cur_byte
                 nx = nxt(1)
                 if cur == 0x3C && nx == 0x21 && doctype_at_cur?
@@ -291,7 +322,7 @@ module Nokogiri
                   @err_no = Err::DOCUMENT_END
                   @well_formed = 0
                   @instate = PARSER_EOF
-                  @sax.end_document(@user_data) if @sax_flags[:end_document]
+                  @sax.end_document(@user_data) if @sax_end_document
                   throw :done
                 end
               when PARSER_START_TAG

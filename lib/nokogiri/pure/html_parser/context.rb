@@ -354,6 +354,8 @@ module Nokogiri
             error: s.respond_to?(:error),
             warning: s.respond_to?(:warning),
           }
+          # the same flags as instance variables (@sax_characters, ...) for the hot paths
+          @sax_flags.each { |k, v| instance_variable_set(:"@sax_#{k}", v) }
         end
 
         def sax=(s)
@@ -747,7 +749,7 @@ module Nokogiri
             (level != Level::WARNING || (@options & PARSE_NOWARNING) == 0)
           if allowed && @error_handler
             @error_handler.call(err)
-          elsif allowed && @sax_flags[:serror]
+          elsif allowed && @sax_serror
             @sax.serror(@user_data, err)
           elsif Errors.handler
             Errors.report(err)
@@ -756,8 +758,8 @@ module Nokogiri
             nil
           elsif allowed
             if level == Level::WARNING
-              @sax.warning(@user_data, err.message) if @sax_flags[:warning]
-            elsif @sax_flags[:error]
+              @sax.warning(@user_data, err.message) if @sax_warning
+            elsif @sax_error
               @sax.error(@user_data, err.message)
             end
           end
@@ -928,21 +930,21 @@ module Nokogiri
         # ---- SAX dispatch helpers ------------------------------------------------
 
         def sax_characters(str)
-          @sax.characters(@user_data, str) if @sax_flags[:characters]
+          @sax.characters(@user_data, str) if @sax_characters
         end
 
         def sax_ignorable_whitespace(str)
           return if @ignorable_whitespace_noop
 
-          @sax.ignorable_whitespace(@user_data, str) if @sax_flags[:ignorable_whitespace]
+          @sax.ignorable_whitespace(@user_data, str) if @sax_ignorable_whitespace
         end
 
         def sax_start_element(name, atts)
-          @sax.start_element(@user_data, name, atts) if @sax_flags[:start_element]
+          @sax.start_element(@user_data, name, atts) if @sax_start_element
         end
 
         def sax_end_element(name)
-          @sax.end_element(@user_data, name) if @sax_flags[:end_element]
+          @sax.end_element(@user_data, name) if @sax_end_element
         end
 
         # the SAX locator (xmlSAX2GetLineNumber / GetColumnNumber)
