@@ -407,20 +407,6 @@ module Nokogiri
               name = fullname.dup
             end
           end
-          # the "a:" case: xmlSplitQName returns "" as name and "a" as prefix
-          if ctxt.html == 0 && fullname.end_with?(":") && fullname.count(":") >= 1 && !fullname.start_with?(":")
-            ns_part = fullname[0...-1]
-            if ns_part == "xmlns"
-              ctxt.ctxt_err(nil, Domain::NAMESPACE, ErrCode::ERR_NS_DECL_ERROR, Level::ERROR, fullname, nil, nil, 0,
-                "invalid namespace declaration '#{fullname}'\n")
-            else
-              ctxt.ctxt_err(nil, Domain::NAMESPACE, ErrCode::WAR_NS_COLUMN, Level::WARNING, fullname, nil, nil, 0,
-                "Avoid attribute ending with ':' like '#{fullname}'\n")
-            end
-            ns = nil
-            name = fullname.dup
-          end
-
           nval = nil
           ctxt.vctxt.valid = 1
           nval = Valid.ctxt_normalize_attribute_value(ctxt.vctxt, ctxt.my_doc, ctxt.node, fullname, value)

@@ -291,7 +291,13 @@ module Nokogiri
         def switch_encoding(enc)
           handler = case enc
           when :utf8, :none then nil
-          when :ebcdic then detect_ebcdic
+          when :ebcdic
+            h = detect_ebcdic
+            if h.is_a?(Integer)
+              fatal_err(h, "EBCDIC")
+              return -1
+            end
+            h
           else EncodingSupport.lookup_handler(enc)
           end
           ret = switch_input_encoding(@input, handler)
@@ -309,9 +315,33 @@ module Nokogiri
           rescue StandardError
             ""
           end
-          if (m = out.match(/\A[^>]*?encoding\s*=\s*(["'])([A-Za-z0-9._-]*)\1/))
-            res, h = EncodingSupport.open_handler(m[2])
-            return h if res == 0 && h
+          out = out.b
+          i = 0
+          n = out.bytesize
+          while i < n
+            c = out.getbyte(i)
+            break if c == 0x3E
+            if c == 0x65 && out.byteslice(i, 8) == "encoding"
+              i += 8
+              i += 1 while Chars.blank?(out.getbyte(i) || 0)
+              break if out.getbyte(i) != 0x3D
+
+              i += 1
+              i += 1 while Chars.blank?(out.getbyte(i) || 0)
+              quote = out.getbyte(i)
+              i += 1
+              break if quote != 0x27 && quote != 0x22
+
+              start = i
+              i += 1 while (x = out.getbyte(i)) && ((x >= 0x61 && x <= 0x7A) || (x >= 0x41 && x <= 0x5A) ||
+                (x >= 0x30 && x <= 0x39) || x == 0x2E || x == 0x5F || x == 0x2D)
+              break if out.getbyte(i) != quote
+
+              res, h = EncodingSupport.open_handler(out.byteslice(start, i - start))
+              return res if res != 0
+              return h || EncodingSupport.lookup_handler(:ebcdic)
+            end
+            i += 1
           end
           EncodingSupport.lookup_handler(:ebcdic)
         end

@@ -273,7 +273,12 @@ module Nokogiri
                 avail = @input.raw.bytesize - @input.raw_offset(@cur)
               end
               break if !terminate && avail < 4
-              break if cmp?("\x4C\x6F\xA7\x94".b) && !terminate && avail < 200
+              ebcdic = if @input.raw && @input.decoder.nil?
+                @input.raw.byteslice(@input.raw_offset(@cur), 4) == "\x4C\x6F\xA7\x94".b
+              else
+                cmp?("\x4C\x6F\xA7\x94".b)
+              end
+              break if ebcdic && !terminate && avail < 200
 
               detect_encoding
               @instate = XML_PARSER_XML_DECL
