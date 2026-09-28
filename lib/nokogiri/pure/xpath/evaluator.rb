@@ -11,6 +11,8 @@ module Nokogiri
       # notices ctxt.error != 0 after calling a function.
       class ParserContext
         attr_accessor :error, :context, :comp, :value_tab, :ancestor, :xptr, :base, :cur_offset
+        # the live recursion depth (ctxt->context->depth while evaluating)
+        attr_reader :depth
 
         def initialize(context, comp = nil, base = nil, cur_offset = 0)
           @context = context
@@ -540,7 +542,12 @@ module Nokogiri
           ctx.function = op.value4
           ctx.function_uri = uri
           @sorted = nil # (an extension function may hand back a reordered node-set)
+          # libxml2 keeps the recursion depth in ctxt->context->depth: publish the live depth
+          # so that evaluations nested in the function continue from it
+          old_depth = ctx.depth
+          ctx.depth = @depth
           func.call(self, nargs)
+          ctx.depth = old_depth
           ctx.function = old_func
           ctx.function_uri = old_func_uri
           check_error!
