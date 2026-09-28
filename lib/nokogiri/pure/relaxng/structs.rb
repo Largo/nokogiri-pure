@@ -223,8 +223,7 @@ module Nokogiri
 
         # a fresh NUL-terminated copy of +str+ (xmlStrdup)
         def self.dup(str)
-          b = +"".b
-          b << str.b
+          b = str.b # a fresh binary copy
           b << "\0"
           new(b, 0)
         end

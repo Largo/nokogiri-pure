@@ -45,12 +45,12 @@ module Nokogiri
       # xmlRelaxNGNewValidState
       def new_valid_state(ctxt, node)
         root = nil
-        attrs = []
+        attrs = nil
         if node.nil?
           root = Tree.doc_get_root_element(ctxt.doc)
           return nil if root.nil?
-        else
-          attr = node.properties
+        elsif (attr = node.properties)
+          attrs = []
           while attr
             attrs << attr
             attr = attr.next
@@ -67,7 +67,7 @@ module Nokogiri
           ret.seq = node.children
         end
         ret.nb_attrs = 0
-        unless attrs.empty?
+        if attrs
           ret.max_attrs = attrs.size < 4 ? 4 : attrs.size
           ret.attrs = attrs
           ret.nb_attrs = attrs.size
