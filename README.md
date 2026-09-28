@@ -40,6 +40,50 @@ project's own revision (`Nokogiri::Pure::VERSION`).
 
 Without Bundler or gems, put `lib/` on the load path: `ruby -I path/to/nokogiri-pure/lib -rnokogiri`.
 
+## ruby.wasm
+
+nokogiri-pure runs on [ruby.wasm](https://github.com/ruby/ruby.wasm), in the browser or in Node, so
+gems that depend on Nokogiri work there unmodified. CI runs the `wasm/` checks: a smoke test of every
+component (XML/HTML4/HTML5 parsing, XPath/CSS, SAX, Reader, XSLT, XSD, RelaxNG, C14N), and
+loofah + rails-html-sanitizer producing byte-identical output to native Nokogiri.
+
+**With `rbwasm` (packs Ruby and your bundle into one `.wasm`):** point the Gemfile's `nokogiri` at
+this implementation, so every gem depending on `nokogiri` uses it:
+
+```ruby
+# Gemfile
+gem "nokogiri", git: "https://github.com/Largo/nokogiri-pure"
+gem "loofah"          # or any other gem that depends on nokogiri
+gem "ruby_wasm", group: :development
+```
+
+```bash
+bundle exec rbwasm build --ruby-version 3.4 -o app.wasm
+```
+
+The result is a WASI program with the bundle packed inside; in it, `require "/bundle/setup"` and
+then `require "loofah"` (or `"nokogiri"`) as usual. Verified: a Ruby 3.4 `app.wasm` built this way
+runs Loofah's sanitizers on nokogiri-pure under Node's WASI. The first `rbwasm build` compiles Ruby
+for wasm32-wasi (≈20 minutes, cached afterwards).
+
+**With `@ruby/wasm-wasi` and your own file loading:** put nokogiri-pure's `lib/` (and `racc`'s
+`lib/`) on the load path in the VM's filesystem, then `require "nokogiri"`. `wasm/run.mjs` is a
+minimal Node example using `@bjorn3/browser_wasi_shim`, the same WASI layer browsers use:
+
+```bash
+cd wasm && npm ci
+node run.mjs your_script.rb racc=$(ruby -e 'print Gem::Specification.find_by_name("racc").full_gem_path')/lib
+```
+
+Notes:
+- The JS engine's native stack is small, and ruby.wasm spends it on compiling code and on blocks
+  yielded from C methods. nokogiri-pure loads its code on a fresh Fiber (which ruby.wasm starts on a
+  shallow stack), keeps its files' ASTs shallow (CI-enforced), and avoids recursing through C
+  iterators, so deeply nested documents work (tested to 1000 levels for XSLT, 250 for parsing,
+  serialising, XPath/CSS, `traverse`). Recursion in *your* code through `each`/blocks is limited to a
+  few dozen levels on wasm, e.g. a Builder block nested ~60 deep.
+- Loading everything takes ~2 s in ruby.wasm (Node 20).
+
 ## Why
 
 Nokogiri's native gem is fast but needs a compiler (or a precompiled binary for your exact
