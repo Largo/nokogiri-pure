@@ -2338,7 +2338,7 @@ module Nokogiri
           buffer = @table_character_tokens
           if @text_type != NODE_WHITESPACE
             tok = Token.new
-            buffer.each do |line, column, offset, orig_start, orig_len, c|
+            each_table_character_token do |line, column, offset, orig_start, orig_len, c|
               tok.type = Util.ascii_isspace(c) ? TOKEN_WHITESPACE : TOKEN_CHARACTER
               tok.line = line
               tok.column = column
@@ -3040,6 +3040,25 @@ module Nokogiri
         end
 
         def handle_token(token)
+          type = token.type
+          if (type == TOKEN_START_TAG || type == TOKEN_END_TAG) && @insertion_mode == INSERTION_MODE_IN_BODY
+            # (the same steps as below for a tag in the "in body" insertion mode with an HTML
+            # adjusted current node, without the generic dispatch)
+            node = @open_elements.length == 1 && @fragment_ctx ? @fragment_ctx : @open_elements[-1]
+            if node.nil? || node.tag_namespace == NAMESPACE_HTML
+              @ignore_next_linefeed = false
+              if type == TOKEN_START_TAG
+                handle_in_body_start_tag(token)
+              else
+                tag = token.tag
+                @closed_body_tag = true if tag == TAG_BODY
+                @closed_html_tag = true if tag == TAG_HTML
+                handle_in_body_end_tag(token)
+              end
+              return
+            end
+          end
+
           if @ignore_next_linefeed && token.type == TOKEN_WHITESPACE && token.character == 0x0a
             @ignore_next_linefeed = false
             ignore_token
@@ -3139,6 +3158,14 @@ module Nokogiri
               body_like = true
             when INSERTION_MODE_TEXT, INSERTION_MODE_IN_SELECT, INSERTION_MODE_IN_SELECT_IN_TABLE
               body_like = false
+            when INSERTION_MODE_IN_TABLE, INSERTION_MODE_IN_TABLE_BODY, INSERTION_MODE_IN_ROW
+              # (in_table_body/in_row hand character tokens to in_table, which switches to
+              # in_table_text when the current node is a table-ish element)
+              return nil unless node_tag_in_set(@open_elements[-1], IN_TABLE_TEXT_TARGETS)
+
+              return bulk_table_text
+            when INSERTION_MODE_IN_TABLE_TEXT
+              return bulk_table_text
             else
               return
             end
@@ -3156,6 +3183,64 @@ module Nokogiri
             @frameset_ok = false if body_like || !html_path
           end
           true
+        end
+
+        # A run of character tokens handled in the "in table text" insertion mode: each one is
+        # appended to the pending text and remembered in @table_character_tokens (here the whole
+        # run as one TableTextRun, expanded again if the pending chars ever need errors).
+        def bulk_table_text
+          tokenizer = @tokenizer
+          line = tokenizer.line
+          column = tokenizer.column
+          offset = tokenizer.offset
+          start = tokenizer.start
+          run = tokenizer.scan_text_run
+          return nil unless run
+
+          if @insertion_mode != INSERTION_MODE_IN_TABLE_TEXT
+            @original_insertion_mode = @insertion_mode
+            @insertion_mode = INSERTION_MODE_IN_TABLE_TEXT
+          end
+          buffer = @text_buffer
+          @text_start_line = line if buffer.empty?
+          buffer << run
+          @text_type = NODE_TEXT if run.match?(Tokenizer::NON_WS_RE)
+          @table_character_tokens << TableTextRun.new(run, line, column, offset, start)
+          true
+        end
+
+        TableTextRun = Struct.new(:run, :line, :column, :offset, :start)
+
+        # the entries of @table_character_tokens as [line, column, offset, orig_start, orig_len,
+        # character] per character token
+        def each_table_character_token
+          tab_stop = @options.tab_stop
+          @table_character_tokens.each do |t|
+            unless t.is_a?(TableTextRun)
+              yield t
+              next
+            end
+
+            line = t.line
+            column = t.column
+            offset = t.offset
+            start = t.start
+            t.run.dup.force_encoding(Encoding::UTF_8).each_char do |ch|
+              c = ch.ord
+              w = ch.bytesize
+              yield [line, column, offset, start, w, c]
+              offset += w
+              start += w
+              if c == 0x0a
+                line += 1
+                column = 1
+              elsif c == 0x09
+                column = ((column / tab_stop) + 1) * tab_stop
+              else
+                column += 1
+              end
+            end
+          end
         end
 
         # the main loop of gumbo_parse_with_options

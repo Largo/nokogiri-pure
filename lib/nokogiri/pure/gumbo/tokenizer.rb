@@ -89,7 +89,7 @@ module Nokogiri
         SCRIPT_TAG = "script".b.freeze
         EMPTY = "".b.freeze
 
-        attr_reader :state, :input, :line, :current
+        attr_reader :state, :input, :line, :current, :column, :offset, :start
         attr_writer :is_adjusted_current_node_foreign # (set_is_adjusted_current_node_foreign)
 
         def initialize(parser, input, tab_stop)

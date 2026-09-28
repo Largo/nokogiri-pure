@@ -340,8 +340,9 @@ module Nokogiri
       end
 
       def new_doc_text(doc, content)
-        t = new_text(content)
-        t.doc = doc
+        # (new_text + doc=, in one constructor call: this is hot in the parsers' tree building)
+        t = XmlNode.new(TEXT_NODE, STRING_TEXT, doc)
+        t.content = content.nil? ? nil : +content.to_s
         t
       end
 
