@@ -8,8 +8,11 @@ module Nokogiri
       # The generic collector calls an axis "next" function per node and then runs the node test,
       # like libxml2. For the common axes and node tests, this file generates (per axis x node test)
       # tight loops doing exactly the same traversal and test inline. They are only used when none
-      # of the traversal-altering features apply (first/last limits, [n] axis ranges, break on
-      # first hit, namespace context nodes), so the resulting node sequence is identical.
+      # of the traversal-altering features apply (first/last limits, break on first hit, namespace
+      # context nodes), so the resulting node sequence is identical. Also generated: loops over a
+      # whole context node-set for the child / attribute axes (multi_*, and multi_range_* for [n]),
+      # and memoized counters for count(preceding-sibling::x) / count(following-sibling::x).
+      # test-pure/xpath/internals_diff.rb checks them all against the generic collector.
       module FastCollect
         # node test kinds (op.matcher)
         MATCHERS = {
