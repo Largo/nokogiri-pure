@@ -148,7 +148,9 @@ module Nokogiri
               when G::ATTR_NAMESPACE_XMLNS
                 lookup_or_add_ns(doc, xml_root, XMLNS_NS, "xmlns")
               end
-              value = attr.value.dup
+              # (each gumbo attribute owns its value string, and the gumbo tree is dropped after
+              # this, so the string can become the attribute's text node content)
+              value = attr.value
               value = value.byteslice(0, value.index(NUL)) if value.include?(NUL)
               Tree.new_ns_prop(xml_child, ns, xml_name(attr.name), value.force_encoding(Encoding::UTF_8))
             end

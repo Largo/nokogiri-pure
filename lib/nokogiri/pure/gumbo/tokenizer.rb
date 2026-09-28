@@ -2321,11 +2321,12 @@ module Nokogiri
         FT_SQV = "(?:[\\t\\n\\x0C\\x20-\\x25\\x28-\\x7E]++|#{SAFE_MB})*+"
         FT_UQV = "(?:[\\x21\\x23-\\x25\\x28-\\x3B\\x3F-\\x5F\\x61-\\x7E]++|#{SAFE_MB})++"
         FT_ATTR = "#{FT_WS}++(#{FT_ANAME})(?:=(?:\"(#{FT_DQV})\"|'(#{FT_SQV})'|(#{FT_UQV})))?"
-        FAST_START_TAG = Regexp.new(
-          "<(#{FT_TNAME})((?:#{FT_ATTR.gsub("(", "(?:").gsub("(?:?:", "(?:")})*+)#{FT_WS}*+(/?)>".b, Regexp::NOENCODING
-        )
         FAST_ATTR = Regexp.new(FT_ATTR.b, Regexp::NOENCODING)
-        FAST_END_TAG = Regexp.new("</(#{FT_TNAME})>".b, Regexp::NOENCODING)
+        FAST_TAG_NAME = Regexp.new(FT_TNAME.b, Regexp::NOENCODING)
+        FAST_TAG_END = Regexp.new("#{FT_WS}*+>".b, Regexp::NOENCODING)
+        FAST_TAG_SELF_CLOSING_END = Regexp.new("#{FT_WS}*+/>".b, Regexp::NOENCODING)
+        # printable ASCII only (one column per byte)
+        PLAIN_ASCII = /[\x20-\x7E]*+/n
 
         # Tokenizes such a tag starting at the current '<' (in the data state) in one go, leaving
         # the tokenizer exactly as the character-by-character state machine would. Returns false
@@ -2333,45 +2334,51 @@ module Nokogiri
         def fast_tag(output)
           start = @start
           ss = (@scanner ||= StringScanner.new(@input))
-          ss.pos = start
           attrs = []
           if @input.getbyte(start + 1) == 0x2F
-            len = ss.skip(FAST_END_TAG)
-            return false unless len
+            ss.pos = start + 2
+            return false unless ss.skip(FAST_TAG_NAME)
 
-            raw_name = ss[1]
+            name = ss.matched
+            return false unless @input.getbyte(ss.pos) == 0x3e
+
             is_start = false
             self_closing = false
-            reset_rel = len - 1
+            reset_rel = ss.pos - start
+            len = reset_rel + 1
           else
-            len = ss.skip(FAST_START_TAG)
-            return false unless len
+            ss.pos = start + 1
+            return false unless ss.skip(FAST_TAG_NAME)
 
-            raw_name = ss[1]
-            attr_src = ss[2]
-            self_closing = ss[3].bytesize == 1
-            is_start = true
-            reset_rel = 1 + raw_name.bytesize + attr_src.bytesize
-            unless attr_src.empty?
-              max_attributes = @parser.max_attributes
-              as = StringScanner.new(attr_src)
-              until as.eos?
-                as.skip(FAST_ATTR)
-                aname = as[1].downcase
-                return false if max_attributes >= 0 && attrs.length >= max_attributes
-                return false if attrs.any? { |a| a.name == aname }
+            name = ss.matched
+            max_attributes = @parser.max_attributes
+            while ss.skip(FAST_ATTR)
+              aname = ss[1]
+              orig_len = aname.bytesize
+              aname.downcase!
+              return false if max_attributes >= 0 && attrs.length >= max_attributes
+              return false if attrs.any? { |a| a.name == aname }
 
-                attrs << Attribute.new(aname, as[2] || as[3] || as[4] || EMPTY.dup, as[1].bytesize)
-              end
+              attrs << Attribute.new(aname, ss[2] || ss[3] || ss[4] || EMPTY.dup, orig_len)
             end
+            reset_rel = ss.pos - start
+            if (tail = ss.skip(FAST_TAG_END))
+              self_closing = false
+            elsif (tail = ss.skip(FAST_TAG_SELF_CLOSING_END))
+              self_closing = true
+            else
+              return false
+            end
+            is_start = true
+            len = reset_rel + tail
           end
-          name = raw_name.downcase
+          name.downcase!
 
           # <: set_mark; start_new_tag; the name and attributes; the last
           # reinitialize_tag_buffer/reset_tag_buffer_start_point happens at reset_rel
           iter_mark
-          text = @input.byteslice(start, len)
-          if text.ascii_only? && !text.include?("\n") && !text.include?("\t")
+          ss.pos = start
+          if ss.skip(PLAIN_ASCII) >= len
             # one column per byte: move straight to the reset point, then onto the '>'
             @column += reset_rel
             @offset += reset_rel
@@ -2384,18 +2391,33 @@ module Nokogiri
             @current = 0x3e
             @width = 1
           else
-            advance_over(text.byteslice(0, reset_rel))
+            advance_over(@input.byteslice(start, reset_rel))
             reset_tag_buffer_start_point
-            advance_over(text.byteslice(reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
+            advance_over(@input.byteslice(start + reset_rel, len - 1 - reset_rel)) if len - 1 > reset_rel
           end
-          @tag = Util.tagn_enum(name)
-          @tag_name = name if @tag == TAG_UNKNOWN
+          @tag = tag = Util.tagn_enum(name)
           @drop_next_attr_value = false
           @is_start_tag = is_start
           @is_self_closing = self_closing
-          @tag_attributes = attrs
+          # emit_current_tag
+          if is_start
+            output.type = TOKEN_START_TAG
+            output.tag = tag
+            output.name = tag == TAG_UNKNOWN ? name : @tag_name
+            output.attributes = attrs
+            output.is_self_closing = self_closing
+            @last_start_tag = tag
+          else
+            output.type = TOKEN_END_TAG
+            output.tag = tag
+            output.name = tag == TAG_UNKNOWN ? name : @tag_name
+          end
+          @tag_name = nil
+          @tag_attributes = nil
+          @tag_buffer.clear # (a fresh buffer in emit_current_tag; this one is never shared)
           @state = LEX_DATA
-          emit_current_tag(output)
+          finish_token(output)
+          true
         end
 
         # gumbo_lex
