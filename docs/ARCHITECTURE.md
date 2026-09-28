@@ -51,3 +51,10 @@ its libxml2 2.13.9 / libxslt 1.1.43 / gumbo behaviour) that needs no compiled C 
 ## Testing
 
 `bin/test [test files...]` runs upstream's test suite (test/ in nokogiri-upstream) against lib/.
+
+## Native method stubs / progress
+
+`lib/nokogiri/pure/glue/_stubs.rb` (generated from ext/nokogiri/*.c) defines a NotImplementedError
+stub for each of the 205 native methods; it loads first, and real implementations in the other
+glue files override them. `ruby -Ilib -rnokogiri -e 'p Nokogiri::Pure::STUBS.count { |t, m, _| t.instance_method(m).source_location&.first&.end_with?("_stubs.rb") }'`
+shows how many are still unimplemented.
