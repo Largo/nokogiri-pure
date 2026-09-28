@@ -1928,7 +1928,13 @@ module Nokogiri
       # ---- content ----------------------------------------------------------
 
       # xmlNodeParseContentInternal. If parent is given, replaces its children. Returns the list head.
+      # libxml2 strings are NUL-terminated: content after a NUL byte is invisible to C code
+      def cstr(s)
+        (s && (z = s.index("\0"))) ? s[0, z] : s
+      end
+
       def node_parse_content_internal(doc, parent, value)
+        value = cstr(value)
         head = nil
         last = nil
         link = lambda do |node|
@@ -2114,11 +2120,12 @@ module Nokogiri
         while node
           if node.type == TEXT_NODE || node.type == CDATA_SECTION_NODE
             if node.content
+              content = cstr(node.content)
               buf << case esc_mode
-              when 0 then node.content
-              when 1 then encode_entities_reentrant(doc, node.content)
-              when 2 then encode_attribute_entities(doc, node.content)
-              else encode_special_chars(doc, node.content)
+              when 0 then content
+              when 1 then encode_entities_reentrant(doc, content)
+              when 2 then encode_attribute_entities(doc, content)
+              else encode_special_chars(doc, content)
               end
             end
           elsif node.type == ENTITY_REF_NODE
