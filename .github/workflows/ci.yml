@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # reused by release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  upstream-tests:
+    name: upstream nokogiri test suite (ruby ${{ matrix.ruby }}${{ matrix.yjit && ', yjit' || '' }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.2", "3.3", "3.4", "4.0"]
+        yjit: [false]
+        include:
+          - ruby: "4.0"
+            yjit: true
+    env:
+      NOKOGIRI_UPSTREAM: ${{ github.workspace }}/nokogiri-upstream
+      RUBY_YJIT_ENABLE: ${{ matrix.yjit && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      - name: Install test dependencies
+        run: gem install --no-document racc "minitest:~> 5.0"
+      - name: Check out upstream Nokogiri (the test suite we run against lib/)
+        run: |
+          version=$(ruby -Ilib -e 'require "nokogiri/version/constant"; print Nokogiri::VERSION')
+          git clone --depth 1 --branch "v$version" --recurse-submodules --shallow-submodules \
+            https://github.com/sparklemotion/nokogiri.git "$NOKOGIRI_UPSTREAM"
+      - name: No native method is left stubbed
+        run: |
+          ruby -Ilib -rnokogiri -e 'u = Nokogiri::Pure.unimplemented; abort("unimplemented: #{u}") unless u.empty?'
+      - name: Run upstream test suite
+        # Excluded: the version-info tests shell out to the upstream checkout's own lib/ (not ours),
+        # and the memsize test measures C allocations (ObjectSpace.memsize_of), which pure Ruby lacks.
+        run: bin/test --exclude '/test_version_info_for_libx(ml|slt)|memsize/'
+
+  gem:
+    name: build gems
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - run: gem build nokogiri-pure.gemspec && gem build nokogiri.gemspec
+      - name: Smoke-test the installed nokogiri-pure gem
+        run: |
+          gem install --local ./nokogiri-pure-*.gem
+          cd /tmp && ruby -e 'gem "nokogiri-pure"; require "nokogiri"
+            doc = Nokogiri::HTML5("<p class=x>hi")
+            raise "css" unless doc.at_css("p.x").text == "hi"
+            raise "xml" unless Nokogiri::XML("<a><b/></a>").xpath("count(//b)") == 1.0
+            puts "ok: #{Nokogiri::VERSION} (#{$LOADED_FEATURES.grep(/nokogiri\/pure\.rb/).first})"'

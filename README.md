@@ -8,22 +8,37 @@ is replaced: the C glue in `ext/nokogiri/*.c` and the C libraries under it are p
 following libxml2 2.13.9 / libxslt 1.1.43 / gumbo closely enough that output, error messages
 and edge-case behaviour match the native gem.
 
-> Status: work in progress. See `docs/ARCHITECTURE.md` for how it's built, and run
-> `ruby -Ilib -rnokogiri -e 'puts Nokogiri::Pure.unimplemented'` for the native methods that are
-> still stubbed out.
+> Status: every native method of Nokogiri's C extension is implemented, and upstream Nokogiri's own
+> test suite (≈6700 tests) passes except for a test of C memory accounting. Each component is
+> also checked differentially against the native gem (see `test-pure/`). Performance work is ongoing.
+> See `docs/ARCHITECTURE.md` for how it's built.
 
-## Using it
+## Installing
 
-The gemspec is named `nokogiri` (version = the upstream release it tracks), so a Gemfile entry
-replaces the native gem everywhere, including for gems that depend on nokogiri:
+There are two gemspecs, providing the same code:
+
+| gem | where | use it when |
+|---|---|---|
+| `nokogiri-pure` | rubygems.org | you `require "nokogiri"` yourself and nothing else depends on the `nokogiri` gem |
+| `nokogiri` (`nokogiri.gemspec`) | this git repo | other gems in your bundle depend on `nokogiri` (loofah, rails-html-sanitizer, …) and must use this implementation |
 
 ```ruby
+# Gemfile — replace native Nokogiri everywhere, including as other gems' dependency:
 gem "nokogiri", git: "https://github.com/Largo/nokogiri-pure"
-# or, with a local checkout:
+# (or with a local checkout)
 gem "nokogiri", path: "../nokogiri-pure"
+
+# Gemfile — just use it directly:
+gem "nokogiri-pure"
 ```
 
-Without Bundler, put `lib/` on the load path: `ruby -I path/to/nokogiri-pure/lib -rnokogiri ...`.
+RubyGems can't host a second gem named `nokogiri`, hence the two names. Don't install the native
+`nokogiri` gem next to `nokogiri-pure` outside Bundler: both provide `nokogiri.rb`.
+
+Versions: `nokogiri-pure` 1.19.4.N implements Nokogiri 1.19.4 (`Nokogiri::VERSION`); N is this
+project's own revision (`Nokogiri::Pure::VERSION`).
+
+Without Bundler or gems, put `lib/` on the load path: `ruby -I path/to/nokogiri-pure/lib -rnokogiri`.
 
 ## Why
 
@@ -32,6 +47,13 @@ platform). This implementation runs anywhere Ruby runs: unusual platforms, WebAs
 (ruby.wasm), sandboxes, and single-file packagers.
 
 It is much slower than native Nokogiri; use it where portability matters more than raw speed.
+
+## Releasing
+
+Bump `Nokogiri::Pure::VERSION` (lib/nokogiri/pure/version.rb), commit, and push a tag
+`v<version>`. `.github/workflows/release.yml` runs the test suite, publishes `nokogiri-pure` to
+rubygems.org (Trusted Publishing — see the one-time setup notes at the top of the workflow) and
+creates a GitHub release with both `.gem` files attached.
 
 ## Testing
 

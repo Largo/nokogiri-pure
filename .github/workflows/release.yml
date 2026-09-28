@@ -1,0 +1,59 @@
+name: Release
+
+# Push a tag "v<Nokogiri::Pure::VERSION>" (e.g. v1.19.4.0) to publish nokogiri-pure to rubygems.org.
+#
+# One-time setup on rubygems.org (Trusted Publishing, no API key needed):
+#   rubygems.org → your profile → "Trusted publishers" → "Create" a *pending* trusted publisher:
+#     gem name: nokogiri-pure, repository: Largo/nokogiri-pure,
+#     workflow filename: release.yml, environment: rubygems
+# Alternatively set a repository secret RUBYGEMS_API_KEY (scoped to "push rubygem"); it is used
+# instead of Trusted Publishing when present.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: rubygems
+    env:
+      HAS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY != '' }}
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # rubygems.org trusted publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - name: Tag must match Nokogiri::Pure::VERSION
+        run: |
+          version=$(ruby -Ilib -e 'require "nokogiri/pure/version"; print Nokogiri::Pure::VERSION')
+          test "${GITHUB_REF_NAME}" = "v${version}" || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+      - name: Build gems
+        run: |
+          gem build nokogiri-pure.gemspec
+          gem build nokogiri.gemspec
+      - name: Configure rubygems.org credentials (trusted publishing)
+        if: ${{ env.HAS_API_KEY != 'true' }}
+        uses: rubygems/configure-rubygems-credentials@v1.0.0
+      - name: Push nokogiri-pure to rubygems.org
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          # an empty GEM_HOST_API_KEY would override the trusted-publishing credentials
+          if [ -n "$RUBYGEMS_API_KEY" ]; then export GEM_HOST_API_KEY="$RUBYGEMS_API_KEY"; fi
+          gem push "nokogiri-pure-${VERSION}.gem"
+      - name: GitHub release (both gems attached)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gem_nokogiri=$(ls nokogiri-[0-9]*.gem)
+          gh release create "${GITHUB_REF_NAME}" "nokogiri-pure-${VERSION}.gem" "$gem_nokogiri" \
+            --title "nokogiri-pure ${VERSION}" --generate-notes

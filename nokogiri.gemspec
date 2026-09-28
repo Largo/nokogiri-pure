@@ -18,7 +18,7 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/Largo/nokogiri-pure"
   spec.required_ruby_version = ">= 3.2"
   spec.platform = Gem::Platform::RUBY
-  spec.files = Dir["lib/**/*.rb", "lib/**/*.xsd", "LICENSE*", "README.md", "docs/**/*.md"]
+  spec.files = Dir["lib/**/*.rb", "LICENSE*", "README.md", "docs/**/*.md"]
   spec.require_paths = ["lib"]
   spec.bindir = "bin"
   spec.executables = []
