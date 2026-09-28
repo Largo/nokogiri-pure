@@ -971,7 +971,7 @@ module Nokogiri
       # xmlXPathCmpNodesExt (the comparison used for sorting node-sets)
       def cmp_nodes_ext(node1, node2)
         return -2 if node1.nil? || node2.nil?
-        return 0 if node1.equal?(node2)
+        return 0 if node1 == node2
 
         misc = false
         precedence1 = precedence2 = 0
@@ -1060,11 +1060,11 @@ module Nokogiri
         end
 
         if misc
-          if node1.equal?(node2)
+          if node1 == node2
             if precedence1 == precedence2
               cur = misc_node2.prev
               while cur
-                return 1 if cur.equal?(misc_node1)
+                return 1 if cur == misc_node1
                 return -1 if cur.type == ELEMENT_NODE
 
                 cur = cur.prev
@@ -1077,7 +1077,7 @@ module Nokogiri
           if precedence2 == 3 && precedence1 > 1
             cur = node1.parent
             while cur
-              return 1 if cur.equal?(node2)
+              return 1 if cur == node2
 
               cur = cur.parent
             end
@@ -1085,7 +1085,7 @@ module Nokogiri
           if precedence1 == 3 && precedence2 > 1
             cur = node2.parent
             while cur
-              return -1 if cur.equal?(node1)
+              return -1 if cur == node1
 
               cur = cur.parent
             end
@@ -1106,8 +1106,8 @@ module Nokogiri
 
       # the "turtle_comparison" tail of xmlXPathCmpNodesExt
       def cmp_turtle(node1, node2)
-        return 1 if node1.equal?(node2.prev)
-        return -1 if node1.equal?(node2.next)
+        return 1 if node1 == node2.prev
+        return -1 if node1 == node2.next
 
         # Nodes at the same depth (the common case when sorting the result of a location path):
         # climb both chains in lockstep to the first level where the parents coincide. Neither
@@ -1119,7 +1119,7 @@ module Nokogiri
         while true
           px = x.parent
           py = y.parent
-          break if px.equal?(py)
+          break if px == py
 
           if px.nil? || py.nil?
             x = nil
@@ -1131,8 +1131,8 @@ module Nokogiri
         if x
           return -2 if px.nil?
 
-          return 1 if x.equal?(y.prev)
-          return -1 if x.equal?(y.next)
+          return 1 if x == y.prev
+          return -1 if x == y.next
 
           if (c1 = x.content).is_a?(Integer) && c1 < 0 && x.type == ELEMENT_NODE && y.type == ELEMENT_NODE &&
               (c2 = y.content).is_a?(Integer) && c2 < 0 && x.doc.equal?(y.doc)
@@ -1142,7 +1142,7 @@ module Nokogiri
 
           cur = x.next
           while cur
-            return 1 if cur.equal?(y)
+            return 1 if cur == y
 
             cur = cur.next
           end
@@ -1152,7 +1152,7 @@ module Nokogiri
         depth2 = 0
         cur = node2
         while (par = cur.parent)
-          return 1 if par.equal?(node1)
+          return 1 if par == node1
 
           depth2 += 1
           cur = par
@@ -1161,12 +1161,12 @@ module Nokogiri
         depth1 = 0
         cur = node1
         while (par = cur.parent)
-          return -1 if par.equal?(node2)
+          return -1 if par == node2
 
           depth1 += 1
           cur = par
         end
-        return -2 unless root.equal?(cur)
+        return -2 unless root == cur
 
         while depth1 > depth2
           depth1 -= 1
@@ -1181,8 +1181,8 @@ module Nokogiri
           node2 = node2.parent
           return -2 if node1.nil? || node2.nil?
         end
-        return 1 if node1.equal?(node2.prev)
-        return -1 if node1.equal?(node2.next)
+        return 1 if node1 == node2.prev
+        return -1 if node1 == node2.next
 
         if node1.type == ELEMENT_NODE && node2.type == ELEMENT_NODE &&
             (l1 = doc_order(node1)) && (l2 = doc_order(node2)) && node1.doc.equal?(node2.doc)
@@ -1192,7 +1192,7 @@ module Nokogiri
 
         cur = node1.next
         while cur
-          return 1 if cur.equal?(node2)
+          return 1 if cur == node2
 
           cur = cur.next
         end

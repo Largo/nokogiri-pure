@@ -84,7 +84,9 @@ module Nokogiri
           end
         end
 
-        # node type constants in the generated code become literals (cheaper in the interpreter)
+        # In the generated code, node type constants are literals and nodes are compared with ==
+        # (BasicObject#==, the identity like equal?, which the interpreter runs without a method
+        # frame): both cheaper in the interpreter.
         LITERAL_TYPES = %w[
           ELEMENT_NODE ATTRIBUTE_NODE TEXT_NODE CDATA_SECTION_NODE ENTITY_REF_NODE PI_NODE
           COMMENT_NODE DOCUMENT_NODE DTD_NODE HTML_DOCUMENT_NODE ENTITY_DECL NAMESPACE_DECL
@@ -107,7 +109,7 @@ module Nokogiri
               end
               return if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
 
-              cur = ctxnode.equal?(doc) ? doc.children : ctxnode.children
+              cur = ctxnode == doc ? doc.children : ctxnode.children
               return if cur.nil?
 
               t = cur.type
@@ -119,7 +121,7 @@ module Nokogiri
                   cur = ch
                   next if t != DTD_NODE
                 end
-                break if cur.equal?(ctxnode)
+                break if cur == ctxnode
 
                 found = false
                 while (nx = cur.next)
@@ -134,7 +136,7 @@ module Nokogiri
 
                 while true
                   cur = cur.parent
-                  return if cur.nil? || cur.equal?(ctxnode)
+                  return if cur.nil? || cur == ctxnode
 
                   if (nx = cur.next)
                     cur = nx
@@ -173,7 +175,7 @@ module Nokogiri
 
             # xmlXPathNextAttribute
             def self.attribute_#{m}(ctxnode, doc, name, uri, seq, _unused)
-              return if ctxnode.type != ELEMENT_NODE || ctxnode.equal?(doc)
+              return if ctxnode.type != ELEMENT_NODE || ctxnode == doc
 
               cur = ctxnode.properties
               while cur
@@ -192,7 +194,7 @@ module Nokogiri
               while cur
                 t = cur.type
                 seq << cur if #{cond}
-                break if cur.equal?(doc)
+                break if cur == doc
 
                 cur = cur.next
               end
@@ -207,7 +209,7 @@ module Nokogiri
               while cur
                 t = cur.type
                 seq << cur if #{cond}
-                break if cur.equal?(doc)
+                break if cur == doc
 
                 pr = cur.prev
                 cur = pr if pr && pr.type == DTD_NODE
@@ -238,7 +240,7 @@ module Nokogiri
                   break
                 end
                 path << cur
-                break if cur.equal?(doc)
+                break if cur == doc
 
                 cur = cur.next
               end
@@ -274,7 +276,7 @@ module Nokogiri
                   break
                 end
                 path << cur
-                break if cur.equal?(doc)
+                break if cur == doc
 
                 pr = cur.prev
                 cur = pr if pr && pr.type == DTD_NODE
@@ -347,10 +349,10 @@ module Nokogiri
                 seq << cur if #{cond}
               end
               while true
-                if cur.equal?(doc.children)
+                if cur == doc.children
                   cur = doc
                 else
-                  return if cur.equal?(doc)
+                  return if cur == doc
 
                   ctype = cur.type
                   if PARENT_CTX[ctype]
