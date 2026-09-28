@@ -1640,6 +1640,16 @@ module Nokogiri
       # xmlSchemaIsValid
       def is_valid(ctxt) = ctxt.nil? ? -1 : (ctxt.err == 0 ? 1 : 0)
 
+      # xmlSchemaSetValidErrors
+      def set_valid_errors(ctxt, err, warn, ctx = nil)
+        return if ctxt.nil?
+
+        ctxt.error = err
+        ctxt.warning = warn
+        ctxt.err_ctxt = ctx
+        set_parser_errors(ctxt.pctxt, err, warn, ctx) if ctxt.pctxt
+      end
+
       # xmlSchemaSetValidStructuredErrors
       def set_valid_structured_errors(ctxt, serror, ctx = nil)
         return if ctxt.nil?
