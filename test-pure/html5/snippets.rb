@@ -102,6 +102,52 @@ SNIPPETS = <<~'RUBY'.split("\n---\n")
   Nokogiri::HTML5("<table><tr><td>a</td></tr>x y<tr><td>", max_errors: 10).errors.map(&:to_s)
   ---
   Nokogiri::HTML5("<textarea>\nx</textarea><pre>\n\ny</pre>").to_html
+  ---
+  doc = Nokogiri::HTML5::Document.new; e = doc.create_element("foo"); ns = e.add_namespace_definition("p", "urn:x"); e.namespace = ns; Nokogiri::HTML5::DocumentFragment.new(doc, "<p>", e)
+  ---
+  doc = Nokogiri::HTML5::Document.new; f = doc.create_element("form"); ns = f.add_namespace_definition("p", "urn:x"); f.namespace = ns; d = doc.create_element("div"); f.add_child(d); fr = Nokogiri::HTML5::DocumentFragment.new(doc, "<form><p>x", d); fr.to_html
+  ---
+  doc = Nokogiri::HTML5::Document.new; f = doc.create_element("FORM"); d = doc.create_element("div"); f.add_child(d); fr = Nokogiri::HTML5::DocumentFragment.new(doc, "<form><p>x", d); fr.to_html
+  ---
+  doc = Nokogiri::HTML5::Document.new; e = doc.create_element("td"); Nokogiri::HTML5::DocumentFragment.new(doc, "a<td>b", e, max_errors: 5).then { [_1.to_html, _1.errors.map(&:to_s), _1.quirks_mode] }
+  ---
+  doc = Nokogiri::HTML5("<!DOCTYPE html>"); e = doc.create_element("p"); Nokogiri::HTML5::DocumentFragment.new(doc, "<table>", e).then { [_1.to_html, _1.quirks_mode] }
+  ---
+  doc = Nokogiri::HTML5("<p>"); e = doc.create_element("p"); Nokogiri::HTML5::DocumentFragment.new(doc, "<table>", e).then { [_1.to_html, _1.quirks_mode] }
+  ---
+  doc = Nokogiri::HTML5::Document.new; e = doc.create_element("p"); Nokogiri::HTML5::DocumentFragment.new(doc, "<table>", e).then { [_1.to_html, _1.quirks_mode] }
+  ---
+  doc = Nokogiri::HTML5::Document.new; e = doc.create_element("template"); Nokogiri::HTML5::DocumentFragment.new(doc, "<td>x<tr>", e, max_errors: 9).then { [_1.to_html, _1.errors.map(&:to_s)] }
+  ---
+  doc = Nokogiri::HTML5::Document.new; e = doc.create_element("TITLE"); Nokogiri::HTML5::DocumentFragment.new(doc, "<b>x</title>y", e).to_html
+  ---
+  Nokogiri::HTML5::DocumentFragment.new(Nokogiri::HTML5::Document.new, "<b>x</b>", nil, max_errors: 9).then { [_1.to_html, _1.errors.map(&:file)] }
+  ---
+  Nokogiri::HTML5::DocumentFragment.new(Nokogiri::HTML5::Document.new, 42, nil)
+  ---
+  Nokogiri::Gumbo.fragment(Nokogiri::HTML5::DocumentFragment.new(Nokogiri::HTML5::Document.new), 42, nil, max_errors: 1, max_tree_depth: 1, max_attributes: 1)
+  ---
+  Nokogiri::Gumbo.fragment(Nokogiri::HTML5::DocumentFragment.new(Nokogiri::HTML5::Document.new), "x", 42, max_errors: 1, max_tree_depth: 1, max_attributes: 1)
+  ---
+  f = Nokogiri::HTML5::DocumentFragment.new(Nokogiri::HTML5::Document.new); Nokogiri::Gumbo.fragment(f, "<p>x", "p", max_errors: 1, max_tree_depth: -1, max_attributes: 1); [f.to_html, f.quirks_mode, f.errors]
+  ---
+  Nokogiri::HTML5("<p>x", max_tree_depth: -5).to_html
+  ---
+  Nokogiri::HTML5.fragment("<p><p>", max_tree_depth: 1).to_html
+  ---
+  Nokogiri::HTML5.fragment("<div><p>", max_tree_depth: 1).to_html
+  ---
+  Nokogiri::HTML5("<html><head></head><body></body></html>", max_tree_depth: 2).to_html
+  ---
+  Nokogiri::HTML5("<html><head></head><body><p></body></html>", max_tree_depth: 2).to_html
+  ---
+  Nokogiri::HTML5("<!DOCTYPE html><html><body><p><b><i><u>x", max_tree_depth: 4, max_errors: 9).errors
+  ---
+  d = Nokogiri::HTML5("<p>a</p>\n<p>b\nc</p>\n<!-- x\ny -->\n<br>"); d.root.children[1].children.map { [_1.name, _1.line] }
+  ---
+  d = Nokogiri::HTML5("<p>é&amp;</p><p title='a&notb &notc&amp=d'>"); [d.to_html, d.root.children[1].children.map { |c| c.attributes.transform_values(&:value) }]
+  ---
+  Nokogiri::HTML5("<p>\u0000x\u0000", max_errors: 9).errors.map(&:to_s)
 RUBY
 
 require "open3"
