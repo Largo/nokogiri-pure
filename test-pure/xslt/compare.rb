@@ -8,10 +8,15 @@ require "open3"
 dir = __dir__
 filter = ARGV.find { |a| !a.start_with?("-") }
 verbose = ARGV.include?("-v")
-cases_json, = Open3.capture2("ruby", File.join(dir, "corpus.rb"), *[filter].compact, binmode: true)
+cases_json = if ENV["CASES"]
+  File.binread(ENV["CASES"])
+else
+  Open3.capture2("ruby", File.join(dir, "corpus.rb"), *[filter].compact, binmode: true)[0]
+end
 cases = Marshal.load(cases_json)
 cache = "/tmp/xslt-native-#{filter.to_s.gsub(/\W/, "_")}.bin"
-native = if File.exist?(cache) && File.mtime(cache) > File.mtime(File.join(dir, "corpus.rb")) && !ENV["REFRESH"]
+cache = "#{ENV["CASES"]}.native" if ENV["CASES"]
+native = if File.exist?(cache) && File.mtime(cache) > File.mtime(ENV["CASES"] || File.join(dir, "corpus.rb")) && !ENV["REFRESH"]
   Marshal.load(File.binread(cache))
 else
   out, = Open3.capture2("ruby", File.join(dir, "runner.rb"), "native", stdin_data: cases_json, binmode: true)

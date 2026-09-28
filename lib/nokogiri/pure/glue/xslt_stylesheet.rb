@@ -149,9 +149,9 @@ module Nokogiri
         # parse_stylesheet_doc
         def parse_stylesheet_doc(xmldocobj)
           xml = Pure.unwrap_document(xmldocobj)
-          errstr = +""
+          errstr = String.new # binary, like rb_str_new(0, 0)
           ss = nil
-          Pure::XSLT.with_generic_error_func(->(msg) { errstr << msg }) do
+          Pure::XSLT.with_generic_error_func(->(msg) { errstr << msg.b }) do
             Pure::Errors.with_handler(Pure::XSLTGlue::STDERR_HANDLER) do
               xml_cpy = Pure::Tree.copy_doc(xml, 1)
               ss = Pure::XSLT.parse_stylesheet_doc(xml_cpy)
@@ -203,14 +203,14 @@ module Nokogiri
           c_document = Pure::Tree.copy_doc(c_document, 1)
         end
 
-        rb_error_str = +""
-        append = ->(msg) { rb_error_str << msg }
+        rb_error_str = String.new # binary, like rb_str_new(0, 0)
+        append = ->(msg) { rb_error_str << msg.b }
         c_result_document = nil
         saved_generic = Thread.current[:__nokogiri_pure_xml_generic_error]
         Thread.current[:__nokogiri_pure_xml_generic_error] = append
         begin
           Pure::XSLT.with_generic_error_func(append) do
-            Pure::Errors.with_handler(->(err) { rb_error_str << Pure::XSLTGlue.generic_text(err) if err }) do
+            Pure::Errors.with_handler(->(err) { rb_error_str << Pure::XSLTGlue.generic_text(err).b if err }) do
               c_result_document = Pure::XSLT.apply_stylesheet(ss, c_document, params)
             end
           end
