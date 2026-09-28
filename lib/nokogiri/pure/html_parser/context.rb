@@ -341,31 +341,26 @@ module Nokogiri
           @input_pushed = true
         end
 
-        SAX_FLAG_IVARS = %i[characters cdata_block ignorable_whitespace start_element end_element comment
-          processing_instruction internal_subset start_document end_document set_document_locator serror
-          error warning].to_h { |k| [k, :"@sax_#{k}"] }.freeze
-
         # recompute which SAX callbacks are "non-NULL"
         def update_sax
           s = @sax
+          # (as instance variables @sax_characters, ... for the hot paths, and as a Hash)
           @sax_flags = {
-            characters: s.respond_to?(:characters),
-            cdata_block: !@cdata_block_disabled && s.respond_to?(:cdata_block),
-            ignorable_whitespace: s.respond_to?(:ignorable_whitespace),
-            start_element: s.respond_to?(:start_element),
-            end_element: s.respond_to?(:end_element),
-            comment: s.respond_to?(:comment),
-            processing_instruction: s.respond_to?(:processing_instruction),
-            internal_subset: s.respond_to?(:internal_subset),
-            start_document: s.respond_to?(:start_document),
-            end_document: s.respond_to?(:end_document),
-            set_document_locator: s.respond_to?(:set_document_locator),
-            serror: s.respond_to?(:serror),
-            error: s.respond_to?(:error),
-            warning: s.respond_to?(:warning),
+            characters: (@sax_characters = s.respond_to?(:characters)),
+            cdata_block: (@sax_cdata_block = !@cdata_block_disabled && s.respond_to?(:cdata_block)),
+            ignorable_whitespace: (@sax_ignorable_whitespace = s.respond_to?(:ignorable_whitespace)),
+            start_element: (@sax_start_element = s.respond_to?(:start_element)),
+            end_element: (@sax_end_element = s.respond_to?(:end_element)),
+            comment: (@sax_comment = s.respond_to?(:comment)),
+            processing_instruction: (@sax_processing_instruction = s.respond_to?(:processing_instruction)),
+            internal_subset: (@sax_internal_subset = s.respond_to?(:internal_subset)),
+            start_document: (@sax_start_document = s.respond_to?(:start_document)),
+            end_document: (@sax_end_document = s.respond_to?(:end_document)),
+            set_document_locator: (@sax_set_document_locator = s.respond_to?(:set_document_locator)),
+            serror: (@sax_serror = s.respond_to?(:serror)),
+            error: (@sax_error = s.respond_to?(:error)),
+            warning: (@sax_warning = s.respond_to?(:warning)),
           }
-          # the same flags as instance variables (@sax_characters, ...) for the hot paths
-          @sax_flags.each { |k, v| instance_variable_set(SAX_FLAG_IVARS[k], v) }
           update_sax2
         end
 
