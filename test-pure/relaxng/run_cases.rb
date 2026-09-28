@@ -13,6 +13,7 @@ end
 require "nokogiri"
 require "json"
 require "timeout"
+require "tmpdir"
 
 cases = JSON.parse(File.read(cases_file))
 cases.select! { |c| c["id"].include?(filter) } if filter
@@ -42,8 +43,12 @@ end
 
 Dir.chdir(here)
 results = {}
+saved_stderr = STDERR.dup
+err_file = File.join(Dir.tmpdir, "rng-stderr-#{mode}-#{Process.pid}.txt")
 cases.each do |c|
   r = results[c["id"]] = {}
+  STDERR.reopen(err_file, "w")
+  STDERR.sync = true
   begin
     Timeout.timeout(60) do
       $last_aggregate = nil
@@ -74,5 +79,10 @@ cases.each do |c|
     r["crash"] = "#{e.class}: #{e.message}"
     r["bt"] = e.backtrace&.first(12)
   end
+  STDERR.flush
+  err = File.binread(err_file)
+  r["stderr"] = js(err) unless err.empty?
 end
+STDERR.reopen(saved_stderr)
+File.delete(err_file) if File.exist?(err_file)
 File.write(out_file, JSON.pretty_generate(results))

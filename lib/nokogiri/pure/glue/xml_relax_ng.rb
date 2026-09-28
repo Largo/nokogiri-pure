@@ -42,6 +42,11 @@ module Nokogiri
         r.validate_doc(valid_ctxt, doc)
         errors
       end
+
+      # RelaxNG inherits Schema's native validate_file, which unwraps self as an xmlSchema
+      def validate_file(_filename)
+        raise TypeError, "wrong argument type xmlRelaxNG (expected xmlSchema)"
+      end
     end
   end
 

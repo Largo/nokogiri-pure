@@ -740,6 +740,28 @@ module Nokogiri
       end
 
       # xmlRegStateAddTrans
+      # (nokogiri-pure addition) xmlRegStateAddTrans for states with many transitions: the
+      # duplicate check looks only at the transitions using the same atom (an identity index
+      # rebuilt whenever the transition list changed behind its back, e.g. cleared).
+      def reg_state_add_trans_indexed(ctxt, state, atom, target, counter, count)
+        trans = state.trans
+        target_no = target.no
+        idx = state.instance_variable_get(:@__trans_idx)
+        if idx.nil? || state.instance_variable_get(:@__trans_idx_n) != trans.size
+          idx = {}.compare_by_identity
+          trans.each { |t| (idx[t.atom] ||= []) << t }
+          state.instance_variable_set(:@__trans_idx, idx)
+        end
+        idx[atom]&.each do |t|
+          return if t.to == target_no && t.counter == counter && t.count == count
+        end
+        t = Trans.new(atom, target_no, counter, count)
+        trans << t
+        (idx[atom] ||= []) << t
+        state.instance_variable_set(:@__trans_idx_n, trans.size)
+        reg_state_add_trans_to(ctxt, target, state.no)
+      end
+
       def reg_state_add_trans(ctxt, state, atom, target, counter, count)
         if state.nil?
           reg_error(ctxt, "add state: state is NULL")
@@ -753,6 +775,8 @@ module Nokogiri
         # here whether such a transition is already present and, if so, silently ignore it.
         trans = state.trans
         target_no = target.no
+        return reg_state_add_trans_indexed(ctxt, state, atom, target, counter, count) if trans.size >= 16
+
         nrtrans = trans.size - 1
         while nrtrans >= 0
           t = trans[nrtrans]
@@ -1433,6 +1457,70 @@ module Nokogiri
         end
       end
 
+      # (nokogiri-pure addition) the cleanup loop of xmlFAComputesDeterminism with the earlier
+      # transitions bucketed by target state (only transitions to the same target are compared).
+      def fa_eliminate_same_target_duplicates(trans, deep)
+        by_to = {}
+        trans.each do |t1|
+          next if t1.atom.nil? || t1.to < 0
+
+          if (prev = by_to[t1.to])
+            prev.each do |t2|
+              next if t2.to != t1.to # eliminated meanwhile
+
+              if fa_equal_atoms(t1.atom, t2.atom, deep) != 0 && t1.counter == t2.counter && t1.count == t2.count
+                t2.to = -1 # eliminated
+              end
+            end
+            prev << t1
+          else
+            by_to[t1.to] = [t1]
+          end
+        end
+      end
+
+      # (nokogiri-pure addition, used by xmlFAComputesDeterminism) true when every live
+      # transition of a state is a plain string atom: no negation, no wildcard, no epsilon.
+      def fa_plain_string_state?(trans)
+        trans.all? do |t|
+          next true if t.to < 0
+
+          a = t.atom
+          a && a.type == XML_REGEXP_STRING && (a.neg == 0 || a.neg == false || a.neg.nil?) &&
+            !a.valuep.include?("*")
+        end
+      end
+
+      # Fast path of the pairwise conflict check of xmlFAComputesDeterminism for such states
+      # (the RelaxNG / XSD content model case, where it is quadratic in the number of element
+      # names): xmlFACompareAtoms(t1, t2, 1) is non-zero exactly for equal strings there, so the
+      # candidates are bucketed by string. Same flags, same result, same "last" transition.
+      def fa_determinism_string_state(trans, deep)
+        ret = 1
+        last = nil
+        seen = {}
+        trans.each do |t1|
+          next if t1.atom.nil? || t1.to < 0
+
+          key = t1.atom.valuep
+          if (prev = seen[key])
+            prev.each do |t2|
+              if t1.to != t2.to || t1.counter == t2.counter || fa_equal_atoms(t1.atom, t2.atom, deep) == 0
+                ret = 0
+              end
+              t1.nd = 1
+              t2.nd = 1
+              last = t1
+            end
+            prev << t1
+          else
+            seen[key] = [t1]
+          end
+        end
+        last.nd = 2 if last
+        ret
+      end
+
       # xmlFAComputesDeterminism
       def fa_computes_determinism(ctxt)
         ret = 1
@@ -1448,6 +1536,11 @@ module Nokogiri
 
           trans = state.trans
           next if trans.size < 2
+
+          if trans.size > 8
+            fa_eliminate_same_target_duplicates(trans, deep)
+            next
+          end
 
           transnr = 0
           while transnr < trans.size
@@ -1484,6 +1577,11 @@ module Nokogiri
 
           trans = state.trans
           next if trans.size < 2
+
+          if trans.size > 8 && fa_plain_string_state?(trans)
+            ret = 0 if fa_determinism_string_state(trans, deep) == 0
+            next
+          end
 
           last = nil
           transnr = 0

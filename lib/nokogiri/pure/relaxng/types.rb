@@ -71,13 +71,23 @@ module Nokogiri
 
         facet.type = s.const_get(ft)
         facet.value = val
-        ret = s.check_facet(facet, typ, nil, type)
+        # xmlSchemaCheckFacet reports through a fresh schema parser context without handlers,
+        # i.e. xmlGenericError
+        ret = with_generic_errors { s.check_facet(facet, typ, nil, type) }
         return -1 if ret != 0
 
         ret = s::Types.validate_facet(typ, facet, strval, value)
         return -1 if ret != 0
 
         0
+      end
+
+      # Errors raised with neither a structured nor a generic handler go to the global
+      # structured handler when one is set, else xmlGenericError prints them on stderr.
+      def with_generic_errors(&block)
+        return yield if Errors.handler
+
+        Errors.with_handler(->(err) { $stderr.write(format_error(err)) }, &block)
       end
 
       # xmlRelaxNGSchemaFreeValue

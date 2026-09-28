@@ -8,7 +8,7 @@ require "rbconfig"
 here = File.expand_path(__dir__)
 filter = ARGV.find { |a| !a.start_with?("-") }
 verbose = ARGV.include?("-v")
-cases = File.join(here, "cases", "cases.json")
+cases = ENV["CASES"] ? File.expand_path(ENV["CASES"], here) : File.join(here, "cases", "cases.json")
 abort "run extract_suites.rb first" unless File.exist?(cases)
 
 tmp = File.join(here, "cases")
@@ -56,6 +56,24 @@ oracle.each do |id, o|
     puts "pure:   #{JSON.generate(pr)[0, 3000]}"
   end
 end
+# retry the oracle on the differing cases: libxml2's hash order also decides e.g. which
+# interleave is checked first (the others are skipped once an error was reported)
+unless diffs.empty?
+  all = JSON.parse(File.read(cases)).select { |c| diffs.include?(c["id"]) }
+  sub = File.join(tmp, "retry.json")
+  File.write(sub, JSON.generate(all))
+  alt = File.join(tmp, "oracle-retry.json")
+  8.times do
+    break if diffs.empty?
+
+    system(RbConfig.ruby, File.join(here, "run_cases.rb"), "oracle", sub, alt, err: File::NULL)
+    o2 = JSON.parse(File.read(alt))
+    matched = diffs.select { |id| o2[id] == pure[id] || unordered(o2[id]) == unordered(pure[id]) }
+    reordered.concat(matched)
+    diffs -= matched
+  end
+end
+
 puts "identical: #{same}/#{total}"
-puts "same errors in another order (libxml2 hash order is random): #{reordered.join(" ")}" unless reordered.empty?
+puts "same as libxml2 up to its random hash order: #{reordered.join(" ")}" unless reordered.empty?
 puts "differing: #{diffs.join(" ")}" unless diffs.empty?

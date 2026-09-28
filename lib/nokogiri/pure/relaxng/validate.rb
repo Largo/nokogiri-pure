@@ -1684,49 +1684,53 @@ module Nokogiri
       end
 
       # xmlValidateDocumentFinal (valid.c) as called by xmlRelaxNGValidateDocument: the IDREF /
-      # IDREFS values recorded while validating must match an ID. The C validation context has
-      # no structured handler, so the errors go to the global structured error handler.
+      # IDREFS values recorded while validating must match an ID. The C validation context uses
+      # xmlGenericError, so the errors go to the global structured error handler if one is set
+      # and are otherwise printed on stderr (xmlFormatError).
       def validate_document_final(doc)
         return 0 if doc.nil?
+        return 1 unless Pure.const_defined?(:Valid) && Pure::Valid.respond_to?(:validate_document_final) &&
+          Pure.const_defined?(:Parser) && Pure::Parser.const_defined?(:ValidCtxt)
 
-        if Pure.const_defined?(:Valid) && Pure::Valid.respond_to?(:validate_document_final)
-          return Pure::Valid.validate_document_final(nil, doc)
-        end
-
-        refs = doc.refs
-        return 1 if refs.nil? || refs.empty?
-
-        valid = 1
-        refs.each_value do |list|
-          Array(list).each do |ref|
-            attr = ref.respond_to?(:attr) ? ref.attr : nil
-            name = ref.respond_to?(:name) && ref.name ? ref.name : attr&.name
-            value = ref.value
-            next if attr.nil? && name.nil?
-
-            atype = attr&.atype
-            if atype == ATTRIBUTE_IDREFS || atype == ATTRIBUTE_ENTITIES
-              value.split(/[ \t\n\r]+/).reject(&:empty?).each do |tok|
-                next if Tree.get_id(doc, tok)
-
-                valid = 0
-                report_unknown_id(attr, name, tok)
-              end
-            elsif Tree.get_id(doc, value).nil?
-              valid = 0
-              report_unknown_id(attr, name, value)
-            end
-          end
-        end
-        valid
+        vctxt = Pure::Parser::ValidCtxt.new
+        vctxt.valid = 1
+        with_generic_errors { Pure::Valid.validate_document_final(vctxt, doc) }
       end
 
-      def report_unknown_id(attr, name, value)
-        node = attr&.parent
-        err = XmlError.new(domain: Domain::VALID, code: ErrCode::DTD_UNKNOWN_ID, level: Level::ERROR,
-          message: "IDREF attribute #{name} references an unknown ID \"#{value}\"\n",
-          file: node&.doc&.url, line: node ? node.line : 0, str1: name, str2: value, node: node)
-        Errors.report(err)
+      FORMAT_DOMAINS = {
+        Domain::PARSER => "parser ", Domain::TREE => "tree ", Domain::NAMESPACE => "namespace ",
+        Domain::DTD => "validity ", Domain::HTML => "HTML parser ", Domain::MEMORY => "memory ",
+        Domain::OUTPUT => "output ", Domain::IO => "I/O ", Domain::XINCLUDE => "XInclude ",
+        Domain::XPATH => "XPath ", Domain::XPOINTER => "parser ", Domain::REGEXP => "regexp ",
+        Domain::MODULE => "module ", Domain::SCHEMASV => "Schemas validity ",
+        Domain::SCHEMASP => "Schemas parser ", Domain::RELAXNGP => "Relax-NG parser ",
+        Domain::RELAXNGV => "Relax-NG validity ", Domain::CATALOG => "Catalog ",
+        Domain::C14N => "C14N ", Domain::XSLT => "XSLT ", Domain::I18N => "encoding ",
+        Domain::SCHEMATRONV => "schematron ", Domain::BUFFER => "internal buffer ",
+        Domain::URI => "URI ", Domain::VALID => "validity ",
+      }.freeze
+
+      # xmlFormatError for an error without parser context
+      def format_error(err)
+        out = +""
+        if err.file
+          out << "#{err.file}:#{err.line}: "
+        elsif err.line != 0 && err.domain == Domain::PARSER
+          out << "Entity: line #{err.line}: "
+        end
+        node = err.node
+        out << "element #{node.name}: " if node.is_a?(XmlNode) && node.type == ELEMENT_NODE && node.name
+        out << FORMAT_DOMAINS.fetch(err.domain, "")
+        out << case err.level
+        when Level::WARNING then "warning : "
+        when Level::ERROR then "error : "
+        when Level::FATAL then "error : "
+        else ""
+        end
+        msg = err.message.to_s
+        out << msg
+        out << "\n" unless msg.end_with?("\n")
+        out
       end
 
       # xmlRelaxNGCleanPSVI
