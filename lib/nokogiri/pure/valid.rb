@@ -280,12 +280,23 @@ module Nokogiri
         attr.id
       end
 
+      # xmlIsStreaming
+      def streaming?(vctxt)
+        p = vctxt && pctxt(vctxt)
+        !p.nil? && p.respond_to?(:parse_mode) && p.parse_mode == 5 # XML_PARSE_READER
+      end
+
       # xmlAddRef
-      def add_ref(_vctxt, doc, value, attr)
+      def add_ref(vctxt, doc, value, attr)
         return nil if doc.nil? || value.nil? || attr.nil?
 
         table = (doc.refs ||= {})
-        ref = [value.dup, attr, nil, Tree.get_line_no(attr.parent)]
+        ref = if streaming?(vctxt)
+          # xmlIsStreaming: the reader frees attributes, keep only the name
+          [value.dup, nil, attr.name.dup, Tree.get_line_no(attr.parent)]
+        else
+          [value.dup, attr, nil, Tree.get_line_no(attr.parent)]
+        end
         (table[value] ||= []) << ref
         ref
       end
