@@ -353,7 +353,7 @@ module Nokogiri
               # node and running the collector's single-node fast path
               seq = []
               plan = op.plan
-              FastCollect.__send__(plan[0], n, ctx.doc, op.value5, op.value4 ? op_uri(op) : nil, seq, plan[1])
+              plan[2].call(n, ctx.doc, op.value5, op.value4 ? op_uri(op) : nil, seq, plan[1])
               @value_tab.push(seq)
               @sorted = seq if op.sorted_axis
             elsif (d = op.dos_op) && (op.impure.nil? || pure_functions?(op.impure))
@@ -411,7 +411,7 @@ module Nokogiri
               # xmlXPathEqualNodeSetFloat), without the intermediate value-stack traffic
               seq = []
               plan = step.plan
-              FastCollect.__send__(plan[0], n, ctx.doc, step.value5, step.value4 ? op_uri(step) : nil, seq, plan[1])
+              plan[2].call(n, ctx.doc, step.value5, step.value4 ? op_uri(step) : nil, seq, plan[1])
               neq = op.value == 0
               v = op.eq_value
               @value_tab.push(v.is_a?(String) ? equal_node_set_string(seq, v, neq) : equal_node_set_float(seq, v, neq))
@@ -500,7 +500,7 @@ module Nokogiri
           if m.nil? || !m[0].equal?(doc) || m[1] != uri
             m = memos[st] = [doc, uri, {}.compare_by_identity]
           end
-          FastCollect.__send__(st.count_meth, n, doc, st.value5, uri, m[2])
+          st.count_meth.call(n, doc, st.value5, uri, m[2])
         end
 
         def eval_variable(op)
@@ -519,7 +519,7 @@ module Nokogiri
         end
 
         def eval_function(op)
-          if (m = op.std_fn)
+          if (m = op.std_meth)
             if (st = op.count_step) && (n = @context.node) && n.type != NAMESPACE_DECL &&
                 @depth + 1 < XPATH_MAX_RECURSION_DEPTH
               # count(sibling-axis::test): the same number the collected node-set would have
@@ -533,7 +533,7 @@ module Nokogiri
             comp_op_eval(op.c1) if op.c1
             nargs = op.value
             xp_error(INVALID_OPERAND) if @value_tab.length < frame + nargs
-            __send__(m, nargs)
+            m.bind_call(self, nargs) # (not __send__ with a varying name: see FastCollect.plan_for)
             check_error!
             xp_error(STACK_ERROR) if @value_tab.length != frame + 1
             return
@@ -756,7 +756,7 @@ module Nokogiri
 
               if op.fused && (n = @context.node) && n.type != NAMESPACE_DECL
                 plan = op.plan
-                return FastCollect.exists?(plan[0], n, @context.doc, op.value5, op.value4 ? op_uri(op) : nil, plan[1])
+                return FastCollect.exists?(plan[2], n, @context.doc, op.value5, op.value4 ? op_uri(op) : nil, plan[1])
               end
 
               comp_op_eval(op.c1)
@@ -1191,7 +1191,8 @@ module Nokogiri
           max_pos, to_bool, dedup)
           doc = @context.doc
           name = op.value5
-          sym, arg = plan
+          arg = plan[1]
+          meth = plan[2]
           out_seq = nil
           seq = []
           merge_state = dedup ? [] : nil
@@ -1207,7 +1208,7 @@ module Nokogiri
             next if child_axis && cn.children.nil?
 
             if has_axis_range
-              FastCollect.__send__(sym, cn, doc, name, uri, range_buf, arg)
+              meth.call(cn, doc, name, uri, range_buf, arg)
               if max_pos >= 1 && range_buf.length >= max_pos
                 seq << range_buf[max_pos - 1]
                 range_buf.clear
@@ -1227,7 +1228,7 @@ module Nokogiri
               next
             end
 
-            FastCollect.__send__(sym, cn, doc, name, uri, seq, arg)
+            meth.call(cn, doc, name, uri, seq, arg)
             next if seq.empty?
 
             if pred_op
@@ -1339,7 +1340,7 @@ module Nokogiri
               (!to_bool || axis != AXIS_DESCENDANT && axis != AXIS_DESCENDANT_OR_SELF) &&
               (cn = obj[0]).type != NAMESPACE_DECL
             seq = []
-            FastCollect.__send__(plan[0], cn, xpctxt.doc, name, uri, seq, plan[1])
+            plan[2].call(cn, xpctxt.doc, name, uri, seq, plan[1])
             @value_tab.push(seq)
             @sorted = seq if SORTED_AXES.include?(axis)
             return
@@ -1422,14 +1423,14 @@ module Nokogiri
             if fast && (cn = xpctxt.node).type != NAMESPACE_DECL
               if has_axis_range
                 # the node at position max_pos among the hits (XP_TEST_HIT with hasAxisRange)
-                FastCollect.__send__(fast[0], cn, xpctxt.doc, name, uri, range_buf, fast[1])
+                fast[2].call(cn, xpctxt.doc, name, uri, range_buf, fast[1])
                 if max_pos >= 1 && range_buf.length >= max_pos
                   seq << range_buf[max_pos - 1]
                   outcome = :range_end
                 end
                 range_buf.clear
               else
-                FastCollect.__send__(fast[0], cn, xpctxt.doc, name, uri, seq, fast[1])
+                fast[2].call(cn, xpctxt.doc, name, uri, seq, fast[1])
               end
               cur = nil
             else

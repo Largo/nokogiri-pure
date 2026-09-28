@@ -91,14 +91,16 @@ module Nokogiri
               return if ctype == ATTRIBUTE_NODE || ctype == NAMESPACE_DECL
 
               cur = ctxnode.equal?(doc) ? doc.children : ctxnode.children
-              while cur
-                t = cur.type
+              return if cur.nil?
+
+              t = cur.type
+              while true
                 seq << cur if #{cond}
-                # advance (xmlXPathNextDescendant)
+                # advance (xmlXPathNextDescendant); +t+ is kept as the type of +cur+
                 ch = cur.children
-                if ch && (ct = ch.type) != ENTITY_DECL
+                if ch && (t = ch.type) != ENTITY_DECL
                   cur = ch
-                  next if ct != DTD_NODE
+                  next if t != DTD_NODE
                 end
                 break if cur.equal?(ctxnode)
 
@@ -115,13 +117,11 @@ module Nokogiri
 
                 while true
                   cur = cur.parent
-                  break if cur.nil?
-                  if cur.equal?(ctxnode)
-                    cur = nil
-                    break
-                  end
+                  return if cur.nil? || cur.equal?(ctxnode)
+
                   if (nx = cur.next)
                     cur = nx
+                    t = cur.type
                     break
                   end
                 end
@@ -301,15 +301,17 @@ module Nokogiri
         end
         FOUND = FoundSink.new
 
-        # does the traversal +sym+ produce any node? (the toBool/breakOnFirstHit mode)
-        def self.exists?(sym, ctxnode, doc, name, uri, arg)
+        # does the traversal +meth+ produce any node? (the toBool/breakOnFirstHit mode)
+        def self.exists?(meth, ctxnode, doc, name, uri, arg)
           catch(:xpath_found) do
-            __send__(sym, ctxnode, doc, name, uri, FOUND, arg)
+            meth.call(ctxnode, doc, name, uri, FOUND, arg)
             false
           end
         end
 
-        # [method, extra_arg] for a COLLECT op, or nil
+        # [method name, extra_arg, Method] for a COLLECT op, or nil. (Calling the Method object
+        # rather than __send__ with a varying name keeps YJIT from falling back to running the
+        # traversal in the interpreter.)
         def self.plan_for(axis, test, type, prefix, name)
           kind = AXIS_KINDS[axis]
           return nil if kind.nil?
@@ -321,7 +323,8 @@ module Nokogiri
           if axis == AXIS_CHILD && (test == NODE_TEST_NAME || test == NODE_TEST_ALL) && type == NODE_TYPE_NODE
             meth = "child_elem"
           end
-          [:"#{meth}_#{m}", kind[1]]
+          sym = :"#{meth}_#{m}"
+          [sym, kind[1], method(sym)]
         end
       end
     end
