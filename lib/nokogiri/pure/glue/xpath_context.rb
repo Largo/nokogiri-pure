@@ -76,6 +76,12 @@ module Nokogiri
         ctxt.value_push(!name.nil? && name == element_name)
       end
 
+      NOKOGIRI_NS_HASH = { NOKOGIRI_PREFIX => NOKOGIRI_URI, NOKOGIRI_BUILTIN_PREFIX => NOKOGIRI_BUILTIN_URI }.freeze
+      NOKOGIRI_FUNC_HASH = DEFAULT_FUNCS.merge(
+        ["css-class", NOKOGIRI_BUILTIN_URI] => CSS_CLASS_FUNC,
+        ["local-name-is", NOKOGIRI_BUILTIN_URI] => LOCAL_NAME_IS_FUNC,
+      ).freeze
+
       PURE_FUNCS[CSS_CLASS_FUNC] = true
       PURE_FUNCS[LOCAL_NAME_IS_FUNC] = true
 
@@ -167,7 +173,13 @@ module Nokogiri
       # StringValueCStr
       def string_value_cstr(value)
         str = value.is_a?(String) ? value : ::String.try_convert(value)
-        raise TypeError, "no implicit conversion of #{value.nil? ? "nil" : value.class} into String" if str.nil?
+        if str.nil?
+          desc = case value
+          when nil, true, false then value.inspect
+          else value.class
+          end
+          raise TypeError, "no implicit conversion of #{desc} into String"
+        end
         raise ArgumentError, "string contains null byte" if str.include?("\0")
 
         str
@@ -183,17 +195,19 @@ module Nokogiri
           c_node = Pure.unwrap(rb_node)
           c_context = Pure::XPath::Context.new(c_node.doc)
           c_context.node = c_node
-          c_context.register_ns(Pure::XPath::NOKOGIRI_PREFIX, Pure::XPath::NOKOGIRI_URI)
-          c_context.register_ns(Pure::XPath::NOKOGIRI_BUILTIN_PREFIX, Pure::XPath::NOKOGIRI_BUILTIN_URI)
-          c_context.register_func_ns("css-class", Pure::XPath::NOKOGIRI_BUILTIN_URI, Pure::XPath::CSS_CLASS_FUNC)
-          c_context.register_func_ns("local-name-is", Pure::XPath::NOKOGIRI_BUILTIN_URI,
-            Pure::XPath::LOCAL_NAME_IS_FUNC)
-          rb_context = allocate
+          # xmlXPathRegisterNs(nokogiri, nokogiri-builtin) + xmlXPathRegisterFuncNS(css-class,
+          # local-name-is), from prebuilt tables
+          c_context.ns_hash = Pure::XPath::NOKOGIRI_NS_HASH.dup
+          c_context.func_hash = Pure::XPath::NOKOGIRI_FUNC_HASH
+          rb_context = Class.instance_method(:allocate).bind_call(self)
           rb_context.instance_variable_set(:@__native, c_context)
           rb_context
         end
 
-        private :allocate
+        # rb_undef_alloc_func
+        def allocate
+          raise TypeError, "allocator undefined for #{self}"
+        end
       end
 
       # noko_xml_xpath_context_register_ns
@@ -233,9 +247,11 @@ module Nokogiri
         begin
           c_xpath_object = Pure::XPath.eval_expression(c_expression_str, c_context)
         ensure
+          # xmlSetStructuredErrorFunc(NULL, NULL)
           Pure::Errors.handler = nil
-          c_context.register_func_lookup(nil, nil)
         end
+        # (skipped when a handler function raised, like the longjmp in C)
+        c_context.register_func_lookup(nil, nil)
 
         if c_xpath_object.nil?
           raise rb_errors[0] if rb_errors[0]

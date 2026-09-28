@@ -288,7 +288,7 @@ module Nokogiri
         def register_ns(prefix, ns_uri)
           return -1 if prefix.nil? || prefix.empty?
 
-          @ns_hash ||= {}
+          @ns_hash = @ns_hash ? @ns_hash.dup : {} if @ns_hash.nil? || @ns_hash.frozen?
           if ns_uri.nil?
             return @ns_hash.delete(prefix) ? 0 : -1
           end
