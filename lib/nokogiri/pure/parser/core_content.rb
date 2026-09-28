@@ -238,6 +238,18 @@ module Nokogiri
         XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/"
         EMPTY_ARRAY = [].freeze
 
+        # xmlParseURI(uri) as 0 (invalid), 1 (no scheme) or 2 (with a scheme), memoized per parse
+        def ns_uri_kind(uri)
+          cache = (@ns_uri_kinds ||= {})
+          kind = cache[uri]
+          return kind if kind
+
+          parsed = URIParser.parse(uri)
+          kind = parsed.nil? ? 0 : (parsed.scheme.nil? ? 1 : 2)
+          cache[uri] = kind if cache.size < 256
+          kind
+        end
+
         # does the DTD declare a non-CDATA type for this attribute (so its value is normalized)?
         def special_attr?(pref, elem, aprefix, aname)
           efull = pref ? "#{pref}:#{elem}" : elem
@@ -319,8 +331,9 @@ module Nokogiri
           atts = nil
           prefixed = false
           while true
-            break unless c != 0x3E && (c != 0x2F || b.getbyte(@cur + 1) != 0x3E) && Chars.byte_char?(c || 0) &&
-              @disable_sax <= 1
+            # (IS_BYTE_CHAR(c) inlined; nil = end of buffer = 0)
+            break unless c != 0x3E && (c != 0x2F || b.getbyte(@cur + 1) != 0x3E) && c &&
+              (c >= 0x20 || c == 0x9 || c == 0xA || c == 0xD) && @disable_sax <= 1
 
             if fast && (ss.pos = @cur) && (n = ss.skip(ATTR_FAST_RE)) &&
                 (attname = ss[1]).bytesize <= XML_MAX_NAME_LENGTH &&
@@ -352,10 +365,10 @@ module Nokogiri
                 uri = attvalue
                 ok = true
                 unless uri.empty?
-                  parsed = URIParser.parse(uri)
-                  if parsed.nil?
+                  kind = ns_uri_kind(uri)
+                  if kind == 0
                     ns_err(ErrCode::WAR_NS_URI, "xmlns: '#{uri}' is not a valid URI\n", uri)
-                  elsif parsed.scheme.nil?
+                  elsif kind == 1
                     ns_warn(ErrCode::WAR_NS_URI_RELATIVE, "xmlns: URI #{uri} is not absolute\n", uri)
                   end
                   if uri == XML_XML_NAMESPACE
@@ -385,10 +398,10 @@ module Nokogiri
                   ns_err(ErrCode::NS_ERR_XML_NAMESPACE, "xmlns:#{attname}: Empty XML namespace is not allowed\n",
                     attname)
                 else
-                  parsed = URIParser.parse(uri)
-                  if parsed.nil?
+                  kind = ns_uri_kind(uri)
+                  if kind == 0
                     ns_err(ErrCode::WAR_NS_URI, "xmlns:#{attname}: '#{uri}' is not a valid URI\n", attname, uri)
-                  elsif @pedantic != 0 && parsed.scheme.nil?
+                  elsif @pedantic != 0 && kind == 1
                     ns_warn(ErrCode::WAR_NS_URI_RELATIVE, "xmlns:#{attname}: URI #{uri} is not absolute\n", attname, uri)
                   end
                   nb_ns += 1 if ns_push(attname, -uri, nil, 0) > 0
@@ -527,17 +540,20 @@ module Nokogiri
           end
 
           # resolve attribute namespaces
-          atts.each do |a|
-            if a.prefix.nil?
+          k = 0
+          while k < nratts
+            a = atts[k]
+            k += 1
+            if (apfx = a.prefix).nil?
               a.ns = NS_INDEX_EMPTY
-            elsif a.prefix == "xml"
+            elsif apfx == "xml"
               a.ns = NS_INDEX_XML
             else
-              ns_index = ns_lookup(a.prefix)
+              ns_index = @ns_hash.fetch(apfx, INT_MAX) # xmlParserNsLookup
               if ns_index == INT_MAX || ns_index < @min_ns_index
                 ns_err(ErrCode::NS_ERR_UNDEFINED_NAMESPACE,
-                  "Namespace prefix #{a.prefix} for #{a.name} on #{localname} is not defined\n",
-                  a.prefix, a.name, localname)
+                  "Namespace prefix #{apfx} for #{a.name} on #{localname} is not defined\n",
+                  apfx, a.name, localname)
                 ns_index = NS_INDEX_EMPTY
               end
               a.ns = ns_index
@@ -652,13 +668,18 @@ module Nokogiri
           end
 
           # reconstruct URIs
-          atts.each do |a|
-            a.ns = if a.ns == INT_MAX
+          k = 0
+          n = atts.length
+          while k < n
+            a = atts[k]
+            k += 1
+            an = a.ns
+            a.ns = if an == INT_MAX
               nil
-            elsif a.ns == INT_MAX - 1
+            elsif an == INT_MAX - 1
               XML_XML_NAMESPACE
             else
-              @ns_tab[a.ns][1]
+              @ns_tab[an][1]
             end
           end
 

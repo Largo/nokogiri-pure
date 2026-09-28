@@ -273,6 +273,23 @@ module Nokogiri
           @end = @buf.bytesize
         end
 
+        # the "<!DOCTYPE" case of xmlParseTryOrFinish (kept apart: nesting depth)
+        def push_parse_doctype
+          @in_subset = 1
+          parse_doctype_decl
+          if cur_byte == 0x5B
+            @instate = XML_PARSER_DTD
+          else
+            @in_subset = 2
+            if @disable_sax == 0 && (cb = @sax.external_subset)
+              cb.call(@user_data, @int_sub_name, @ext_sub_system, @ext_sub_uri)
+            end
+            @in_subset = 0
+            clean_special_attr
+            @instate = XML_PARSER_PROLOG
+          end
+        end
+
         # xmlParseTryOrFinish
         def parse_try_or_finish(terminate)
           ret = 0
@@ -550,19 +567,7 @@ module Nokogiri
                     if cmp?("<!DOCTYPE")
                       break if !terminate && !lookup_gt
 
-                      @in_subset = 1
-                      parse_doctype_decl
-                      if cur_byte == 0x5B
-                        @instate = XML_PARSER_DTD
-                      else
-                        @in_subset = 2
-                        if @disable_sax == 0 && (cb = @sax.external_subset)
-                          cb.call(@user_data, @int_sub_name, @ext_sub_system, @ext_sub_uri)
-                        end
-                        @in_subset = 0
-                        clean_special_attr
-                        @instate = XML_PARSER_PROLOG
-                      end
+                      push_parse_doctype
                       handled = true
                     end
                   end
