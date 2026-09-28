@@ -855,7 +855,7 @@ module Nokogiri
             cur = cur.next
             next
           end
-          loop do
+          while true
             cur = cur.parent
             break if cur.nil?
             if cur.equal?(doc)
@@ -998,7 +998,7 @@ module Nokogiri
         when TEXT_NODE, CDATA_SECTION_NODE, COMMENT_NODE, PI_NODE
           misc_node1 = node1
           if node1.prev
-            loop do
+            while true
               node1 = node1.prev
               if node1.type == ELEMENT_NODE
                 precedence1 = 3
@@ -1033,7 +1033,7 @@ module Nokogiri
         when TEXT_NODE, CDATA_SECTION_NODE, COMMENT_NODE, PI_NODE
           misc_node2 = node2
           if node2.prev
-            loop do
+            while true
               node2 = node2.prev
               if node2.type == ELEMENT_NODE
                 precedence2 = 3
@@ -1530,7 +1530,7 @@ module Nokogiri
             tmp = tmp.next
             next
           end
-          loop do
+          while true
             tmp = tmp.parent
             break if tmp.nil?
             if tmp.equal?(node)

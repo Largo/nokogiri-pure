@@ -118,10 +118,12 @@ module Nokogiri
       # Nokogiri_marshal_xpath_funcall_and_return_values
       def marshal_funcall(ctxt, argc, handler, method_name)
         argv = Array.new(argc)
-        (argc - 1).downto(0) do |j|
+        j = argc - 1
+        while j >= 0
           obj = ctxt.value_pop
           argv[j] = xpath2ruby(obj, ctxt.context)
           argv[j] = XPath.cast_to_string(obj).dup.force_encoding(::Encoding::UTF_8) if argv[j].equal?(:undef)
+          j -= 1
         end
 
         rb_retval = handler.__send__(method_name, *argv)

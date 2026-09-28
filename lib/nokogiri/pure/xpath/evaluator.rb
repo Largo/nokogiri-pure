@@ -6,9 +6,18 @@ module Nokogiri
       # xmlXPathParserContext: the value stack and the evaluator (xmlXPathCompOpEval & friends).
       #
       # Errors: #xp_error (the XP_ERROR macro) reports the error and aborts the evaluation by
-      # throwing :xpath_abort, which the entry points (XPath.eval, XPath.compiled_eval, ...) catch.
+      # raising XPath::Abort (#abort!), which the entry points (XPath.eval, XPath.compiled_eval,
+      # ...) rescue.
       # #xpath_err (xmlXPathErr) only reports and records it; the evaluator aborts as soon as it
       # notices ctxt.error != 0 after calling a function.
+      # The unwinding of XP_ERROR & co. to the evaluation entry points. raise/rescue rather than
+      # catch/throw: Kernel#catch runs its block from C, a native stack frame per nested
+      # evaluation, which ruby.wasm's small native stack can't afford. (An Exception rather than a
+      # StandardError, so that a `rescue => e` in between lets it through like a throw.)
+      class Abort < Exception # rubocop:disable Lint/InheritException
+      end
+      NO_BACKTRACE = [].freeze
+
       class ParserContext
         attr_accessor :error, :context, :comp, :value_tab, :ancestor, :xptr, :base, :cur_offset
         # the live recursion depth (ctxt->context->depth while evaluating)
@@ -128,18 +137,23 @@ module Nokogiri
         # XP_ERROR: report and abort
         def xp_error(code)
           xpath_err(code)
-          throw :xpath_abort
+          raise Abort, nil, NO_BACKTRACE
+        end
+
+        # abort the evaluation (unwinding to the entry point) without reporting anything
+        def abort!
+          raise Abort, nil, NO_BACKTRACE
         end
 
         # xmlXPathPErrMemory
         def mem_error
           @error = MEMORY_ERROR
           XPath.report_memory_error(@context)
-          throw :xpath_abort
+          raise Abort, nil, NO_BACKTRACE
         end
 
         def check_error!
-          throw :xpath_abort if @error != EXPRESSION_OK
+          raise Abort, nil, NO_BACKTRACE if @error != EXPRESSION_OK
         end
 
         # CHECK_ARITY
@@ -299,9 +313,11 @@ module Nokogiri
           saved = [ctx.node, ctx.doc, ctx.context_size, ctx.proximity_position, ctx.function,
                    ctx.function_uri, ctx.depth]
           aborted = true
-          catch(:xpath_abort) do
+          begin
             run_eval(false)
             aborted = false
+          rescue Abort
+            # (aborted)
           end
           XPath.restore_context(ctx, saved) if aborted
           nil
@@ -316,8 +332,10 @@ module Nokogiri
         # way a C caller sees it return; for callers outside the evaluator (e.g. XPointer calling
         # xmlXPathIdFunction)
         def call_function(f, nargs)
-          catch(:xpath_abort) do
+          begin
             f.is_a?(Symbol) ? __send__(f, nargs) : f.call(self, nargs)
+          rescue Abort
+            # (aborted)
           end
           nil
         end
@@ -489,10 +507,14 @@ module Nokogiri
           ctx = @context
           return false if ctx.func_lookup_func
 
-          ops.all? do |f|
+          i = 0
+          while i < ops.length
+            f = ops[i]
+            i += 1
             uri = ctx.ns_lookup(f.value5)
-            uri && PURE_FUNCS[ctx.function_lookup_ns(f.value4, uri)]
+            return false unless uri && PURE_FUNCS[ctx.function_lookup_ns(f.value4, uri)]
           end
+          true
         end
 
         # Can the arguments +args+ (Op#fast_args) be pushed by #push_fast_args? The steps need
@@ -951,7 +973,7 @@ module Nokogiri
               if cur
                 return cur if cur.type == ELEMENT_NODE
 
-                loop do
+                while true
                   cur = cur.next
                   break if cur.nil? || cur.type == ELEMENT_NODE
                 end
@@ -975,7 +997,7 @@ module Nokogiri
             return nxt if nxt.type == ELEMENT_NODE
 
             cur = nxt
-            loop do
+            while true
               cur = cur.next
               break if cur.nil? || cur.type == ELEMENT_NODE
             end
@@ -1009,7 +1031,7 @@ module Nokogiri
             t = cur.type
             return cur if t != ENTITY_DECL && t != DTD_NODE
           end
-          loop do
+          while true
             cur = cur.parent
             break if cur.nil?
             return nil if cur.equal?(ctxnode)
@@ -1158,7 +1180,7 @@ module Nokogiri
           return cur.next if cur.next
 
           doc = @context.doc
-          loop do
+          while true
             cur = cur.parent
             break if cur.nil?
             return nil if cur.equal?(doc)
@@ -2121,7 +2143,7 @@ module Nokogiri
         depth = context.depth
         res_obj = nil
         ok = false
-        catch(:xpath_abort) do
+        begin
           pctxt.run_eval(false)
           if pctxt.value_nr != 1
             pctxt.xpath_err(STACK_ERROR)
@@ -2129,6 +2151,8 @@ module Nokogiri
             res_obj = pctxt.value_pop
           end
           ok = true
+        rescue Abort
+          # (aborted)
         end
         restore_saved(context, node, doc, cs, pp, fn, fn_uri, depth) unless ok
         pctxt.error == EXPRESSION_OK ? res_obj : nil
@@ -2149,10 +2173,12 @@ module Nokogiri
         depth = context.depth
         res = nil
         ok = false
-        catch(:xpath_abort) do
+        begin
           res = pctxt.run_eval(true)
           pctxt.xpath_err(STACK_ERROR) if pctxt.value_nr != 0
           ok = true
+        rescue Abort
+          # (aborted)
         end
         restore_saved(context, node, doc, cs, pp, fn, fn_uri, depth) unless ok
         return -1 if !ok || pctxt.error != EXPRESSION_OK
@@ -2184,7 +2210,7 @@ module Nokogiri
                  context.function, context.function_uri, context.depth]
         res = nil
         aborted = true
-        catch(:xpath_abort) do
+        begin
           pctxt.run_eval(false)
           if pctxt.value_nr != 1
             pctxt.xpath_err(STACK_ERROR)
@@ -2192,6 +2218,8 @@ module Nokogiri
             res = pctxt.value_pop
           end
           aborted = false
+        rescue Abort
+          # (aborted)
         end
         restore_context(context, saved) if aborted
         return nil if pctxt.error != EXPRESSION_OK

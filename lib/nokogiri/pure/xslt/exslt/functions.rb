@@ -247,7 +247,7 @@ module Nokogiri
             if xdepth > tctxt.depth.to_f / tctxt.max_template_depth
               ctxt.xp_error(XPath::RECURSION_LIMIT_EXCEEDED) unless tctxt.stack_overflow_reported
               tctxt.stack_overflow_reported = true
-              throw :xpath_abort
+              ctxt.abort!
             end
             unless tctxt.stack_overflow_reported
               XSLT.transform_error(tctxt, nil, nil,
