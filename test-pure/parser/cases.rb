@@ -169,7 +169,8 @@ module ParserCases
       add.("noent", s, DEFAULT | NOENT)
       add.("dtdattr", s, DEFAULT | DTDLOAD | DTDATTR)
     end
-    BASIC.first(60).each { |s| add.("noblanks", s, DEFAULT | NOBLANKS) }
+    BASIC.each { |s| add.("noblanks", s, DEFAULT | NOBLANKS) }
+    VALID.each { |s| add.("noblanks", s, DEFAULT | NOBLANKS) }
     BASIC.first(60).each { |s| add.("sax1", s, DEFAULT | SAX1) }
     BASES.each do |base|
       (0..base.bytesize).each { |i| add.("trunc", base.byteslice(0, i), DEFAULT) }
