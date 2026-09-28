@@ -1,0 +1,10 @@
+<!ELEMENT doc (item*, note?)>
+<!ELEMENT item (#PCDATA)>
+<!ELEMENT note ANY>
+<!ATTLIST item id ID #REQUIRED kind (a|b) "a" ext CDATA "fromext">
+<!ENTITY extent "external entity text">
+<!ENTITY % pe "<!ENTITY frompe 'pe-value'>">
+%pe;
+<![INCLUDE[ <!ENTITY inc "included"> ]]>
+<![IGNORE[ <!ENTITY ign "ignored"> ]]>
+<!ENTITY chapter SYSTEM "chapter.xml">

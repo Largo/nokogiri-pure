@@ -1,0 +1,2 @@
+<!ENTITY fromfile "file-pe">
+<!ATTLIST doc a CDATA "dflt">

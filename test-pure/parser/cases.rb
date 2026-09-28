@@ -111,6 +111,40 @@ module ParserCases
     "<!DOCTYPE a [<!ELEMENT a EMPTY><!ATTLIST a x NMTOKEN #IMPLIED y NMTOKENS #IMPLIED z IDREF #IMPLIED>]><a x='a b' y=' a  b ' z='1'/>",
   ].freeze
 
+  EXTERNAL = [
+    "<!DOCTYPE doc SYSTEM 'ext.dtd'><doc><item id='x'>&extent;|&frompe;|&inc;|&ign;</item></doc>",
+    "<!DOCTYPE doc SYSTEM 'ext.dtd'><doc><item id='x'>&chapter;</item><note>&chapter;</note></doc>",
+    "<!DOCTYPE doc SYSTEM 'missing.dtd'><doc/>", "<!DOCTYPE doc SYSTEM 'bad.dtd'><doc/>",
+    "<!DOCTYPE doc SYSTEM 'http://example.com/x.dtd'><doc/>", "<!DOCTYPE doc PUBLIC '-//X//DTD X//EN' 'ext.dtd'><doc/>",
+    "<!DOCTYPE doc [<!ENTITY l SYSTEM 'latin1.ent'>]><doc>&l;</doc>",
+    "<!DOCTYPE doc [<!ENTITY % p SYSTEM 'pe.ent'> %p;]><doc>&fromfile;</doc>",
+    "<!DOCTYPE doc [<!ENTITY % p SYSTEM 'pe.ent'> %p; <!ENTITY e 'x'>]><doc>&e;</doc>",
+    "<!DOCTYPE doc [<!ENTITY e SYSTEM 'nofile.xml'>]><doc>&e;</doc>",
+    "<!DOCTYPE doc [<!ENTITY e SYSTEM 'chapter.xml'>]><doc a='&e;'>&e;</doc>",
+    "<?xml version='1.0' standalone='yes'?><!DOCTYPE doc SYSTEM 'ext.dtd'><doc><item id='x'>&extent;</item></doc>",
+    "<!DOCTYPE doc SYSTEM 'ext.dtd' [<!ENTITY extent 'internal wins'>]><doc><item id='x'>&extent;</item></doc>",
+  ].freeze
+
+  ENCODED = [
+    ["<?xml version='1.0' encoding='ISO-8859-1'?><a b='\xe9'>caf\xe9</a>".b, nil],
+    ["<?xml version='1.0' encoding='windows-1252'?><a>\x80\x93</a>".b, nil],
+    ["<?xml version='1.0' encoding='Shift_JIS'?><a>\x82\xa0\x93\xfa</a>".b, nil],
+    ["<?xml version='1.0' encoding='Shift_JIS'?><a>\x82\xa0\xff\xfe</a>".b, nil],
+    ["<?xml version='1.0' encoding='EUC-JP'?><a>\xa4\xa2</a>".b, nil],
+    ["<?xml version='1.0' encoding='UTF-16'?>".encode("UTF-16LE").b + "<a>\u00e9</a>".encode("UTF-16LE").b, nil],
+    ["\xFF\xFE".b + "<?xml version='1.0' encoding='UTF-16'?><a>x\u4e2d</a>".encode("UTF-16LE").b, nil],
+    ["\xFE\xFF".b + "<?xml version='1.0'?><a>x\u4e2d</a>".encode("UTF-16BE").b, nil],
+    ["\xFF\xFE".b + "<?xml version='1.0' encoding='ISO-8859-1'?><a/>".encode("UTF-16LE").b, nil],
+    ["\xFF\xFE".b + "<a>x</a>".encode("UTF-16LE").b + "\x00".b, nil],
+    ["\xFF\xFE".b + "<a>\x00\xD8</a>".b, nil],
+    ["<a>caf\xe9</a>".b, "ISO-8859-1"], ["<a>caf\xe9</a>".b, "UTF-8"], ["<?xml version='1.0' encoding='UTF-8'?><a>caf\xe9</a>".b, "ISO-8859-1"],
+    ["<a>x</a>".encode("UTF-16LE").b, "UTF-16LE"], ["<a>x</a>".encode("UTF-16BE").b, "UTF-16"],
+    ["<?xml version='1.0' encoding='ISO-8859-1'?>".b + "<a>#{"x\xe9" * 3000}</a>".b, nil],
+    ["<?xml version='1.0' encoding='ascii'?>".b + "<a>#{"x" * 5000}\xe9</a>".b, nil],
+    ["<?xml version='1.0' encoding='ascii'?>".b + "<a>#{"x" * 150}\xe9</a>".b, nil],
+    ["<?xml version='1.0' encoding='UTF-8'?><a>\xe9</a>".b, nil], ["\xEF\xBB\xBF<?xml version='1.0' encoding='UTF-16'?><a/>".b, nil],
+  ].freeze
+
   FIXTURES = %w[staff.xml address_book.xml po.xml atom.xml snuggles.xml valid_bar.xml bogus.xml exslt.xml
     iso-8859-1.xml namespace_pressure_test.xml xinclude.xml to_be_xincluded.xml shift_jis.xml].freeze
 
@@ -185,6 +219,26 @@ module ParserCases
       add.("valid_parse_strict", v, STRICT | DTDVALID)
       add.("validate", v, DEFAULT, nil, nil, :validate)
       add.("valid_sax", v, 1 | 16, nil, nil, [:push, 3])
+    end
+    fdir = File.join(__dir__, "files")
+    doc_url = File.join(fdir, "doc.xml")
+    EXTERNAL.each do |x|
+      [DEFAULT, DEFAULT | NOENT, DEFAULT | DTDLOAD, DEFAULT | DTDLOAD | NOENT, DEFAULT | DTDLOAD | DTDATTR | NOENT,
+        DEFAULT | DTDVALID, STRICT | DTDLOAD | NOENT, DEFAULT | DTDLOAD & ~NONET].each do |o|
+        add.("external", x, o, nil, doc_url)
+      end
+      add.("external_sax", x, RECOVER | NOENT, nil, nil, :sax)
+    end
+    add.("external", File.binread(doc_url), DEFAULT | DTDLOAD | NOENT, nil, doc_url)
+    add.("external", File.binread(doc_url), DEFAULT | DTDVALID | NOENT, nil, doc_url)
+    add.("external", File.binread(doc_url), DEFAULT | DTDLOAD, nil, doc_url)
+    add.("external", File.binread(doc_url), DEFAULT, nil, doc_url)
+    add.("external", File.binread(doc_url), DEFAULT | DTDLOAD | NOENT, nil, "doc.xml")
+    ENCODED.each do |e, enc|
+      add.("encoded", e, DEFAULT, enc)
+      add.("encoded", e, STRICT, enc)
+      add.("encoded_push", e, DEFAULT, nil, nil, [:push, 3])
+      add.("encoded_io", e, DEFAULT, enc, nil, :io)
     end
     add.("enc", "<a>\xe9</a>".b, DEFAULT, "ISO-8859-1")
     add.("enc", "<a>x</a>", DEFAULT, "bogus")

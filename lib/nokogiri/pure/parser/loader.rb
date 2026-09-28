@@ -374,7 +374,7 @@ module Nokogiri
             ctxt.err_io(ErrCode::IO_NETWORK_ATTEMPT, canonic)
             # also forwarded to the global error handler (__xmlIOErr)
             Errors.report(XmlError.new(domain: Domain::IO, code: ErrCode::IO_NETWORK_ATTEMPT,
-              message: "Attempt to load network entity #{canonic}\n", level: Level::ERROR,
+              message: "Attempt to load network entity: #{canonic}\n", level: Level::ERROR,
               str1: canonic))
             return nil
           end

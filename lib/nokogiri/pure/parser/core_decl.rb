@@ -335,7 +335,7 @@ module Nokogiri
           end
           ret = nil
           last = nil
-          loop do
+          while true
             next_char
             skip_blank_chars_pe
             name = parse_name
@@ -380,7 +380,7 @@ module Nokogiri
           end
           ret = nil
           last = nil
-          loop do
+          while true
             next_char
             skip_blank_chars_pe
             name = parse_nmtoken
@@ -1152,7 +1152,7 @@ module Nokogiri
               @nodemem = 0
               @nodelen = 0
               copy = Tree.doc_copy_node(cur, @my_doc, 1)
-              if @parse_mode == 1 # XML_PARSE_READER
+              if @parse_mode == 5 # XML_PARSE_READER
                 copy.extra = cur.extra
                 copy._private = cur._private
               end

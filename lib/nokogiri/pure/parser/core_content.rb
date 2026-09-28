@@ -241,7 +241,7 @@ module Nokogiri
           skip_blanks
           grow
           atts = []
-          loop do
+          while true
             c = cur_byte
             break unless c != 0x3E && (c != 0x2F || nxt(1) != 0x3E) && Chars.byte_char?(c) && !stopped?
 
@@ -521,7 +521,7 @@ module Nokogiri
           buf = +""
           buf << utf8_chr(r) << utf8_chr(s)
           pending = [r, s]
-          loop do
+          while true
             if pending[0] == 0x5D && pending[1] == 0x5D && cur_byte == 0x3E
               break
             end

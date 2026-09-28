@@ -170,7 +170,7 @@ module Nokogiri
           @cur += 1
           start = @cur
           qch = quote == 0x22 ? "\"" : "'"
-          loop do
+          while true
             return [nil, nil] if stopped?
 
             if @cur >= @end
@@ -390,7 +390,7 @@ module Nokogiri
           run_re = ATT_RUN[[quote, normalize ? true : false]]
           b = @buf
           ss = @ss
-          loop do
+          while true
             return [nil, false] if stopped?
 
             if @cur >= @end

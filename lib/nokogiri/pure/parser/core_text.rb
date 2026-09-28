@@ -105,7 +105,7 @@ module Nokogiri
           return false if at.(nxt) != 0x2D
 
           state = :after_lang
-          loop do
+          while true
             case state
             when :after_lang
               nxt += 1
@@ -406,7 +406,7 @@ module Nokogiri
 
             start = @cur
             nextl(@cl)
-            loop do
+            while true
               @ss.pos = @cur
               n = @ss.skip(NAME_CHARS_RE)
               if n && n > 0
@@ -511,7 +511,7 @@ module Nokogiri
             end
           else
             nextl(@cl)
-            loop do
+            while true
               @ss.pos = @cur
               n = @ss.skip(NCNAME_CHARS_RE)
               advance_name(n) if n && n > 0
@@ -570,7 +570,7 @@ module Nokogiri
 
           start = pos
           pos += l
-          loop do
+          while true
             c, l = string_cur_char(s, pos)
             break unless name_char?(c)
 
@@ -743,9 +743,9 @@ module Nokogiri
           buf = @buf
           ss = @ss
           sax = @sax
-          loop do
+          while true
             # get_more_space
-            loop do
+            while true
               if buf.getbyte(inp) == 0x20
                 ss.pos = inp
                 n = ss.skip(SPACES_RE)
@@ -782,7 +782,7 @@ module Nokogiri
             end
 
             # get_more
-            loop do
+            while true
               ss.pos = inp
               n = ss.skip(TEST_CHAR_DATA_RE)
               if n
@@ -1008,9 +1008,9 @@ module Nokogiri
             @col = 1
             inp += n
           end
-          loop do
+          while true
             # get_more
-            loop do
+            while true
               ss.pos = inp
               n = ss.skip(COMMENT_FAST_RE)
               if n
