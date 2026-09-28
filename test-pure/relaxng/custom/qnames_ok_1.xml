@@ -1,0 +1,1 @@
+<p:root xmlns:p="urn:p" p:att="1"><p:child/><q:good xmlns:q="urn:q"/><r:x xmlns:r="urn:r"/><y xmlns="urn:default"/></p:root>

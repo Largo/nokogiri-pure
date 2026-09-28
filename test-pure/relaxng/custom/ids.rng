@@ -1,0 +1,9 @@
+<element name="doc" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <zeroOrMore>
+    <choice>
+      <element name="item"><attribute name="id"><data type="ID"/></attribute><text/></element>
+      <element name="ref"><attribute name="to"><data type="IDREF"/></attribute></element>
+      <element name="refs"><attribute name="to"><data type="IDREFS"/></attribute></element>
+    </choice>
+  </zeroOrMore>
+</element>

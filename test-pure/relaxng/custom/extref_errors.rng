@@ -1,0 +1,6 @@
+<element name="wrap" xmlns="http://relaxng.org/ns/structure/1.0">
+  <externalRef href="sub/_broken.rng"/>
+  <externalRef href="sub/missing.rng"/>
+  <externalRef/>
+  <externalRef href="sub/_ext.rng#frag"/>
+</element>

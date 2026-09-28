@@ -1,0 +1,6 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <include href="_inc_a.rng">
+    <define name="item"><element name="entry"><attribute name="k"/></element></define>
+  </include>
+  <define name="body" combine="interleave"><optional><ref name="extra"/></optional></define>
+</grammar>

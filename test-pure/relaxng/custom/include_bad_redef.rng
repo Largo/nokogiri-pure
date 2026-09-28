@@ -1,0 +1,7 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <include href="_inc_a.rng">
+    <start><element name="x"><empty/></element></start>
+    <define name="nothere"><empty/></define>
+    <define><empty/></define>
+  </include>
+</grammar>

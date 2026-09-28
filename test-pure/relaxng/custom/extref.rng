@@ -1,0 +1,4 @@
+<element name="wrap" xmlns="http://relaxng.org/ns/structure/1.0" ns="urn:w">
+  <externalRef href="sub/_ext.rng"/>
+  <optional><externalRef href="sub/_ext.rng"/></optional>
+</element>

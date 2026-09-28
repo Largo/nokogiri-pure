@@ -1,0 +1,10 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><element name="outer"><ref name="inner"/></element></start>
+  <define name="inner">
+    <grammar>
+      <start><element name="in"><parentRef name="leaf"/><ref name="x"/></element></start>
+      <define name="x"><element name="x"><empty/></element></define>
+    </grammar>
+  </define>
+  <define name="leaf"><element name="leaf"><text/></element></define>
+</grammar>

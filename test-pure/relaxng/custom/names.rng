@@ -1,0 +1,9 @@
+<element xmlns="http://relaxng.org/ns/structure/1.0" xmlns:a="urn:a" name="a:root">
+  <oneOrMore>
+    <choice>
+      <element><anyName><except><nsName ns="urn:a"/><name>bad</name></except></anyName><empty/></element>
+      <element><choice><name ns="urn:b">x</name><nsName ns="urn:c"/></choice><zeroOrMore><attribute><anyName/></attribute></zeroOrMore><empty/></element>
+      <element name="a:y"><oneOrMore><attribute><nsName ns="urn:z"><except><name ns="urn:z">no</name></except></nsName></attribute></oneOrMore></element>
+    </choice>
+  </oneOrMore>
+</element>

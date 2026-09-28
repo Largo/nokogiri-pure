@@ -1,0 +1,4 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <include href="sub/_notgrammar.rng"/>
+  <start><element name="a"><empty/></element></start>
+</grammar>

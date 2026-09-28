@@ -1,0 +1,14 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start><choice><ref name="a"/><attribute name="top"/><text/><data type="int"/><list><text/></list></choice></start>
+  <define name="a"><element name="a"><list><list><data type="int"/></list></list>
+    <data type="string"><except><element name="z"><empty/></element><attribute name="q"/><ref name="b"/></except></data>
+    <oneOrMore><group><attribute name="g"/><element name="x"><empty/></element></group></oneOrMore>
+    <oneOrMore><interleave><attribute name="h"/><text/></interleave></oneOrMore>
+    <attribute><anyName/></attribute>
+    <group><attribute name="dup"/><attribute name="dup"/></group>
+    <interleave><element name="i"><empty/></element><element name="i"><empty/></element></interleave>
+  </element></define>
+  <define name="b"><element name="b"><ref name="b"/></element></define>
+  <define name="c"><ref name="d"/></define>
+  <define name="d"><ref name="c"/></define>
+</grammar>

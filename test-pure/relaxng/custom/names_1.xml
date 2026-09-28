@@ -1,0 +1,1 @@
+<a:root xmlns:a="urn:a" xmlns:b="urn:b" xmlns:c="urn:c" xmlns:z="urn:z"><foo/><b:x any="1"/><c:q/><a:y z:ok="1" z:ok2="2"/></a:root>

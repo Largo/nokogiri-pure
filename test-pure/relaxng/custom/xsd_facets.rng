@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<element name="root" xmlns="http://relaxng.org/ns/structure/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <zeroOrMore>
+    <choice>
+      <element name="int"><data type="integer"><param name="minInclusive">1</param><param name="maxExclusive">100</param></data></element>
+      <element name="str"><data type="string"><param name="minLength">2</param><param name="maxLength">5</param></data></element>
+      <element name="pat"><data type="token"><param name="pattern">[a-z]+\d</param></data></element>
+      <element name="dec"><data type="decimal"><param name="totalDigits">4</param><param name="fractionDigits">2</param></data></element>
+      <element name="date"><data type="date"/></element>
+      <element name="bool"><data type="boolean"/></element>
+      <element name="ex"><data type="NCName"><except><value>forbidden</value><value type="NCName">bad</value></except></data></element>
+      <element name="val"><value type="integer">42</value></element>
+      <element name="tok"><value>  hello   world </value></element>
+      <element name="str2"><value type="string">  a </value></element>
+      <element name="lst"><list><oneOrMore><data type="int"/></oneOrMore></list></element>
+      <element name="lst2"><list><data type="int"/><optional><data type="boolean"/></optional><zeroOrMore><value>x</value></zeroOrMore></list></element>
+      <element name="dbl"><data type="double"/></element>
+      <element name="qn"><data type="QName"/></element>
+      <element name="len"><data type="hexBinary"><param name="length">2</param></data></element>
+      <element name="enum"><data type="string"><param name="enumeration">a</param></data></element>
+    </choice>
+  </zeroOrMore>
+</element>

@@ -1,0 +1,4 @@
+<element name="ext" xmlns="http://relaxng.org/ns/structure/1.0">
+  <attribute name="a"/>
+  <element name="inner"><text/></element>
+</element>

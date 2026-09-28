@@ -1,0 +1,17 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0" xmlns:f="urn:foreign" datatypeLibrary="foo#bar">
+  <start combine="choice"><ref name="a"/></start>
+  <start><ref name="b"/></start>
+  <define name="a" combine="choice"><element name="a"><f:annot/><empty/></element></define>
+  <define name="a" combine="interleave"><element name="a2"><empty/></element></define>
+  <define name="b"><element name="b"><ref name="nodef"/></element></define>
+  <define name="b"><element name="b3"><empty/></element></define>
+  <define name="c d"><empty/></define>
+  <define name="e"><element name="1bad"><data type="xyz"/></element></define>
+  <define name="f"><element name="f" foo="bar"><data type="string" datatypeLibrary="urn:unknown"/></element></define>
+  <define name="g"><list><element name="nope"><empty/></element></list></define>
+  <define name="h"><attribute name="x"><attribute name="y"/></attribute></define>
+  <define name="i"><oneOrMore/></define>
+  <define name="j"><value type="string"><f:x/></value></define>
+  <define name="k"><data><param name="x">1</param></data></define>
+  <bogus/>
+</grammar>

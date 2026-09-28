@@ -1,0 +1,14 @@
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element name="top">
+      <interleave>
+        <element name="a"><empty/></element>
+        <optional><element name="b"><text/></element></optional>
+        <zeroOrMore><element name="c"><attribute name="n"/></element></zeroOrMore>
+        <ref name="d"/>
+      </interleave>
+      <optional><element name="tail"><empty/></element></optional>
+    </element>
+  </start>
+  <define name="d"><element><nsName ns="urn:d"/><empty/></element></define>
+</grammar>

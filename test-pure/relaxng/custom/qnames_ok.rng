@@ -1,0 +1,6 @@
+<element xmlns="http://relaxng.org/ns/structure/1.0" xmlns:p="urn:p" name="p:root">
+  <attribute name="p:att"/>
+  <element name="p:child"><empty/></element>
+  <element><name xmlns:q="urn:q">q:good</name><empty/></element>
+  <div xmlns:r="urn:r" ns="urn:default"><element name="r:x"><empty/></element><element name="y"><empty/></element></div>
+</element>

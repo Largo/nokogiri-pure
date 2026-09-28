@@ -1,0 +1,6 @@
+<element name="p" xmlns="http://relaxng.org/ns/structure/1.0">
+  <mixed>
+    <zeroOrMore><choice><element name="b"><text/></element><element name="i"><text/></element></choice></zeroOrMore>
+  </mixed>
+  <attribute name="lang"><choice><value>en</value><value>de</value></choice></attribute>
+</element>

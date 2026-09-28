@@ -1,0 +1,9 @@
+<element name="e" xmlns="http://relaxng.org/ns/structure/1.0">
+  <choice>
+    <group><attribute name="a"/><attribute name="b"/></group>
+    <attribute name="c"/>
+  </choice>
+  <optional><attribute name="d"/></optional>
+  <zeroOrMore><element name="x"><optional><attribute name="y"/></optional></element></zeroOrMore>
+  <choice><element name="p"><empty/></element><element name="q"><empty/></element><empty/></choice>
+</element>

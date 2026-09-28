@@ -1,0 +1,18 @@
+<root>
+  <int>5</int><int>0</int><int>100</int><int>abc</int>
+  <str>a</str><str>abc</str><str>abcdef</str>
+  <pat>abc1</pat><pat>ABC1</pat>
+  <dec>12.34</dec><dec>123.456</dec><dec>12345</dec>
+  <date>2020-01-01</date><date>2020-13-01</date>
+  <bool>true</bool><bool>yes</bool>
+  <ex>ok</ex><ex>forbidden</ex><ex>bad</ex><ex>1bad</ex>
+  <val>42</val><val> 042 </val><val>43</val>
+  <tok>hello world</tok><tok>hello  world  </tok><tok>helloworld</tok>
+  <str2>  a </str2><str2>a</str2>
+  <lst> 1 2   3 </lst><lst>1 x 3</lst><lst/>
+  <lst2>1 true x x</lst2><lst2>1 x</lst2><lst2>1 false y</lst2>
+  <dbl>1e3</dbl><dbl>INF</dbl><dbl>1.2.3</dbl>
+  <qn xmlns:p="urn:p">p:x</qn><qn>q:x</qn>
+  <len>0a1B</len><len>0a1</len>
+  <enum>a</enum><enum>b</enum>
+</root>
