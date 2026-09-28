@@ -77,6 +77,7 @@ module Nokogiri
 
         # buffer offsets where the reads end (pull mode)
         def compute_windows
+          @win_idx = 0
           @windows = raw_boundaries.map { |q| buf_offset(q) }
         end
 
@@ -86,8 +87,11 @@ module Nokogiri
           return @buf.bytesize if w.nil?
 
           target = pos + INPUT_CHUNK
-          i = w.bsearch_index { |x| x >= target }
-          i ? w[i] : @buf.bytesize
+          i = @win_idx || 0
+          i = 0 if i > 0 && w[i - 1] >= target
+          i += 1 while i < w.size && w[i] < target
+          @win_idx = i
+          i < w.size ? w[i] : @buf.bytesize
         end
 
         def encoder?
@@ -146,6 +150,7 @@ module Nokogiri
         def fill_windowed
           bounds = raw_boundaries.select { |q| q > @raw_done }
           @windows = @windows.select { |w| w < @buf.bytesize }
+          @win_idx = 0
           start = @raw_done
           (bounds + [@raw.bytesize]).each_with_index do |q, i|
             last = i == bounds.size
@@ -202,6 +207,7 @@ module Nokogiri
           @raw_done = q
           @held = 0
           @windows = @windows&.select { |w| w < pos }
+          @win_idx = 0
           fill
         end
 

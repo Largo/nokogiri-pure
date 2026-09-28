@@ -348,21 +348,40 @@ module Nokogiri
           max_atts = nratts + nb_total_def
           num_dup_err = 0
           num_ns_err = 0
-          seen = nil
+          # the attribute hash of xmlParseStartTag2: (name, namespace URI) -> first index
+          seen_names = nil
+          seen_uris = nil
+          seen_idx = nil
           if max_atts > 1
-            seen = {}
-            atts.each_with_index do |a, i|
-              if a.ns == NS_INDEX_EMPTY
-                next if a.prefix
-
+            seen_names = []
+            seen_uris = []
+            seen_idx = []
+            i = 0
+            while i < nratts
+              a = atts[i]
+              an = a.ns
+              if an == NS_INDEX_EMPTY
+                if a.prefix
+                  i += 1
+                  next
+                end
                 nsuri = nil
-              elsif a.ns == NS_INDEX_XML
+              elsif an == NS_INDEX_XML
                 nsuri = XML_XML_NAMESPACE
               else
-                nsuri = @ns_tab[a.ns][1]
+                nsuri = @ns_tab[an][1]
               end
-              key = [a.name, nsuri]
-              if (res = seen[key])
+              res = nil
+              k = 0
+              name = a.name
+              while k < seen_names.size
+                if seen_names[k] == name && seen_uris[k] == nsuri
+                  res = seen_idx[k]
+                  break
+                end
+                k += 1
+              end
+              if res
                 if a.prefix == atts[res].prefix
                   err_attribute_dup(a.prefix, a.name)
                   num_dup_err += 1
@@ -372,8 +391,11 @@ module Nokogiri
                   num_ns_err += 1
                 end
               else
-                seen[key] = i
+                seen_names << name
+                seen_uris << nsuri
+                seen_idx << i
               end
+              i += 1
             end
           end
 
@@ -404,14 +426,24 @@ module Nokogiri
                 end
               end
               if max_atts > 1
-                key = [attname, nsuri]
-                if (res = seen[key])
+                res = nil
+                k = 0
+                while k < seen_names.size
+                  if seen_names[k] == attname && seen_uris[k] == nsuri
+                    res = seen_idx[k]
+                    break
+                  end
+                  k += 1
+                end
+                if res
                   next if aprefix == atts[res].prefix
 
                   ns_err(ErrCode::NS_ERR_ATTRIBUTE_REDEFINED,
                     "Namespaced Attribute #{attname} in '#{nsuri}' redefined\n", attname, nsuri)
                 else
-                  seen[key] = atts.length
+                  seen_names << attname
+                  seen_uris << nsuri
+                  seen_idx << atts.length
                 end
               end
               parser_entity_check(attr.expanded_size)
