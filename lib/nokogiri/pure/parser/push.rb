@@ -387,7 +387,15 @@ module Nokogiri
                 # nameNsPush
                 (tab = @name_tab) << name
                 @name = name
-                @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, nb_ns)
+                # (StartTag records are reused: nothing keeps one after its end tag)
+                if (st = @push_tab[tab.length - 1])
+                  st.prefix = prefix
+                  st.uri = uri
+                  st.line = line
+                  st.ns_nr = nb_ns
+                else
+                  @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, nb_ns)
+                end
               else
                 fatal_err_msg_str(ErrCode::ERR_GT_REQUIRED, "Couldn't find end of Start Tag #{name}\n", name)
                 node_pop

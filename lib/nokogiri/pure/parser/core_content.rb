@@ -419,9 +419,13 @@ module Nokogiri
           defaults = @atts_default && @atts_default[[localname, prefix]]
           if atts.nil?
             atts = defaults ? [] : EMPTY_ARRAY
-            nbdef, nb_ns = start_tag2_attributes(atts, localname, prefix, defaults, nb_ns) if defaults
+            if defaults
+              nbdef = start_tag2_attributes(atts, localname, prefix, defaults, nb_ns)
+              nb_ns = @tag_nb_ns
+            end
           elsif defaults || prefixed || (atts.length > 1 && Ctxt.dup_att_names?(atts))
-            nbdef, nb_ns = start_tag2_attributes(atts, localname, prefix, defaults, nb_ns)
+            nbdef = start_tag2_attributes(atts, localname, prefix, defaults, nb_ns)
+            nb_ns = @tag_nb_ns
           end
           # (otherwise every attribute is unprefixed with a distinct name: nothing to resolve or report)
 
@@ -473,8 +477,34 @@ module Nokogiri
           false
         end
 
+        # do two attributes (with a resolved or no namespace) have the same name and namespace URI?
+        def dup_resolved_atts?(atts)
+          n = atts.length
+          i = 1
+          while i < n
+            a = atts[i]
+            an = a.ns
+            unless an == NS_INDEX_EMPTY && a.prefix
+              name = a.name
+              uri = an == NS_INDEX_EMPTY ? nil : (an == NS_INDEX_XML ? XML_XML_NAMESPACE : @ns_tab[an][1])
+              j = 0
+              while j < i
+                b = atts[j]
+                bn = b.ns
+                if b.name == name && !(bn == NS_INDEX_EMPTY && b.prefix)
+                  buri = bn == NS_INDEX_EMPTY ? nil : (bn == NS_INDEX_XML ? XML_XML_NAMESPACE : @ns_tab[bn][1])
+                  return true if buri == uri
+                end
+                j += 1
+              end
+            end
+            i += 1
+          end
+          false
+        end
+
         # the second half of xmlParseStartTag2: defaulted attributes, attribute namespaces,
-        # duplicate detection. Returns [nbdef, nb_ns].
+        # duplicate detection. Returns nbdef; the updated nb_ns is left in @tag_nb_ns.
         def start_tag2_attributes(atts, localname, prefix, defaults, nb_ns)
           nbdef = 0
           nratts = atts.length
@@ -518,7 +548,8 @@ module Nokogiri
           seen_names = nil
           seen_uris = nil
           seen_idx = nil
-          if max_atts > 1
+          # (without defaulted attributes the table only reports duplicates: skipped if there are none)
+          if max_atts > 1 && (defaults || dup_resolved_atts?(atts))
             seen_names = []
             seen_uris = []
             seen_idx = []
@@ -628,7 +659,8 @@ module Nokogiri
             end
           end
 
-          [nbdef, nb_ns]
+          @tag_nb_ns = nb_ns
+          nbdef
         end
 
         # xmlParseEndTag2
@@ -880,7 +912,15 @@ module Nokogiri
           # nameNsPush
           (tab = @name_tab) << name
           @name = name
-          @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, nb_ns)
+          # (StartTag records are reused: nothing keeps one after its end tag)
+          if (st = @push_tab[tab.length - 1])
+            st.prefix = prefix
+            st.uri = uri
+            st.line = line
+            st.ns_nr = nb_ns
+          else
+            @push_tab[tab.length - 1] = StartTag.new(prefix, uri, line, nb_ns)
+          end
 
           if @validate != 0 && @well_formed != 0 && @my_doc && @node && @node.equal?(@my_doc.children)
             @valid &= Valid.validate_root(@vctxt, @my_doc)
