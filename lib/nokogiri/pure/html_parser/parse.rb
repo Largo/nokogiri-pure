@@ -861,7 +861,7 @@ module Nokogiri
               c != 0x3C && c != 0x26 && (ss = (@scanner ||= StringScanner.new(@buf))) && (ss.pos = @cur) &&
               (n = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? TEXT_RUN_UTF8 : TEXT_RUN_ASCII)) &&
               n < HTML_PARSER_BIG_BUFFER_SIZE && ((e = @buf.getbyte(@cur + n)) == 0x3C || e == 0x26) &&
-              @buf.bytesize - @cur - n >= INPUT_CHUNK
+              grow_inert?(@cur + n)
             @clen = 1
             run = ss.matched # (a copy)
             advance_run(run)
@@ -913,7 +913,7 @@ module Nokogiri
             end
             # CUR_CHAR(l), for a plain ASCII char that can't make it grow the input
             c = @buf.getbyte(@cur)
-            if c && c < 0x80 && c != 0 && @buf.bytesize - @cur >= INPUT_CHUNK
+            if c && c < 0x80 && c != 0 && grow_inert?(@cur)
               cur = c
               l = @clen = 1
             else
@@ -1097,7 +1097,7 @@ module Nokogiri
           return false if c.nil? || c == 0x3E || (c == 0x2D && buf.getbyte(start + 1) == 0x3E)
 
           e = buf.byteindex(COMMENT_END, start)
-          return false if e.nil? || buf.bytesize - (e + 2) < INPUT_CHUNK
+          return false if e.nil? || !grow_inert?(e + 2)
 
           content = bytes_at_cur(e - start) # (a copy: a substring would share @buf's memory)
           # a "--!>" starting before "-->" lies entirely inside the content
@@ -1290,14 +1290,14 @@ module Nokogiri
           return -1 if @buf.getbyte(@cur) != 0x3C
 
           if @ni_pos == @cur + 1 && @ni_buf.equal?(@buf) && (len = @ni_len) &&
-              !TAG_NAME_CHAR[@buf.getbyte(@cur + 1 + len) || 0] && @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
+              !TAG_NAME_CHAR[@buf.getbyte(@cur + 1 + len) || 0] && grow_inert?(@cur + 1 + len)
             # the name htmlParseHTMLName_nonInvasive just read here is also the complete
             # htmlParseHTMLName result (it isn't followed by a name char such as '.')
             name = @ni_name
             @cur += len + 1
             @col += len + 1
           elsif (ss = scanner) && (ss.pos = @cur + 1) && (len = ss.skip(TAG_NAME_FAST)) &&
-              @buf.bytesize - @cur - 1 - len >= INPUT_CHUNK
+              grow_inert?(@cur + 1 + len)
             # NEXT; GROW; htmlParseHTMLName without any input grow
             name = cached_name(ss.matched)
             @cur += len + 1
@@ -1349,7 +1349,7 @@ module Nokogiri
             ss.pos = @cur
             raw = attvalue = nil
             len = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII)
-            len = nil if len && @buf.bytesize - @cur - len < INPUT_CHUNK
+            len = nil if len && !grow_inert?(@cur + len)
             if len
               raw = ss[2] || ss[3] || ss[4]
               attvalue = raw && raw.include?(AMP) ? expand_attr_refs(raw) : raw
@@ -1409,7 +1409,8 @@ module Nokogiri
           # buffer that no NEXT can grow the input
           ss = scanner
           ss.pos = @cur + 2
-          if (name = @name) && (len = ss.skip(name)) && @buf.getbyte(@cur + 2 + len) == 0x3E
+          if (name = @name) && @buf.getbyte(@cur) == 0x3C && @buf.getbyte(@cur + 1) == 0x2F &&
+              (len = ss.skip(name)) && @buf.getbyte(@cur + 2 + len) == 0x3E
             # "</" + the current element's name (as spelled in @name, i.e. lowercase) + ">": what
             # END_TAG_FAST would match, without building the name
             len += 3
@@ -1417,7 +1418,7 @@ module Nokogiri
             ss.pos = @cur
             name = (len = ss.skip(END_TAG_FAST)) && cached_name(ss[1])
           end
-          if len && @buf.bytesize - @cur - len >= INPUT_CHUNK
+          if len && grow_inert?(@cur + len)
             if name == @name && (@depth <= 0 || (name != "html" && name != "body" && name != "head"))
               @cur += len
               @col += len
@@ -1483,7 +1484,7 @@ module Nokogiri
           # possible input grow
           ss = scanner
           ss.pos = @cur
-          if (len = ss.skip(REF_FAST)) && @buf.bytesize - @cur - len >= INPUT_CHUNK
+          if (len = ss.skip(REF_FAST)) && grow_inert?(@cur + len)
             v = if (name = ss[1])
               (ent = ENTITY_BY_NAME[name]) && ent.value > 0 ? ent.value : nil
             elsif (dec = ss[2])
@@ -1558,8 +1559,8 @@ module Nokogiri
           end
 
           if c == 0x3E
-            if @buf.bytesize - @cur >= INPUT_CHUNK
-              # NEXT over '>' without a grow
+            if grow_inert?(@cur)
+              # NEXT over '>' without a (effective) grow
               @cur += 1
               @col += 1
             else
@@ -1683,7 +1684,7 @@ module Nokogiri
             pos += len
           end
           self_closing = c == 0x2F
-          return false if buf.bytesize - pos - (self_closing ? 2 : 1) < INPUT_CHUNK
+          return false unless grow_inert?(pos + (self_closing ? 2 : 1))
 
           # commit: NEXT over '<', the name; htmlAutoClose (nothing to do in the content loop);
           # htmlCheckImplied

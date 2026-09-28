@@ -341,6 +341,10 @@ module Nokogiri
           @input_pushed = true
         end
 
+        SAX_FLAG_IVARS = %i[characters cdata_block ignorable_whitespace start_element end_element comment
+          processing_instruction internal_subset start_document end_document set_document_locator serror
+          error warning].to_h { |k| [k, :"@sax_#{k}"] }.freeze
+
         # recompute which SAX callbacks are "non-NULL"
         def update_sax
           s = @sax
@@ -361,7 +365,7 @@ module Nokogiri
             warning: s.respond_to?(:warning),
           }
           # the same flags as instance variables (@sax_characters, ...) for the hot paths
-          @sax_flags.each { |k, v| instance_variable_set(:"@sax_#{k}", v) }
+          @sax_flags.each { |k, v| instance_variable_set(SAX_FLAG_IVARS[k], v) }
           update_sax2
         end
 
@@ -468,6 +472,17 @@ module Nokogiri
         end
 
         # ---- input buffer growth / encoding conversion ------------------------
+
+        # Would an xmlParserGrow at any position up to +end_pos+ be a no-op? Either none happens
+        # (the parser only grows the input when fewer than INPUT_CHUNK bytes are left) or the
+        # input can't grow any more, and then xmlParserGrow only checks the buffer size limit.
+        # (The fast paths use this; near the end of a fully read input they still apply.)
+        def grow_inert?(end_pos)
+          return true if @buf.bytesize - end_pos >= INPUT_CHUNK
+          return false if growable?
+
+          end_pos - @base <= ((@options & PARSE_HUGE) != 0 ? MAX_HUGE_LENGTH : MAX_TEXT_LENGTH)
+        end
 
         # can xmlParserGrow do anything for this input?
         def growable?
