@@ -252,6 +252,15 @@ module Nokogiri
           ss.scan(re)
         end
 
+        # a StringScanner over @buf (strings it returns are copies, never shared with @buf)
+        def scanner
+          ss = @scanner
+          if ss.nil? || !ss.string.equal?(@buf)
+            ss = @scanner = StringScanner.new(@buf)
+          end
+          ss
+        end
+
         NAME_CACHE = {} # rubocop:disable Style/MutableConstant
 
         def cached_name(run)
@@ -1121,6 +1130,22 @@ module Nokogiri
 
         # ---- tags ------------------------------------------------------------------
 
+        # A complete attribute: a name directly followed by ="value", 'value' or an unquoted value
+        # (without '&', NUL or newlines, ending before a blank or '>'), or by a char that neither
+        # continues the name nor starts " = value" (then the value is NULL).
+        ATTR_NAME_SRC = "([A-Za-z_:.][A-Za-z0-9:_.\\-]{0,99})"
+        ATTR_FAST_ASCII = Regexp.new(
+          "#{ATTR_NAME_SRC}(?:=(?:\"([^\\x00&\"\\n\\x80-\\xFF]*)\"|'([^\\x00&'\\n\\x80-\\xFF]*)'|" \
+          "([^\\x00&>\\t\\n\\r \"'\\x80-\\xFF][^\\x00&>\\t\\n\\r \\x80-\\xFF]*)(?=[\\t\\n\\r >]))|" \
+          "(?=[^A-Za-z0-9:_.\\-=\\t\\n\\r ]))".b, Regexp::NOENCODING
+        )
+        ATTR_FAST_UTF8 = Regexp.new(
+          "#{ATTR_NAME_SRC}(?:=(?:\"((?:[^\\x00&\"\\n\\x80-\\xFF]|#{UTF8_CHAR_SRC})*)\"|" \
+          "'((?:[^\\x00&'\\n\\x80-\\xFF]|#{UTF8_CHAR_SRC})*)'|" \
+          "((?:[^\\x00&>\\t\\n\\r \"'\\x80-\\xFF]|#{UTF8_CHAR_SRC})(?:[^\\x00&>\\t\\n\\r \\x80-\\xFF]|#{UTF8_CHAR_SRC})*)" \
+          "(?=[\\t\\n\\r >]))|(?=[^A-Za-z0-9:_.\\-=\\t\\n\\r ]))".b, Regexp::NOENCODING
+        )
+
         # htmlParseStartTag: returns 0 on success, -1 on error, 1 if discarded
         def parse_start_tag
           return -1 unless @has_input
@@ -1164,7 +1189,24 @@ module Nokogiri
           skip_blanks
           while (c = cur_byte) != 0 && c != 0x3E && (c != 0x2F || nxt(1) != 0x3E) && !stopped?
             grow_macro
-            attname, attvalue = parse_attribute
+            # fast path: a whole attribute that htmlParseAttribute would parse without errors,
+            # entities, line breaks or input grows
+            ss = scanner
+            ss.pos = @cur
+            if (len = ss.skip((@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII)) &&
+                @buf.bytesize - @cur - len >= INPUT_CHUNK
+              attname = cached_name(ss[1])
+              attvalue = ss[2] || ss[3] || ss[4]
+              if attvalue && !attvalue.ascii_only?
+                @col += len - attvalue.count(CONT_BYTES)
+              else
+                @col += len
+              end
+              @cur += len
+              attvalue&.force_encoding(Encoding::UTF_8)
+            else
+              attname, attvalue = parse_attribute
+            end
             if attname
               dup = false
               if atts
