@@ -100,10 +100,14 @@ module Nokogiri
           @err_no
         end
 
-        LOOKUP_NEEDLES = Hash.new { |h, k| h[k] = k.pack("C*").b.freeze }
-        LOOKUP_QUOTE_RES = Hash.new { |h, c| h[c] = Regexp.new("[\"'#{Regexp.escape(c.chr)}]".b, Regexp::NOENCODING) }
         DQUOTE = "\"".b.freeze
+        DASH_DASH = "--".b.freeze
+        LT_SLASH = "</".b.freeze
+        ONE_BYTE = Array.new(256) { |i| i.chr.b.freeze }.freeze
         SQUOTE = "'".b.freeze
+        # from an unquoted position: everything up to the next '>' outside of quotes, or up to an
+        # unterminated quote
+        GT_OUTSIDE_QUOTES = /(?:[^>"']++|"[^"]*+"|'[^']*+')*+/n
 
         # htmlParseLookupSequence (the byte loop done with String#byteindex; same result, same
         # check_index / end_check_state bookkeeping)
@@ -119,8 +123,34 @@ module Nokogiri
             len -= 1
           end
           if base < len
-            if ignoreattrval
-              re = LOOKUP_QUOTE_RES[first]
+            if ignoreattrval && first == 0x3E && nxt_c == 0 && third == 0
+              # (len is the whole rest of the buffer here)
+              if quote != 0
+                i = buf.byteindex(quote == 0x22 ? DQUOTE : SQUOTE, cur + base)
+                if i.nil?
+                  base = len
+                else
+                  quote = 0
+                  base = i - cur + 1
+                end
+              end
+              if quote == 0 && base < len
+                ss = scanner
+                ss.pos = cur + base
+                base += ss.skip(GT_OUTSIDE_QUOTES)
+                if base < len
+                  c = buf.getbyte(cur + base)
+                  if c == 0x3E
+                    @check_index = 0
+                    @end_check_state = 0
+                    return base
+                  end
+                  quote = c # an unterminated quote
+                  base = len
+                end
+              end
+            elsif ignoreattrval
+              re = Regexp.new("[\"'#{Regexp.escape(first.chr)}]".b, Regexp::NOENCODING)
               while base < len
                 if quote != 0
                   i = buf.byteindex(quote == 0x22 ? DQUOTE : SQUOTE, cur + base)
@@ -158,11 +188,11 @@ module Nokogiri
               base = len if base < len
             else
               needle = if third != 0
-                LOOKUP_NEEDLES[[first, nxt_c, third]]
+                [first, nxt_c, third].pack("C*")
               elsif nxt_c != 0
-                LOOKUP_NEEDLES[[first, nxt_c]]
+                first == 0x2D && nxt_c == 0x2D ? DASH_DASH : (first == 0x3C && nxt_c == 0x2F ? LT_SLASH : [first, nxt_c].pack("C*"))
               else
-                LOOKUP_NEEDLES[[first]]
+                ONE_BYTE[first]
               end
               i = buf.byteindex(needle, cur + base)
               if i && i - cur < len
@@ -229,102 +259,7 @@ module Nokogiri
               end
 
               case @instate
-              when PARSER_EOF
-                throw :done
-              when PARSER_START
-                if (@input_flags & INPUT_HAS_ENCODING) == 0 && bytes_at(@cur, 4) == "<?xm"
-                  switch_encoding(:utf8)
-                end
-                cur = cur_byte
-                if blank_ch?(cur)
-                  skip_blanks
-                  avail = @buf.bytesize - @cur
-                end
-                @sax.set_document_locator(@user_data, self) if @sax_set_document_locator
-                @sax.start_document(@user_data) if @sax_start_document && @disable_sax == 0
-                cur = cur_byte
-                nx = nxt(1)
-                if cur == 0x3C && nx == 0x21 && doctype_at_cur?
-                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, true) < 0
-                  parse_doctype_decl
-                  @instate = PARSER_PROLOG
-                else
-                  @instate = PARSER_MISC
-                end
-              when PARSER_MISC
-                skip_blanks
-                avail = @buf.bytesize - @cur
-                throw :done if avail < 1
-                if avail < 2
-                  throw :done unless terminate
-                  nx = 0x20
-                else
-                  nx = nxt(1)
-                end
-                cur = cur_byte
-                if cur == 0x3C && nx == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
-                  throw :done if !terminate && lookup_comment_end < 0
-                  parse_comment
-                  @instate = PARSER_MISC
-                elsif cur == 0x3C && nx == 0x3F
-                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, false) < 0
-                  parse_pi
-                  @instate = PARSER_MISC
-                elsif cur == 0x3C && nx == 0x21 && doctype_at_cur?
-                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, true) < 0
-                  parse_doctype_decl
-                  @instate = PARSER_PROLOG
-                elsif cur == 0x3C && nx == 0x21 && avail < 9
-                  throw :done
-                else
-                  @instate = PARSER_CONTENT
-                end
-              when PARSER_PROLOG
-                skip_blanks
-                avail = @buf.bytesize - @cur
-                throw :done if avail < 2
-                cur = cur_byte
-                nx = nxt(1)
-                if cur == 0x3C && nx == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
-                  throw :done if !terminate && lookup_comment_end < 0
-                  parse_comment
-                  @instate = PARSER_PROLOG
-                elsif cur == 0x3C && nx == 0x3F
-                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, false) < 0
-                  parse_pi
-                  @instate = PARSER_PROLOG
-                elsif cur == 0x3C && nx == 0x21 && avail < 4
-                  throw :done
-                else
-                  @instate = PARSER_CONTENT
-                end
-              when PARSER_EPILOG
-                avail = @buf.bytesize - @cur
-                throw :done if avail < 1
-                cur = cur_byte
-                if blank_ch?(cur)
-                  parse_char_data
-                  throw :done
-                end
-                throw :done if avail < 2
-                nx = nxt(1)
-                if cur == 0x3C && nx == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
-                  throw :done if !terminate && lookup_comment_end < 0
-                  parse_comment
-                  @instate = PARSER_EPILOG
-                elsif cur == 0x3C && nx == 0x3F
-                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, false) < 0
-                  parse_pi
-                  @instate = PARSER_EPILOG
-                elsif cur == 0x3C && nx == 0x21 && avail < 4
-                  throw :done
-                else
-                  @err_no = Err::DOCUMENT_END
-                  @well_formed = 0
-                  @instate = PARSER_EOF
-                  @sax.end_document(@user_data) if @sax_end_document
-                  throw :done
-                end
+              # (the frequent states first)
               when PARSER_START_TAG
                 throw :done if avail < 1
                 if avail < 2
@@ -467,6 +402,102 @@ module Nokogiri
                 parse_end_tag
                 @instate = @name_tab.empty? ? PARSER_EPILOG : PARSER_CONTENT
                 @check_index = 0
+              when PARSER_EOF
+                throw :done
+              when PARSER_START
+                if (@input_flags & INPUT_HAS_ENCODING) == 0 && bytes_at(@cur, 4) == "<?xm"
+                  switch_encoding(:utf8)
+                end
+                cur = cur_byte
+                if blank_ch?(cur)
+                  skip_blanks
+                  avail = @buf.bytesize - @cur
+                end
+                @sax.set_document_locator(@user_data, self) if @sax_set_document_locator
+                @sax.start_document(@user_data) if @sax_start_document && @disable_sax == 0
+                cur = cur_byte
+                nx = nxt(1)
+                if cur == 0x3C && nx == 0x21 && doctype_at_cur?
+                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, true) < 0
+                  parse_doctype_decl
+                  @instate = PARSER_PROLOG
+                else
+                  @instate = PARSER_MISC
+                end
+              when PARSER_MISC
+                skip_blanks
+                avail = @buf.bytesize - @cur
+                throw :done if avail < 1
+                if avail < 2
+                  throw :done unless terminate
+                  nx = 0x20
+                else
+                  nx = nxt(1)
+                end
+                cur = cur_byte
+                if cur == 0x3C && nx == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
+                  throw :done if !terminate && lookup_comment_end < 0
+                  parse_comment
+                  @instate = PARSER_MISC
+                elsif cur == 0x3C && nx == 0x3F
+                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, false) < 0
+                  parse_pi
+                  @instate = PARSER_MISC
+                elsif cur == 0x3C && nx == 0x21 && doctype_at_cur?
+                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, true) < 0
+                  parse_doctype_decl
+                  @instate = PARSER_PROLOG
+                elsif cur == 0x3C && nx == 0x21 && avail < 9
+                  throw :done
+                else
+                  @instate = PARSER_CONTENT
+                end
+              when PARSER_PROLOG
+                skip_blanks
+                avail = @buf.bytesize - @cur
+                throw :done if avail < 2
+                cur = cur_byte
+                nx = nxt(1)
+                if cur == 0x3C && nx == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
+                  throw :done if !terminate && lookup_comment_end < 0
+                  parse_comment
+                  @instate = PARSER_PROLOG
+                elsif cur == 0x3C && nx == 0x3F
+                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, false) < 0
+                  parse_pi
+                  @instate = PARSER_PROLOG
+                elsif cur == 0x3C && nx == 0x21 && avail < 4
+                  throw :done
+                else
+                  @instate = PARSER_CONTENT
+                end
+              when PARSER_EPILOG
+                avail = @buf.bytesize - @cur
+                throw :done if avail < 1
+                cur = cur_byte
+                if blank_ch?(cur)
+                  parse_char_data
+                  throw :done
+                end
+                throw :done if avail < 2
+                nx = nxt(1)
+                if cur == 0x3C && nx == 0x21 && nxt(2) == 0x2D && nxt(3) == 0x2D
+                  throw :done if !terminate && lookup_comment_end < 0
+                  parse_comment
+                  @instate = PARSER_EPILOG
+                elsif cur == 0x3C && nx == 0x3F
+                  throw :done if !terminate && lookup_sequence(0x3E, 0, 0, false) < 0
+                  parse_pi
+                  @instate = PARSER_EPILOG
+                elsif cur == 0x3C && nx == 0x21 && avail < 4
+                  throw :done
+                else
+                  @err_no = Err::DOCUMENT_END
+                  @well_formed = 0
+                  @instate = PARSER_EOF
+                  @sax.end_document(@user_data) if @sax_end_document
+                  throw :done
+                end
               else
                 html_err(Err::INTERNAL_ERROR, "HPP: internal error\n")
                 @instate = PARSER_EOF

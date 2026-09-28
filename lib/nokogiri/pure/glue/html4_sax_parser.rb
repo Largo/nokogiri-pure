@@ -28,8 +28,12 @@ module Nokogiri
           @rb_parser.instance_variable_get(:@document)
         end
 
+        # a fresh, mutable UTF-8 copy (NOKOGIRI_STR_NEW2)
         def str(s)
-          s.nil? ? nil : HTMLParser.to_utf8(s).dup
+          return nil if s.nil?
+
+          s = s.to_s
+          s.encoding == Encoding::UTF_8 ? s.dup : s.dup.force_encoding(Encoding::UTF_8)
         end
 
         # noko_html4_sax_parser_start_document / noko_xml_sax_parser_start_document_callback
