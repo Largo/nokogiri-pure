@@ -823,120 +823,126 @@ module Nokogiri
 
         old_inst = ctxt.inst
         ctxt.inst = comp.node
+        begin
+          comp_match_steps(ctxt, comp, match_node)
+        ensure
+          ctxt.inst = old_inst
+        end
+      end
+
+      # xsltTestCompMatch's step loop (with the rollback states for '//'): 1, 0 or -1
+      def comp_match_steps(ctxt, comp, match_node)
+        node = match_node
         states = nil
-        found = 0
         steps = comp.steps
         nb = steps.length
         sel = nil
         i = 0
-        begin
-          result = catch(:pattern_done) do
-            loop do # restart
-              rollback = false
-              while i < nb
-                step = steps[i]
-                sel = step if step.op != OP_PREDICATE
-                case step.op
-                when OP_END
-                  throw :pattern_done, 1
-                when OP_PARENT
-                  t = node.type
-                  if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE || node.is_a?(XmlNs)
-                    rollback = true
-                    break
-                  end
-                  node = node.parent
-                  if node.nil?
-                    rollback = true
-                    break
-                  end
-                  if step.value.nil?
-                    i += 1
-                    next
-                  end
-                  if step.value != node.name ||
-                      (node.ns.nil? ? !step.value2.nil? : (node.ns.href && (step.value2.nil? || step.value2 != node.ns.href)))
-                    rollback = true
-                    break
-                  end
-                  i += 1
-                  next
-                when OP_ANCESTOR
-                  if step.value.nil?
-                    step = steps[i + 1]
-                    throw :pattern_done, 1 if step.op == OP_ROOT
-                    unless [OP_ELEM, OP_ALL, OP_NS, OP_ID, OP_KEY].include?(step.op)
-                      rollback = true
-                      break
-                    end
-                  end
-                  if node.nil?
-                    rollback = true
-                    break
-                  end
-                  t = node.type
-                  if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE || node.is_a?(XmlNs)
-                    rollback = true
-                    break
-                  end
-                  node = node.parent
-                  if step.op != OP_ELEM && step.op != OP_ALL
-                    (states ||= []) << [i, node]
-                    i += 1
-                    next
-                  end
-                  i += 1
-                  sel = step
-                  if step.value.nil?
-                    (states ||= []) << [i - 1, node]
-                    i += 1
-                    next
-                  end
-                  while node
-                    if node.type == ELEMENT_NODE && step.value == node.name
-                      if node.ns.nil?
-                        break if step.value2.nil?
-                      elsif node.ns.href
-                        break if step.value2 && step.value2 == node.ns.href
-                      end
-                    end
-                    node = node.parent
-                  end
-                  if node.nil?
-                    rollback = true
-                    break
-                  end
-                  (states ||= []) << [i - 1, node]
-                  i += 1
-                  next
-                when OP_PREDICATE
-                  throw :pattern_done, test_comp_match_direct(ctxt, comp, match_node, comp.ns_list) if comp.direct
-
-                  unless test_predicate_match(ctxt, comp, node, step, sel)
-                    rollback = true
-                    break
-                  end
-                else
-                  if test_step_match(ctxt, node, step) != 1
-                    rollback = true
-                    break
-                  end
-                end
-                i += 1
+        while true # rubocop:disable Style/InfiniteLoop -- restart
+          rollback = false
+          while i < nb
+            step = steps[i]
+            op = step.op
+            sel = step if op != OP_PREDICATE
+            if op == OP_END
+              return 1
+            elsif op == OP_PARENT
+              node = pattern_parent_step(node, step)
+              if node.nil?
+                rollback = true
+                break
               end
-              throw :pattern_done, 1 unless rollback
+            elsif op == OP_ANCESTOR
+              states ||= []
+              code, i, node, sel = pattern_ancestor_step(steps, i, node, sel, states)
+              return 1 if code == 1
+              if code == 0
+                rollback = true
+                break
+              end
+              next
+            elsif op == OP_PREDICATE
+              return test_comp_match_direct(ctxt, comp, match_node, comp.ns_list) if comp.direct
 
-              # rollback:
-              throw :pattern_done, 0 if states.nil? || states.empty?
-
-              i, node = states.pop
+              unless test_predicate_match(ctxt, comp, node, step, sel)
+                rollback = true
+                break
+              end
+            elsif test_step_match(ctxt, node, step) != 1
+              rollback = true
+              break
             end
+            i += 1
           end
-          found = result
-        ensure
-          ctxt.inst = old_inst
+          return 1 unless rollback
+
+          # rollback:
+          return 0 if states.nil? || states.empty?
+
+          i, node = states.pop
         end
-        found
+      end
+
+      # XSLT_OP_PARENT: the parent to continue with, nil to roll back
+      def pattern_parent_step(node, step)
+        t = node.type
+        return nil if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE || node.is_a?(XmlNs)
+
+        node = node.parent
+        return nil if node.nil?
+        return node if step.value.nil?
+        return nil if step.value != node.name
+
+        if node.ns.nil?
+          return nil unless step.value2.nil?
+        elsif node.ns.href && (step.value2.nil? || step.value2 != node.ns.href)
+          return nil
+        end
+        node
+      end
+
+      # XSLT_OP_ANCESTOR: returns [code, i, node, sel] with code 1 (matched), 0 (roll back) or
+      # 2 (continue at step i); pushes the rollback state onto +states+.
+      def pattern_ancestor_step(steps, i, node, sel, states)
+        step = steps[i]
+        if step.value.nil?
+          step = steps[i + 1]
+          return [1, i, node, sel] if step.op == OP_ROOT
+          return [0, i, node, sel] unless [OP_ELEM, OP_ALL, OP_NS, OP_ID, OP_KEY].include?(step.op)
+        end
+        return [0, i, node, sel] if node.nil?
+
+        t = node.type
+        return [0, i, node, sel] if t == DOCUMENT_NODE || t == HTML_DOCUMENT_NODE || node.is_a?(XmlNs)
+
+        node = node.parent
+        if step.op != OP_ELEM && step.op != OP_ALL
+          states << [i, node]
+          return [2, i + 1, node, sel]
+        end
+        i += 1
+        sel = step
+        if step.value.nil?
+          states << [i - 1, node]
+          return [2, i + 1, node, sel]
+        end
+        node = node.parent until node.nil? || pattern_ancestor_match?(node, step)
+        return [0, i, node, sel] if node.nil?
+
+        states << [i - 1, node]
+        [2, i + 1, node, sel]
+      end
+
+      def pattern_ancestor_match?(node, step)
+        return false unless node.type == ELEMENT_NODE && step.value == node.name
+
+        if node.ns.nil?
+          step.value2.nil?
+        elsif node.ns.href
+          !step.value2.nil? && step.value2 == node.ns.href
+        else
+          false
+        end
       end
 
       # xsltTestCompMatchList
