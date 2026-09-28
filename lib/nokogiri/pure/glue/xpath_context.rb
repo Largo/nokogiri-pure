@@ -95,6 +95,7 @@ module Nokogiri
       ).freeze
 
       PURE_FUNCS[CSS_CLASS_FUNC] = true
+      STRING_PREDICATES[CSS_CLASS_FUNC] = ->(hay, needle) { XPath.css_class_match?(hay, needle) }
       PURE_FUNCS[LOCAL_NAME_IS_FUNC] = true
 
       # _noko_xml_xpath_context__xpath2ruby: returns the Ruby object, or :undef

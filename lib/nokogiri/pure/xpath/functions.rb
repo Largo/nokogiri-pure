@@ -262,7 +262,7 @@ module Nokogiri
           cast_top_to_string
           hay = @value_tab.pop
           xp_error(INVALID_TYPE) if hay.nil? || !hay.is_a?(String)
-          @value_tab.push(!hay.b.index(needle.b).nil?)
+          @value_tab.push(CONTAINS_PREDICATE.call(hay, needle))
         end
 
         # xmlXPathStartsWithFunction
@@ -274,7 +274,7 @@ module Nokogiri
           cast_top_to_string
           hay = @value_tab.pop
           xp_error(INVALID_TYPE) if hay.nil? || !hay.is_a?(String)
-          @value_tab.push(hay.b.start_with?(needle.b))
+          @value_tab.push(STARTS_WITH_PREDICATE.call(hay, needle))
         end
 
         # xmlXPathSubstringFunction
@@ -653,6 +653,31 @@ module Nokogiri
           @value_tab.push(target.force_encoding(::Encoding::UTF_8))
         end
       end
+
+      # Two-argument functions that cast both arguments to strings and push a boolean computed
+      # from them alone, as callables (hay, needle): ParserContext#eval_function computes calls
+      # whose arguments are a context step and a string literal directly. The glue registers
+      # nokogiri-builtin:css-class here.
+      STRING_PREDICATES = {}.compare_by_identity
+
+      # the byte-wise tests of contains() / starts-with() (two valid UTF-8 strings compare the
+      # same character-wise)
+      def self.utf8_pair?(a, b)
+        a.encoding == ::Encoding::UTF_8 && b.encoding == ::Encoding::UTF_8 && a.valid_encoding? &&
+          b.valid_encoding?
+      end
+
+      CONTAINS_PREDICATE = lambda do |hay, needle|
+        utf8_pair?(hay, needle) ? hay.include?(needle) : !hay.b.index(needle.b).nil?
+      end
+      STARTS_WITH_PREDICATE = lambda do |hay, needle|
+        utf8_pair?(hay, needle) ? hay.start_with?(needle) : hay.b.start_with?(needle.b)
+      end
+      # the same for the standard functions (by method name)
+      STD_STRING_PREDICATES = {
+        fn_contains: CONTAINS_PREDICATE,
+        fn_starts_with: STARTS_WITH_PREDICATE,
+      }.freeze
 
       FN = {}
       STANDARD_FN_METHODS = {

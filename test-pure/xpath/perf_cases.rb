@@ -107,3 +107,13 @@ end
   /node()/node()[count(preceding-sibling::node())=1]
 ].each { |e| EXPRS << ["/", e] }
 %w[//node()/..[1] //node()/parent::*[1] //@*/..[1] //node()/parent::node()[2] (//node()/..)[1]].each { |e| EXPRS << ["/", e] }
+# string predicates with a context step / "." and a literal
+%w[
+  //*[contains(.,'1')] //*[starts-with(.,'t')] //@*[contains(.,'x')] //*[contains(@n,'3')] //*[starts-with(@class,'r1')]
+  //*[contains(text(),'e')] //*[starts-with(text(),'')] //*[contains(node(),'a')] //*[contains(@*,'1')]
+  //*[starts-with(preceding-sibling::*,'t')] //*[contains(following-sibling::node(),'t')] //*[contains(ancestor::*,'t')]
+  //*[nokogiri-builtin:css-class(.,'x')] //*[nokogiri-builtin:css-class(text(),'t1')] //*[nokogiri-builtin:css-class(@*,'x')]
+  //*[nokogiri-builtin:css-class(ancestor::*/@class,'c1')] //*[contains(@p:k,'1')] //*[nokogiri-builtin:css-class(@class,1)]
+  //namespace::*[contains(.,'urn')] //*[contains(.,'é')] //*[starts-with(normalize-space(.),'t')]
+].each { |e| EXPRS << ["/", e, { ns: { "p" => "urn:p" } }] }
+EXPRS << ["/", "//*[contains(@p:k,'1')]"]

@@ -78,7 +78,7 @@ module Nokogiri
         attr_accessor :op, :ch1, :ch2, :value, :value2, :value3, :value4, :value5, :c1, :c2,
           :index, :positional, :max_pos, :last_fn, :first_one, :plan,
           :dos_op, :impure, :std_fn, :std_meth, :fused, :sorted_axis,
-          :eq_step, :eq_value, :count_step, :count_meth, :fast_args
+          :eq_step, :eq_value, :count_step, :count_meth, :fast_args, :pred_args, :std_pred
 
         def initialize(op, ch1, ch2, value, value2, value3, value4, value5)
           @op = op
@@ -247,6 +247,11 @@ module Nokogiri
           end
         end
         op.fast_args = kinds.freeze
+        # (a context step or ".", then a string literal): candidates for the string predicates
+        if kinds.length == 2 && kinds[0][0] != :value && kinds[1][0] == :value && kinds[1][1].value4.is_a?(String)
+          op.pred_args = kinds
+          op.std_pred = STD_STRING_PREDICATES[op.std_fn] if op.std_fn
+        end
       end
 
       # Static result types of the standard functions (used by the rewrite below)
