@@ -196,6 +196,8 @@ module ParserCases
       add.("push7", s, 0, nil, nil, [:push, 7])
     end
     BASES.each { |b| [1, 2, 3, 5, 16, 64].each { |n| add.("pushbase", b, DEFAULT, nil, nil, [:push, n]) } }
+    BASIC.first(100).each { |b| add.("push_sax1", b, DEFAULT | SAX1, nil, nil, [:push, 4]) }
+    BASIC.first(100).each { |b| add.("push_noent", b, DEFAULT | NOENT | DTDLOAD, nil, nil, [:push, 4]) }
     FRAGMENTS.each do |f|
       CONTEXTS.each do |c|
         add.("fragment", f, DEFAULT, nil, nil, [:fragment, c])

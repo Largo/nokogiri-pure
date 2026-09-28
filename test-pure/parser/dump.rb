@@ -16,7 +16,7 @@ module ParserDump
   end
 
   def err(e)
-    [e.message, e.line, e.column, e.level, e.code, e.domain, e.str1, e.str2, e.str3, e.int1, e.file]
+    [e.message, e.line, e.column, e.level, e.code, e.domain, e.str1, e.str2, e.str3, e.int1, e.file, (e.respond_to?(:path) ? e.path : nil)]
   end
 
   def node(n, depth = 0)
