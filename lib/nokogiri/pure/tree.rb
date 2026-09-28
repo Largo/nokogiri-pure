@@ -1865,22 +1865,13 @@ module Nokogiri
         len = bytes.bytesize
         while i < len
           c = bytes.getbyte(i)
+          # (Nokogiri's libxml2 patches 0001/0002 remove the HTML "<!--...-->" and "&{...}"
+          # attribute passthroughs, so there are none here)
           if c == 0x3C # <
-            if html && attr && bytes.getbyte(i + 1) == 0x21 && bytes.getbyte(i + 2) == 0x2D &&
-                bytes.getbyte(i + 3) == 0x2D && (e = bytes.index("-->", i))
-              out << bytes.byteslice(i, e + 3 - i)
-              i = e + 3
-              next
-            end
             out << "&lt;"
           elsif c == 0x3E
             out << "&gt;"
           elsif c == 0x26 # &
-            if html && attr && bytes.getbyte(i + 1) == 0x7B && (e = bytes.index("}", i))
-              out << bytes.byteslice(i, e + 1 - i)
-              i = e + 1
-              next
-            end
             out << "&amp;"
           elsif (c >= 0x20 && c < 0x80) || c == 0x0A || c == 0x09 || (html && c == 0x0D)
             out << c
