@@ -262,8 +262,8 @@ module Nokogiri
       end
 
       class Context
-        attr_reader :sax
-        attr_accessor :user_data, :my_doc, :node, :node_tab, :name, :name_tab, :html, :depth,
+        attr_reader :sax, :user_data
+        attr_accessor :my_doc, :node, :node_tab, :name, :name_tab, :html, :depth,
           :options, :recovery, :keep_blanks, :disable_sax, :well_formed, :err_no, :instate,
           :encoding, :linenumbers, :record_info, :pedantic, :replace_entities, :validate,
           :dict_names, :loadsubset, :nb_errors, :nb_warnings, :error_handler, :valid,
@@ -356,6 +356,17 @@ module Nokogiri
           }
           # the same flags as instance variables (@sax_characters, ...) for the hot paths
           @sax_flags.each { |k, v| instance_variable_set(:"@sax_#{k}", v) }
+          update_sax2
+        end
+
+        # is the default tree-building handler in use (its callbacks then run as sax2_* methods)?
+        def update_sax2
+          @sax2 = @sax.equal?(SAX2Handler::DEFAULT) && @user_data.equal?(self)
+        end
+
+        def user_data=(data)
+          @user_data = data
+          update_sax2 if @sax_flags
         end
 
         def sax=(s)
@@ -930,7 +941,11 @@ module Nokogiri
         # ---- SAX dispatch helpers ------------------------------------------------
 
         def sax_characters(str)
-          @sax.characters(@user_data, str) if @sax_characters
+          if @sax2
+            sax2_text(str, TEXT_NODE)
+          elsif @sax_characters
+            @sax.characters(@user_data, str)
+          end
         end
 
         def sax_ignorable_whitespace(str)
@@ -940,11 +955,19 @@ module Nokogiri
         end
 
         def sax_start_element(name, atts)
-          @sax.start_element(@user_data, name, atts) if @sax_start_element
+          if @sax2
+            sax2_start_element(name, atts)
+          elsif @sax_start_element
+            @sax.start_element(@user_data, name, atts)
+          end
         end
 
         def sax_end_element(name)
-          @sax.end_element(@user_data, name) if @sax_end_element
+          if @sax2
+            node_pop
+          elsif @sax_end_element
+            @sax.end_element(@user_data, name)
+          end
         end
 
         # the SAX locator (xmlSAX2GetLineNumber / GetColumnNumber)

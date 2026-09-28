@@ -800,13 +800,13 @@ module Nokogiri
           str = buf.force_encoding(Encoding::UTF_8)
           if blanks
             if @keep_blanks != 0
-              @sax.characters(@user_data, str) if @sax_characters
+              sax_characters(str)
             else
               sax_ignorable_whitespace(str)
             end
           else
             check_paragraph
-            @sax.characters(@user_data, str) if @sax_characters
+            sax_characters(str)
           end
         end
 

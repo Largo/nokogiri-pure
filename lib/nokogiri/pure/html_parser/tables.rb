@@ -1117,8 +1117,7 @@ module Nokogiri
 
       # htmlCheckAutoClose: does +newtag+ implicitly close +oldtag+?
       def check_auto_close(newtag, oldtag)
-        return false if newtag.nil? || oldtag.nil? || newtag.include?("\0") || oldtag.include?("\0")
-
+        # (a name containing NUL can't collide with a table entry here, unlike in a joined key)
         (START_CLOSE_MAP[oldtag] || START_CLOSE_NONE).key?(newtag)
       end
 

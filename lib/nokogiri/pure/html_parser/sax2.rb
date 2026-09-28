@@ -120,91 +120,22 @@ module Nokogiri
 
         # xmlSAX2AppendChild
         def append_child(ctxt, node)
-          parent = ctxt.node || ctxt.my_doc
-          last = parent.last
-          if last.nil?
-            parent.children = node
-          else
-            last.next = node
-            node.prev = last
-          end
-          parent.last = node
-          node.parent = parent
-          if node.type != TEXT_NODE && ctxt.linenumbers != 0
-            node.line = ctxt.line < 65535 ? ctxt.line : 65535
-          end
+          ctxt.sax2_append_child(node)
         end
 
         # xmlSAX2StartElement (HTML branch)
         def start_element(ctxt, fullname, atts)
-          doc = ctxt.my_doc
-          return if fullname.nil? || doc.nil?
-
-          if ctxt.validate != 0 && doc.ext_subset.nil? &&
-              (doc.int_subset.nil? ||
-               (doc.int_subset.notations.nil? && doc.int_subset.elements.nil? &&
-                doc.int_subset.attributes.nil? && doc.int_subset.entities.nil?))
-            ctxt.ctxt_err(Domain::DTD, 94, Level::ERROR, nil, nil, nil, 0, "Validation failed: no DTD found !")
-            ctxt.valid = 0
-            ctxt.validate = 0
-          end
-
-          ret = Tree.new_doc_node(doc, nil, fullname)
-          append_child(ctxt, ret)
-          if ctxt.node_push(ret) < 0
-            Tree.unlink_node(ret)
-            return
-          end
-          return if atts.nil?
-
-          i = 0
-          while i < atts.length
-            attribute_internal(ctxt, atts[i], atts[i + 1])
-            i += 2
-          end
+          ctxt.sax2_start_element(fullname, atts)
         end
 
         # xmlSAX2AttributeInternal (HTML branch)
         def attribute_internal(ctxt, fullname, value)
-          node = ctxt.node
-          doc = ctxt.my_doc
-          value = fullname.dup if value.nil? && HTMLParser.boolean_attr?(fullname)
-
-          ret = Tree.new_prop_internal(node, nil, fullname, nil)
-          return if ret.nil?
-
-          unless value.nil?
-            t = Tree.new_doc_text(doc, value)
-            t.parent = ret
-            ret.children = t
-            ret.last = t
-          end
-
-          if (ctxt.loadsubset & 8) == 0 && ret.children && ret.children.type == TEXT_NODE &&
-              ret.children.next.nil?
-            content = ret.children.content
-            if fullname == "xml:id"
-              unless HTMLParser.valid_ncname?(content)
-                ctxt.ctxt_err(Domain::DTD, 539, Level::ERROR, content, nil, nil, 0,
-                  "xml:id : attribute value #{content} is not an NCName\n")
-                ctxt.valid = 0
-              end
-              add_id(ctxt, ret, content)
-            elsif Tree.is_id(doc, node, ret)
-              add_id(ctxt, ret, content)
-            end
-          end
+          ctxt.sax2_attribute(fullname, value)
         end
 
         # xmlAddID (with the parser's validation context)
         def add_id(ctxt, attr, value)
-          return if attr.doc != ctxt.my_doc
-
-          res = Tree.add_id(attr, value)
-          if res == 0
-            ctxt.ctxt_err(Domain::VALID, 513, Level::ERROR, value, nil, nil, 0,
-              "ID #{value} already defined\n", attr.parent)
-          end
+          ctxt.sax2_add_id(attr, value)
         end
 
         # xmlSAX2EndElement
@@ -214,38 +145,7 @@ module Nokogiri
 
         # xmlSAX2Text
         def text(ctxt, str, type)
-          parent = ctxt.node
-          return if parent.nil?
-
-          last = parent.last
-          if last.nil?
-            last = type == TEXT_NODE ? Tree.new_text(str) : Tree.new_cdata_block(ctxt.my_doc, str)
-            parent.children = last
-            parent.last = last
-            last.parent = parent
-            last.doc = parent.doc
-          elsif last.type == type && (type != TEXT_NODE || last.name.equal?(STRING_TEXT) || last.name == STRING_TEXT)
-            max_length = (ctxt.options & PARSE_HUGE) != 0 ? MAX_HUGE_LENGTH : MAX_TEXT_LENGTH
-            if str.bytesize > max_length || last.content.bytesize > max_length - str.bytesize
-              ctxt.fatal_err(Err::RESOURCE_LIMIT, "Text node too long, try XML_PARSE_HUGE")
-              ctxt.halt_parser
-              return
-            end
-            last.content << str
-          else
-            last = type == TEXT_NODE ? Tree.new_text(str) : Tree.new_cdata_block(ctxt.my_doc, str)
-            last.doc = ctxt.my_doc
-            append_child(ctxt, last)
-          end
-
-          if type == TEXT_NODE && ctxt.linenumbers != 0
-            if ctxt.line < 65535
-              last.line = ctxt.line
-            else
-              last.line = 65535
-              last.psvi = ctxt.line if (ctxt.options & PARSE_BIG_LINES) != 0
-            end
-          end
+          ctxt.sax2_text(str, type)
         end
 
         # xmlSAX2Characters
@@ -278,6 +178,135 @@ module Nokogiri
 
       # a NULL SAX handler (ctxt->sax == NULL): no callbacks at all
       NullSAX = Object.new.freeze
+
+      # The tree-building SAX2 callbacks proper, run on the parser context itself (the default
+      # handler's user data); the parser calls them directly when the default handler is in use.
+      class Context
+        # xmlSAX2AppendChild
+        def sax2_append_child(node)
+          parent = @node || @my_doc
+          last = parent.last
+          if last.nil?
+            parent.children = node
+          else
+            last.next = node
+            node.prev = last
+          end
+          parent.last = node
+          node.parent = parent
+          if node.type != TEXT_NODE && @linenumbers != 0
+            node.line = @line < 65535 ? @line : 65535
+          end
+        end
+
+        # xmlSAX2StartElement (HTML branch)
+        def sax2_start_element(fullname, atts)
+          doc = @my_doc
+          return if fullname.nil? || doc.nil?
+
+          if @validate != 0 && doc.ext_subset.nil? &&
+              (doc.int_subset.nil? ||
+               (doc.int_subset.notations.nil? && doc.int_subset.elements.nil? &&
+                doc.int_subset.attributes.nil? && doc.int_subset.entities.nil?))
+            ctxt_err(Domain::DTD, 94, Level::ERROR, nil, nil, nil, 0, "Validation failed: no DTD found !")
+            @valid = 0
+            @validate = 0
+          end
+
+          ret = Tree.new_doc_node(doc, nil, fullname)
+          sax2_append_child(ret)
+          if node_push(ret) < 0
+            Tree.unlink_node(ret)
+            return
+          end
+          return if atts.nil?
+
+          i = 0
+          n = atts.length
+          while i < n
+            sax2_attribute(atts[i], atts[i + 1])
+            i += 2
+          end
+        end
+
+        # xmlSAX2AttributeInternal (HTML branch)
+        def sax2_attribute(fullname, value)
+          node = @node
+          doc = @my_doc
+          value = fullname.dup if value.nil? && HTMLParser.boolean_attr?(fullname)
+
+          ret = Tree.new_prop_internal(node, nil, fullname, nil)
+          return if ret.nil?
+
+          unless value.nil?
+            t = Tree.new_doc_text(doc, value)
+            t.parent = ret
+            ret.children = t
+            ret.last = t
+          end
+
+          if (@loadsubset & 8) == 0 && (t = ret.children) && t.type == TEXT_NODE && t.next.nil?
+            content = t.content
+            if fullname == "xml:id"
+              unless HTMLParser.valid_ncname?(content)
+                ctxt_err(Domain::DTD, 539, Level::ERROR, content, nil, nil, 0,
+                  "xml:id : attribute value #{content} is not an NCName\n")
+                @valid = 0
+              end
+              sax2_add_id(ret, content)
+            elsif Tree.is_id(doc, node, ret)
+              sax2_add_id(ret, content)
+            end
+          end
+        end
+
+        # xmlAddID (with the parser's validation context)
+        def sax2_add_id(attr, value)
+          return if attr.doc != @my_doc
+
+          res = Tree.add_id(attr, value)
+          if res == 0
+            ctxt_err(Domain::VALID, 513, Level::ERROR, value, nil, nil, 0,
+              "ID #{value} already defined\n", attr.parent)
+          end
+        end
+
+        # xmlSAX2Text
+        def sax2_text(str, type)
+          parent = @node
+          return if parent.nil?
+
+          last = parent.last
+          if last.nil?
+            last = type == TEXT_NODE ? Tree.new_text(str) : Tree.new_cdata_block(@my_doc, str)
+            parent.children = last
+            parent.last = last
+            last.parent = parent
+            last.doc = parent.doc
+          elsif last.type == type && (type != TEXT_NODE || last.name.equal?(STRING_TEXT) || last.name == STRING_TEXT)
+            max_length = (@options & PARSE_HUGE) != 0 ? MAX_HUGE_LENGTH : MAX_TEXT_LENGTH
+            if str.bytesize > max_length || last.content.bytesize > max_length - str.bytesize
+              fatal_err(Err::RESOURCE_LIMIT, "Text node too long, try XML_PARSE_HUGE")
+              halt_parser
+              return
+            end
+            last.content << str
+          else
+            last = type == TEXT_NODE ? Tree.new_text(str) : Tree.new_cdata_block(@my_doc, str)
+            last.doc = @my_doc
+            sax2_append_child(last)
+          end
+
+          if type == TEXT_NODE && @linenumbers != 0
+            if @line < 65535
+              last.line = @line
+            else
+              last.line = 65535
+              last.psvi = @line if (@options & PARSE_BIG_LINES) != 0
+            end
+          end
+        end
+      end
     end
   end
 end
