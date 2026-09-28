@@ -1581,6 +1581,123 @@ module Nokogiri
           end
         end
 
+        EXPRESS_TAG_NAME = /[A-Za-z][A-Za-z0-9]{0,99}/n
+        EXPRESS_BLANKS = /[ \t\n\r]*+/n
+        EXPRESS_SPECIAL = { "html" => true, "head" => true, "body" => true, "meta" => true }.freeze
+
+        # Express lane for one iteration of htmlParseContentInternal at "<name": a start tag
+        # whose name is plain alphanumeric (so htmlParseHTMLName_nonInvasive and
+        # htmlParseHTMLName agree on it), that doesn't auto-close anything, isn't one of the
+        # special html/head/body/meta tags, is a known element, and whose attributes all take
+        # the attribute fast path (no errors, duplicates or input grows). Does exactly what
+        # the full path would (implied elements, SAX events, line/column bookkeeping); returns
+        # false, having done nothing, for anything else.
+        def express_start_tag(current_node, depth)
+          return false if current_node == "script" || current_node == "style"
+          return false if !@name_tab.empty? && depth >= @name_tab.length && current_node != @name
+
+          buf = @buf
+          start = @cur
+          ss = scanner
+          ss.pos = start + 1
+          nlen = ss.skip(EXPRESS_TAG_NAME)
+          return false if nlen.nil? || TAG_NAME_CHAR[buf.getbyte(start + 1 + nlen) || 0]
+
+          name = cached_name(ss.matched)
+          return false if EXPRESS_SPECIAL.key?(name)
+          return false if @name && (closes = CLOSED_BY[name]) && closes.key?(@name)
+
+          info = HTMLParser.tag_lookup(name)
+          return false if info.nil?
+
+          # dry run over the attributes: position, line and column as they would evolve
+          pos = start + 1 + nlen
+          line = @line
+          col = @col + 1 + nlen
+          atts = nil
+          attre = (@input_flags & INPUT_HAS_ENCODING) != 0 ? ATTR_FAST_UTF8 : ATTR_FAST_ASCII
+          while true
+            ss.pos = pos
+            if (bl = ss.skip(EXPRESS_BLANKS)) > 0
+              nl = 0
+              i = pos
+              last_nl = nil
+              while i < pos + bl
+                if buf.getbyte(i) == 0x0A
+                  nl += 1
+                  last_nl = i
+                end
+                i += 1
+              end
+              if nl > 0
+                line += nl
+                col = pos + bl - last_nl
+              else
+                col += bl
+              end
+              pos += bl
+            end
+            c = buf.getbyte(pos)
+            break if c == 0x3E || (c == 0x2F && buf.getbyte(pos + 1) == 0x3E)
+            return false if c.nil? || c == 0
+
+            len = ss.skip(attre)
+            return false if len.nil?
+
+            raw = ss[2] || ss[3] || ss[4]
+            if raw
+              value = raw.include?(AMP) ? expand_attr_refs(raw) : raw
+              return false if value.nil?
+
+              col += raw.ascii_only? ? len : len - raw.count(CONT_BYTES)
+            else
+              value = nil
+              col += len
+            end
+            attname = cached_name(ss[1])
+            if atts
+              j = 0
+              while j < atts.length
+                return false if atts[j] == attname
+
+                j += 2
+              end
+            else
+              atts = []
+            end
+            atts << attname << value&.force_encoding(Encoding::UTF_8)
+            pos += len
+          end
+          self_closing = c == 0x2F
+          return false if buf.bytesize - pos - (self_closing ? 2 : 1) < INPUT_CHUNK
+
+          # commit: NEXT over '<', the name; htmlAutoClose (nothing); htmlCheckImplied
+          @cur = start + 1 + nlen
+          @col += 1 + nlen
+          check_implied(name)
+          # the blanks and attributes; then name push and startElement
+          @cur = pos
+          @line = line
+          @col = col
+          name_push(name)
+          sax_start_element(name, atts)
+          # htmlParseElementInternal after htmlParseStartTag
+          if self_closing
+            @cur += 2
+            @col += 2
+            sax_end_element(name)
+            name_pop
+          else
+            @cur += 1
+            @col += 1
+            if info.empty != 0
+              sax_end_element(name)
+              name_pop
+            end
+          end
+          true
+        end
+
         # htmlParseContentInternal (GROW/SHRINK/CUR/NXT inlined)
         def parse_content_internal
           depth = @name_tab.length
@@ -1598,6 +1715,16 @@ module Nokogiri
                 end
                 next
               elsif (c1 >= 0x61 && c1 <= 0x7A) || (c1 >= 0x41 && c1 <= 0x5A) || c1 == 0x5F || c1 == 0x3A
+                if c1 != 0x5F && c1 != 0x3A && express_start_tag(current_node, depth)
+                  current_node = @name
+                  depth = @name_tab.length
+                  if (@input_flags & INPUT_PROGRESSIVE) == 0 # SHRINK; GROW
+                    avail = @buf.bytesize - @cur
+                    parser_shrink if @cur - @base > 2 * INPUT_CHUNK && avail < 2 * INPUT_CHUNK
+                    grow if @buf.bytesize - @cur < INPUT_CHUNK
+                  end
+                  next
+                end
                 name = parse_html_name_non_invasive
                 if name.nil?
                   html_err(Err::NAME_REQUIRED, "htmlParseStartTag: invalid element name\n")
