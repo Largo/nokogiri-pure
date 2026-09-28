@@ -474,6 +474,30 @@ module Nokogiri
         (bm.getbyte(c >> 3) >> (c & 7)) & 1
       end
 
+      # atom type -> category table (xmlUCSIsCat* used by xmlRegCheckCharacterRange)
+      CAT_TABLES = []
+      {
+        XML_REGEXP_LETTER => Unicode::CAT_L, XML_REGEXP_LETTER_UPPERCASE => Unicode::CAT_LU,
+        XML_REGEXP_LETTER_LOWERCASE => Unicode::CAT_LL, XML_REGEXP_LETTER_TITLECASE => Unicode::CAT_LT,
+        XML_REGEXP_LETTER_MODIFIER => Unicode::CAT_LM, XML_REGEXP_LETTER_OTHERS => Unicode::CAT_LO,
+        XML_REGEXP_MARK => Unicode::CAT_M, XML_REGEXP_MARK_NONSPACING => Unicode::CAT_MN,
+        XML_REGEXP_MARK_SPACECOMBINING => Unicode::CAT_MC, XML_REGEXP_MARK_ENCLOSING => Unicode::CAT_ME,
+        XML_REGEXP_NUMBER => Unicode::CAT_N, XML_REGEXP_NUMBER_DECIMAL => Unicode::CAT_ND,
+        XML_REGEXP_NUMBER_LETTER => Unicode::CAT_NL, XML_REGEXP_NUMBER_OTHERS => Unicode::CAT_NO,
+        XML_REGEXP_PUNCT => Unicode::CAT_P, XML_REGEXP_PUNCT_CONNECTOR => Unicode::CAT_PC,
+        XML_REGEXP_PUNCT_DASH => Unicode::CAT_PD, XML_REGEXP_PUNCT_OPEN => Unicode::CAT_PS,
+        XML_REGEXP_PUNCT_CLOSE => Unicode::CAT_PE, XML_REGEXP_PUNCT_INITQUOTE => Unicode::CAT_PI,
+        XML_REGEXP_PUNCT_FINQUOTE => Unicode::CAT_PF, XML_REGEXP_PUNCT_OTHERS => Unicode::CAT_PO,
+        XML_REGEXP_SEPAR => Unicode::CAT_Z, XML_REGEXP_SEPAR_SPACE => Unicode::CAT_ZS,
+        XML_REGEXP_SEPAR_LINE => Unicode::CAT_ZL, XML_REGEXP_SEPAR_PARA => Unicode::CAT_ZP,
+        XML_REGEXP_SYMBOL => Unicode::CAT_S, XML_REGEXP_SYMBOL_MATH => Unicode::CAT_SM,
+        XML_REGEXP_SYMBOL_CURRENCY => Unicode::CAT_SC, XML_REGEXP_SYMBOL_MODIFIER => Unicode::CAT_SK,
+        XML_REGEXP_SYMBOL_OTHERS => Unicode::CAT_SO, XML_REGEXP_OTHER => Unicode::CAT_C,
+        XML_REGEXP_OTHER_CONTROL => Unicode::CAT_CC, XML_REGEXP_OTHER_FORMAT => Unicode::CAT_CF,
+        XML_REGEXP_OTHER_PRIVATE => Unicode::CAT_CO,
+      }.each { |t, tbl| CAT_TABLES[t] = tbl }
+      CAT_TABLES.freeze
+
       BLOCK_TABLE = Unicode::BLOCKS.to_h { |name, ranges| [name, ranges] }.freeze
 
       # xmlUCSIsBlock: 1 / 0, -1 for an unknown block name
@@ -1641,6 +1665,12 @@ module Nokogiri
 
       # xmlRegCheckCharacterRange
       def reg_check_character_range(type, codepoint, neg, start, end_, block_name)
+        # fast path for the Unicode category types (same results as the case below)
+        if type >= XML_REGEXP_LETTER && (tbl = CAT_TABLES[type])
+          ret = member(tbl, codepoint)
+          return neg != 0 ? c_not(ret) : ret
+        end
+
         ret = 0
         case type
         when XML_REGEXP_STRING, XML_REGEXP_SUBREG, XML_REGEXP_RANGES, XML_REGEXP_EPSILON
@@ -1717,7 +1747,14 @@ module Nokogiri
 
       # xmlRegCheckCharacter
       def reg_check_character(atom, codepoint)
-        return -1 if atom.nil? || !is_char(codepoint)
+        return -1 if atom.nil?
+        # IS_CHAR (xmlIsCharQ), inlined
+        if codepoint < 0x100
+          return -1 unless codepoint >= 0x20 || codepoint == 0x9 || codepoint == 0xa || codepoint == 0xd
+        elsif !(codepoint <= 0xd7ff || (codepoint >= 0xe000 && codepoint <= 0xfffd) ||
+                (codepoint >= 0x10000 && codepoint <= 0x10ffff))
+          return -1
+        end
 
         case atom.type
         when XML_REGEXP_SUBREG, XML_REGEXP_EPSILON
@@ -2077,7 +2114,8 @@ module Nokogiri
 
       # xmlRegExecSetErrString
       def reg_exec_set_err_string(exec, value)
-        exec.err_string = value.nil? ? nil : value.dup
+        # (xmlStrdup in C; input strings are never mutated here, so no copy is needed)
+        exec.err_string = value
         0
       end
 
@@ -2087,7 +2125,7 @@ module Nokogiri
           exec.input_stack = []
           exec.input_data = []
         end
-        exec.input_stack[exec.input_stack_nr] = value&.dup
+        exec.input_stack[exec.input_stack_nr] = value
         exec.input_data[exec.input_stack_nr] = data
         exec.input_stack_nr += 1
         exec.input_stack[exec.input_stack_nr] = nil
@@ -2235,7 +2273,10 @@ module Nokogiri
                 if value.nil? && final != 0
                   ret = 1
                 elsif value
-                  state_trans.each do |t|
+                  i = 0
+                  while i < state_trans.size
+                    t = state_trans[i]
+                    i += 1
                     next if t.counter < 0 || t.equal?(trans)
 
                     counter = counters[t.counter]
@@ -2253,7 +2294,10 @@ module Nokogiri
               elsif trans.count == REGEXP_ALL_COUNTER
                 ret = 1
                 # Check all counted transitions from the current state
-                state_trans.each do |t|
+                i = 0
+                while i < state_trans.size
+                  t = state_trans[i]
+                  i += 1
                   next if t.counter < 0 || t.equal?(trans)
 
                   counter = counters[t.counter]
@@ -2273,7 +2317,15 @@ module Nokogiri
                 exec.status = XML_REGEXP_INTERNAL_ERROR
                 break
               elsif value
-                ret = reg_str_equal_wildcard(atom.valuep, value)
+                av = atom.valuep
+                # xmlRegStrEqualWildcard, with its common outcomes inlined
+                ret = if av == value
+                  1
+                elsif !av.include?("*") && !value.include?("*")
+                  0
+                else
+                  reg_str_equal_wildcard(av, value)
+                end
                 if atom.neg != 0
                   ret = c_not(ret)
                   ret = 0 if compound == 0
