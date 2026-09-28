@@ -10,6 +10,10 @@ module Nokogiri
           [0x22, true] => /[^"&< \x00-\x1F\u0080-\u{10FFFF}]+/,
           [0x27, true] => /[^'&< \x00-\x1F\u0080-\u{10FFFF}]+/,
         }.freeze
+        ATT_RUN_DQ = ATT_RUN[[0x22, false]]
+        ATT_RUN_SQ = ATT_RUN[[0x27, false]]
+        ATT_RUN_DQ_N = ATT_RUN[[0x22, true]]
+        ATT_RUN_SQ_N = ATT_RUN[[0x27, true]]
         MB_RUN_RE = /[\u0080-￼\u{10000}-\u{10FFFF}]+/
 
         # "ent->content[0] = 0": the C string becomes empty but the bytes after it remain
@@ -403,7 +407,11 @@ module Nokogiri
           flags = @in_subset == 0 ? (ENT_CHECKED | ENT_VALIDATED) : ENT_VALIDATED
           in_space = true
           chunk_size = 0
-          run_re = ATT_RUN[[quote, normalize ? true : false]]
+          run_re = if quote == 0x22
+            normalize ? ATT_RUN_DQ_N : ATT_RUN_DQ
+          else
+            normalize ? ATT_RUN_SQ_N : ATT_RUN_SQ
+          end
           b = @buf
           ss = @ss
           while true
