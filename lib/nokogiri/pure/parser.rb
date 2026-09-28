@@ -6,6 +6,7 @@
 require_relative "parser/codes"
 require_relative "parser/errstrings"
 require_relative "parser/chars"
+require_relative "parser/ebcdic"
 require_relative "parser/encoding"
 require_relative "parser/input"
 require_relative "parser/ctxt"

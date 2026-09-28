@@ -49,6 +49,18 @@ module Nokogiri
           return ["".dup.force_encoding(Encoding::UTF_8), :error] if @dead
 
           case @handler.kind
+          when :table
+            tbl = @handler.ruby_encoding
+            out = +""
+            src.each_byte do |b|
+              ch = tbl[b]
+              if ch.nil?
+                @dead = true
+                return [out, :error]
+              end
+              out << ch
+            end
+            [out, :ok]
           when :latin1
             [src.dup.force_encoding(Encoding::ISO_8859_1).encode(Encoding::UTF_8), :ok]
           else
@@ -144,6 +156,11 @@ module Nokogiri
             return [0, InputHandler.new(b[0], b[1], b[2])]
           end
 
+          key = up.delete("-_")
+          key = "IBM#{key[2..]}" if key.start_with?("CP")
+          if (tbl = EBCDIC_TABLES[key])
+            return [0, InputHandler.new(name, tbl, :table)]
+          end
           enc = ruby_encoding_for(name)
           return [ErrCode::ERR_UNSUPPORTED_ENCODING, nil] if enc.nil?
           return [0, nil] if enc == Encoding::UTF_8
