@@ -135,8 +135,16 @@ module Nokogiri
         "&#x#{cp.to_s(16).upcase};"
       end
 
+      ENTITIES_ASCII_RE = /[<>&\r\x00-\x08\x0B\x0C\x0E-\x1F]/
+      ENTITIES_ASCII_MAP = { "<" => "&lt;", ">" => "&gt;", "&" => "&amp;", "\r" => "&#xD;" }.freeze
+
       # xmlEscapeEntities
       def escape_entities(str)
+        if str.ascii_only?
+          return str unless str.match?(ENTITIES_ASCII_RE)
+
+          return str.gsub(ENTITIES_ASCII_RE) { |m| ENTITIES_ASCII_MAP[m] || "&#xFFFD;" }
+        end
         str = scrubbed(str)
         return str unless str.match?(ENTITIES_RE)
 
@@ -159,6 +167,8 @@ module Nokogiri
 
       # xmlEscapeContent
       def escape_content(str)
+        return str unless str.match?(CONTENT_RE)
+
         str.gsub(CONTENT_RE, CONTENT_MAP)
       end
 
@@ -246,7 +256,7 @@ module Nokogiri
 
         buf << "("
         cur = content
-        loop do
+        while true
           return if cur.nil?
 
           case cur.type
@@ -522,7 +532,7 @@ module Nokogiri
         root = cur
         parent = cur.parent
         unformatted_node = nil
-        loop do
+        while true
           case cur.type
           when DOCUMENT_NODE, HTML_DOCUMENT_NODE
             doc_content_dump_output(ctxt, cur)
@@ -621,7 +631,7 @@ module Nokogiri
             ns_dump_output(buf, nil, cur, ctxt)
           end
 
-          loop do
+          while true
             return if cur.equal?(root)
 
             buf << "\n" if ctxt.format == 1 && cur.type != XINCLUDE_START && cur.type != XINCLUDE_END
@@ -833,7 +843,7 @@ module Nokogiri
         root = cur
         parent = cur.parent
         unformatted_node = nil
-        loop do
+        while true
           case cur.type
           when DOCUMENT_NODE, HTML_DOCUMENT_NODE
             doc_content_dump_output(ctxt, cur)
@@ -948,7 +958,7 @@ module Nokogiri
           end
 
           done = false
-          loop do
+          while true
             if cur.equal?(root)
               done = true
               break
@@ -1286,7 +1296,7 @@ module Nokogiri
 
         root = cur
         parent = cur.parent
-        loop do
+        while true
           case cur.type
           when HTML_DOCUMENT_NODE, DOCUMENT_NODE
             html_dtd_dump_output(buf, cur) if cur.int_subset
@@ -1365,7 +1375,7 @@ module Nokogiri
             buf << cur.content if cur.content
           end
 
-          loop do
+          while true
             return if cur.equal?(root)
 
             if cur.next
