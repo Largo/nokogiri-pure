@@ -20,6 +20,20 @@ DOCS = {
   "d2" => <<~XML,
     <html><body><div class="a b  c" id="d1"><p class="x">P1</p><p>P2<span>S</span></p></div><div class="b"><p>P3</p><div><p class="x y">P4</p></div></div><ul><li>1</li><li>2</li><li>3</li><li>4</li></ul></body></html>
   XML
+  "dtd1" => <<~XML,
+    <?xml version="1.0"?>
+    <?top-pi data?>
+    <!DOCTYPE r [
+      <!ENTITY ent "xyz">
+      <!ENTITY ent2 "<q>inner</q>tail">
+      <!ELEMENT r ANY>
+      <!ATTLIST e key ID #IMPLIED>
+      <!ATTLIST e def CDATA "dflt">
+    ]>
+    <!-- before root -->
+    <r><e key="k1">a&ent;b</e><e key="k2">&ent2;</e><e key="k3"><![CDATA[c<d]]>&amp;&#65;</e><e>&ent;</e><s>xy</s></r>
+    <?after-pi?>
+  XML
   "html1" => <<~HTML,
     <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
     <!-- lead comment -->
@@ -116,5 +130,12 @@ EXPRS = [
   ["/", "1 = 1 = 1"], ["/", "1 < 2 < 3"], ["/", "3 > 2 > 1"], ["/", "'abc' < 'abd'"], ["/", "//*[1] < //*[2]"], ["/", "true() = 1"], ["/", "false() = ''"], ["/", "//nothing = false()"],
   ["/", "//nothing != //nothing"], ["/", "//nothing = //nothing"], ["/", "not(//nothing = 'x')"], ["/", "//* = //*"], ["/", "//* != //*"], ["/", "1 div 0 > 1 div 0"], ["/", "1 div 0 >= 1 div 0"],
   ["/", "-1 div 0 < 0"], ["/", "0 div 0 = 0 div 0"], ["/", "0 div 0 != 0 div 0"], ["/", "number('Infinity')"], ["/", "string(number(' -0 '))"], ["/", "1 div number('-0')"],
+  ["/", "id('k1')"], ["/", "id('k2 k3')"], ["/", "id(//e/@key)"], ["/", "//e[. = 'axyzb']"], ["/", "//e[. = 'xyz']"], ["/", "//e[starts-with(., 'xyz')]"], ["/", "string(//e[2])"],
+  ["/", "//e/node()"], ["/", "//e//text()"], ["/", "//e/@def"], ["/", "//@*"], ["/", "/node()"], ["/", "count(//node())"], ["/", "//node()[last()]"], ["/", "//e[4] = 'xyz'"], ["/", "//e[4] != 'xyz'"],
+  ["/", "//e[4] = //e[1]"], ["/", "//e[. = //s]"], ["/", "//s = 'xy'"], ["/", "//e[1] = 'axyzb'"], ["/", "//e[1] != 'axyzb'"], ["/", "//e[3] = 'c<d&A'"], ["/", "string-length(//e[3])"],
+  ["/", "//e[1]/node()[2]/preceding::node()"], ["/", "//e[1]/node()[2]/.."], ["/", "//e[1]/node()[2]/ancestor::*"], ["/", "count(//e[2]/descendant::node())"],
+  ["/", "name(//e[1]/node()[2])"], ["/", "local-name(//e[1]/node()[2])"], ["/", "string(//e[1]/node()[2])"], ["/", "//e[1]/node()[2]/self::node()"], ["/", "//e[1]/node()[2]/following-sibling::node()"],
+  ["/", "//processing-instruction()"], ["/", "/processing-instruction('after-pi')"], ["/", "//comment()/following::node()[1]"], ["/", "/*/preceding::node()"], ["/", "/*/following::node()"],
+  ["/", "//e[1]/node()[2] | //e[1]/text()"], ["/", "sum(//e[@key='k1']/node()[2])"], ["/", "number(//e[4])"],
   ["//div/@class", "self::node()"], ["//div/@class", "child::node()"], ["//div/@class", "following-sibling::node()"], ["//div/@class", "../@id"], ["//div/@class", "name()"],
 ]

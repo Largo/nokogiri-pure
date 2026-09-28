@@ -1245,6 +1245,10 @@ module Nokogiri
           set1
         end
 
+        # the node-set size at which libxml2's nodeTab can't grow any more (nodeMax doubles from 10
+        # and must stay below XPATH_MAX_NODESET_LENGTH)
+        NODESET_HARD_LIMIT = 10 * (2**20)
+
         # axes visiting a bounded, small number of nodes
         BOUNDED_AXES = [AXIS_CHILD, AXIS_ATTRIBUTE, AXIS_SELF, AXIS_FOLLOWING_SIBLING,
                         AXIS_PRECEDING_SIBLING].freeze
@@ -1486,6 +1490,9 @@ module Nokogiri
                   break
                 end
               else
+                # xmlXPathNodeSetAddUnique fails once the set can't grow past
+                # XPATH_MAX_NODESET_LENGTH (e.g. the following axis cycling through entities)
+                mem_error if seq.length >= NODESET_HARD_LIMIT
                 seq << (ctype == NAMESPACE_DECL ? XPath.node_set_dup_ns(cur.next, cur) : cur)
                 if break_on_first_hit
                   outcome = :first_hit
