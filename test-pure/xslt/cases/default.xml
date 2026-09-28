@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!DOCTYPE doc [
+<!ENTITY ent "entity text">
+<!ATTLIST item id ID #IMPLIED>
+<!NOTATION gif SYSTEM "image/gif">
+<!ENTITY pic SYSTEM "pic.gif" NDATA gif>
+]>
+<doc xmlns:x="urn:x" lang="en">
+  <title>Sample &amp; <b>bold</b> &ent;</title>
+  <!-- a comment -->
+  <?pi-target some data?>
+  <list>
+    <item id="i1" n="3" x:attr="xa">Banana</item>
+    <item id="i2" n="10">apple</item>
+    <item id="i3" n="2.5">Cherry</item>
+    <item id="i4" n="-1">apple</item>
+    <item id="i5">date</item>
+  </list>
+  <x:ns-el x:a="1">namespaced</x:ns-el>
+  <text>  leading and trailing   </text>
+  <empty/>
+  <nums><v>1</v><v>2</v><v>3</v><v>NaN</v><v>1e3</v></nums>
+</doc>

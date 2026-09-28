@@ -51,6 +51,14 @@ Dir[File.join(LOCAL, "*.xsl")].sort.each do |xsl|
              "xml" => File.exist?(xml) ? read(xml) : default_xml, "xsl_url" => xsl, "xml_url" => xml }
 end
 
+require_relative "inline_cases"
+XSLTInlineCases.cases.each do |c|
+  c["xml"] ||= default_xml
+  c["xsl_url"] = File.join(LOCAL, "#{c["name"].tr("/", "_")}.xsl")
+  c["xml_url"] = File.join(LOCAL, "default.xml")
+  cases << c
+end
+
 filter = ARGV[0] ? Regexp.new(ARGV[0]) : nil
 cases.select! { |c| filter.match?(c["name"]) } if filter
 $stdout.binmode
