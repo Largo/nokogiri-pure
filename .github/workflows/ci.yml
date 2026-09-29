@@ -85,3 +85,12 @@ jobs:
           cd /tmp && ruby -e 'require "nokogiri/pure"
             raise "not loaded" unless Nokogiri::HTML5("<p>hi").at_css("p").text == "hi"
             puts "ok: require \"nokogiri/pure\""'
+      - name: Native nokogiri loaded first, then require "nokogiri/pure" (keeps native, warns)
+        run: |
+          gem install --no-document nokogiri -v "$(ruby -Ilib -e 'require "nokogiri/version/constant"; print Nokogiri::VERSION')"
+          cd /tmp && ruby -e 'gem "nokogiri"; require "nokogiri"
+            err = StringIO.new; $stderr = err; require "nokogiri/pure"; $stderr = STDERR
+            raise "no warning: #{err.string.inspect}" unless err.string.include?("native Nokogiri")
+            raise "pure internals loaded" if defined?(Nokogiri::Pure::Tree)
+            raise "native broken" unless Nokogiri::HTML5("<p>hi").at_css("p").text == "hi"
+            puts "ok: #{err.string.strip}"'

@@ -36,7 +36,9 @@ Either way, `require "nokogiri"` loads it. `require "nokogiri/pure"` (the gem na
 `Bundler.require` uses for `gem "nokogiri-pure"`) does the same.
 
 RubyGems can't host a second gem named `nokogiri`, hence the two names. Don't install the native
-`nokogiri` gem next to `nokogiri-pure` outside Bundler: both provide `nokogiri.rb`.
+`nokogiri` gem next to `nokogiri-pure` outside Bundler: both provide `nokogiri.rb`, and a plain
+`require "nokogiri"` then picks the native one (use `require "nokogiri/pure"`). If native Nokogiri
+is already loaded, `require "nokogiri/pure"` keeps it and warns, since the two can't share a process.
 
 Versions: `nokogiri-pure` 1.19.4.N implements Nokogiri 1.19.4 (`Nokogiri::VERSION`); N is this
 project's own revision (`Nokogiri::Pure::VERSION`).
