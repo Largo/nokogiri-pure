@@ -6,8 +6,10 @@ its libxml2 2.13.9 / libxslt 1.1.43 / gumbo behaviour) that needs no compiled C 
 ## Layout
 
 - `lib/nokogiri.rb`, `lib/nokogiri/**` — upstream Nokogiri v1.19.4 Ruby code, kept verbatim
-  except `lib/nokogiri/extension.rb`, which loads `nokogiri/pure` instead of the C extension.
-- `lib/nokogiri/pure.rb` — defines the class/module skeleton (same as `Init_nokogiri()` in
+  except `lib/nokogiri/extension.rb`, which loads `nokogiri/pure/init` instead of the C extension.
+- `lib/nokogiri/pure.rb` — public entry point for the gem name (`require "nokogiri/pure"`); just
+  loads `nokogiri.rb`.
+- `lib/nokogiri/pure/init.rb` — defines the class/module skeleton (same as `Init_nokogiri()` in
   ext/nokogiri/nokogiri.c), the LIBXML_* constants, then loads everything below.
 - `lib/nokogiri/pure/*.rb` — pure-Ruby ports of the *libraries*:
   - `tree.rb`     libxml2 tree.c/entities.c/(parts of valid.c): structs + `Pure::Tree.*` functions

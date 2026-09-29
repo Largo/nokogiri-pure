@@ -2,7 +2,7 @@
 
 # nokogiri-pure: instead of loading the C (or Java) extension, load the pure-Ruby implementation
 # of the same classes and methods.
-require_relative "pure"
+require_relative "pure/init"
 
 if Nokogiri::Pure::WASM
   # ruby.wasm may not have RubyGems loaded; upstream's version/info.rb needs Gem::Version and

@@ -32,6 +32,9 @@ gem "nokogiri", path: "../nokogiri-pure"
 gem "nokogiri-pure"
 ```
 
+Either way, `require "nokogiri"` loads it. `require "nokogiri/pure"` (the gem name's path, which
+`Bundler.require` uses for `gem "nokogiri-pure"`) does the same.
+
 RubyGems can't host a second gem named `nokogiri`, hence the two names. Don't install the native
 `nokogiri` gem next to `nokogiri-pure` outside Bundler: both provide `nokogiri.rb`.
 

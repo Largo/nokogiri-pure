@@ -80,4 +80,8 @@ jobs:
             doc = Nokogiri::HTML5("<p class=x>hi")
             raise "css" unless doc.at_css("p.x").text == "hi"
             raise "xml" unless Nokogiri::XML("<a><b/></a>").xpath("count(//b)") == 1.0
-            puts "ok: #{Nokogiri::VERSION} (#{$LOADED_FEATURES.grep(/nokogiri\/pure\.rb/).first})"'
+            puts "ok: #{Nokogiri::VERSION} (#{$LOADED_FEATURES.grep(/nokogiri\/pure\/init\.rb/).first})"'
+          # the gem name's own path (what Bundler.require uses for nokogiri-pure) loads all of Nokogiri
+          cd /tmp && ruby -e 'require "nokogiri/pure"
+            raise "not loaded" unless Nokogiri::HTML5("<p>hi").at_css("p").text == "hi"
+            puts "ok: require \"nokogiri/pure\""'
